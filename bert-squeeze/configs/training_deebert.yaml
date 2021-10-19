@@ -1,0 +1,59 @@
+task:
+  name: train
+  strategy:
+
+model:
+  model_type: deebert
+  pretrained_model: bert-base-cased
+  pretrained_tokenizer: ${model.pretrained_model}
+  num_labels: 5
+  max_seq_length: 300
+
+dataset:
+  is_local: true
+  name: conference
+  split: default
+  text_col: title
+  label_col: label
+  truncate_mode: head
+
+train:
+  training_batch_size: 8
+  num_epochs: 10
+  dropout: 0.2
+  train_highway: true
+  early_exit_entropy: -1
+  optimizer: bertadam
+  weight_decay: 0.01
+  discriminative_learning: true
+  learning_rates: [ 2e-5 ]
+  auto_lr: false
+  layer_lr_decay: 0.95
+  lr_scheduler: true
+  adam_eps: 1e-8
+  warmup_ratio: 0.06
+  warmup_steps: true
+  max_grad_norm: 1.0
+  accumulation_steps: 1
+  eval_batch_size: 16
+
+general:
+  do_train: true
+  do_eval: false
+  debug: false
+  labels: [ ISCAS, INFOCOM, WWW, SIGGRAPH, VLDB ]
+  output_dir: outputs
+  save_steps: 500
+  logging_steps: 50
+  validation_every_n_epoch: 1
+  evaluate_during_training: true
+  get_mismated: true
+
+neptune:
+  user_name: julesbelveze
+  project: bert-tricks
+  tags: [ ]
+
+hydra:
+  run:
+    dir: ./outputs/${task.name}/${task.strategy}/${now:%Y-%m-%d_%H-%M-%S}

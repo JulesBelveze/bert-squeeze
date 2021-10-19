@@ -1,0 +1,17 @@
+.DS_Store
+.env
+.venv
+*.py.lock
+.idea/
+*/__pycache__/
+*/*/__pycache__/
+*/*/*/__pycache__/
+
+# data
+bert-squeeze/data/classification
+bert-squeeze/data/unlabeled
+
+# various
+.neptune/
+outputs/
+checkpoints/
