@@ -1,11 +1,13 @@
 import logging
 import math
+from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
 import seaborn as sns
 import torch
+import torch.nn.functional as F
 from omegaconf import ListConfig, DictConfig
 from torch.nn import CrossEntropyLoss
 from transformers import AutoModel, AutoConfig, AdamW, get_linear_schedule_with_warmup
@@ -17,34 +19,29 @@ from ..utils.scorer import Scorer
 
 class BaseModule(pl.LightningModule):
 
-    def __init__(self, training_config: DictConfig, model_config: str, num_labels: int, **kwargs):
+    def __init__(self, training_config: DictConfig, num_labels: int, model_config: str = None, **kwargs):
         super(BaseModule, self).__init__()
-        self.model_config = AutoConfig.from_pretrained(model_config, num_labels=num_labels)
         self.config = training_config
+        self.num_labels = num_labels
+
+        if model_config is not None:
+            self.model_config = AutoConfig.from_pretrained(model_config, num_labels=num_labels)
 
         self._set_scorers()
-        self._build_model()
         self._set_objective()
 
     def _set_scorers(self):
-        self.scorer = Scorer(self.model_config.num_labels)
-        self.valid_scorer = Scorer(self.model_config.num_labels)
-        self.test_scorer = Scorer(self.model_config.num_labels)
+        self.scorer = Scorer(self.num_labels)
+        self.valid_scorer = Scorer(self.num_labels)
+        self.test_scorer = Scorer(self.num_labels)
 
     def _build_model(self):
-        self.encoder = AutoModel.from_config(self.model_config)
-        self.classifier = torch.nn.Sequential(
-            torch.nn.Dropout(self.model_config.hidden_dropout_prob),
-            torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),
-            torch.nn.ReLU(),
-            torch.nn.LayerNorm(self.model_config.hidden_size),
-            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels)
-        )
+        raise NotImplementedError()
 
     def _set_objective(self):
         objective = self.config.get("objective", "ce")
         self.smoothing = self.config.get("smoothing", 0.0)
-        self.class_weights = self.config.get("class_weights", [1.0] * self.model_config.num_labels)
+        self.class_weights = self.config.get("class_weights", [1.0] * self.num_labels)
 
         if objective == "lsl" and self.smoothing == 0.0:
             logging.warning("You are using label smoothing and the smoothing parameter"
@@ -54,13 +51,13 @@ class BaseModule(pl.LightningModule):
                             "weights are all equal to 1.0.")
         self.objective = {
             "ce": CrossEntropyLoss(),
-            "lsl": LabelSmoothingLoss(classes=self.model_config.num_labels,
+            "lsl": LabelSmoothingLoss(classes=self.num_labels,
                                       smoothing=self.smoothing),
             "weighted": CrossEntropyLoss(weight=torch.Tensor(self.class_weights)),
         }[objective]
 
     def loss(self, logits: torch.Tensor, labels: torch.Tensor, *args, **kwargs):
-        return self.objective(logits.view(-1, self.model_config.num_labels), labels.view(-1))
+        return self.objective(logits.view(-1, self.num_labels), labels.view(-1))
 
     def configure_optimizers(self):
         optimizer_parameters = self._get_optimizer_parameters()
@@ -86,7 +83,9 @@ class BaseModule(pl.LightningModule):
                                  warmup=self.config.warmup_ratio, t_total=num_training_steps)
 
         elif self.config.optimizer == "adam":
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.config.learning_rates[0])
+            optimizer = torch.optim.Adam(optimizer_parameters, lr=self.config.learning_rates[0])
+        elif self.config.optimizer == "sgd":
+            optimizer = torch.optim.SGD(optimizer_parameters, lr=self.config.learning_rates[0])
         else:
             raise ValueError(f"Optimizer '{self.config.optimizer}' not supported.")
 
@@ -177,3 +176,15 @@ class BaseModule(pl.LightningModule):
         """Unfreeze encoder layers"""
         for param in self.encoder.parameters():
             param.requires_grad = True
+
+    def validation_epoch_end(self, test_step_outputs: List[dict]):
+        all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])
+        all_probs = F.softmax(all_logits, dim=-1)
+        labels_probs = all_probs.numpy()
+
+        self.log_eval_report(labels_probs)
+        self.valid_scorer.reset()
+
+    def test_epoch_end(self, outputs) -> None:
+        print(self.test_scorer.get_table())
+        self.test_scorer.reset()

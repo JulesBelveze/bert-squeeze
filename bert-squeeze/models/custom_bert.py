@@ -1,16 +1,25 @@
-from typing import List
-
 import torch
-import torch.nn.functional as F
-from overrides import overrides
-
-from .base_lt_module import BaseModule
 from omegaconf import DictConfig
+from overrides import overrides
+from transformers import AutoModel
+from .base_lt_module import BaseModule
 
 
 class LtCustomBert(BaseModule):
     def __init__(self, training_config: DictConfig, model_config: str, num_labels: int, **kwargs):
-        super().__init__(training_config, model_config, num_labels, **kwargs)
+        super().__init__(training_config, num_labels, model_config, **kwargs)
+        self._build_model()
+
+    @overrides
+    def _build_model(self):
+        self.encoder = AutoModel.from_config(self.model_config)
+        self.classifier = torch.nn.Sequential(
+            torch.nn.Dropout(self.model_config.hidden_dropout_prob),
+            torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),
+            torch.nn.ReLU(),
+            torch.nn.LayerNorm(self.model_config.hidden_size),
+            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels)
+        )
 
     @overrides
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
@@ -79,16 +88,3 @@ class LtCustomBert(BaseModule):
         logits = self.forward(**inputs)
         loss = self.loss(logits, batch["labels"])
         return loss, logits
-
-    def validation_epoch_end(self, outputs: List[dict]):
-        all_logits = torch.cat([pred["logits"] for pred in outputs])
-        all_probs = F.softmax(all_logits, dim=-1)
-        labels_probs = all_probs.numpy()
-
-        self.log_eval_report(labels_probs)
-        self.valid_scorer.reset()
-        return torch.stack([out["loss"] for out in outputs]).mean()
-
-    def test_epoch_end(self, outputs) -> None:
-        print(self.test_scorer.get_table())
-        self.test_scorer.reset()
