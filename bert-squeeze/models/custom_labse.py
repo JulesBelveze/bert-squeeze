@@ -1,16 +1,26 @@
-from typing import List
-
 import torch
 import torch.nn.functional as F
-from overrides import overrides
 from omegaconf import DictConfig
-
+from overrides import overrides
+from transformers import AutoModel
 from .base_lt_module import BaseModule
 
 
 class LtCustomLabse(BaseModule):
     def __init__(self, training_config: DictConfig, model_config: str, num_labels: int, **kwargs):
-        super().__init__(training_config, model_config, num_labels, **kwargs)
+        super().__init__(training_config, num_labels, model_config, **kwargs)
+        self._build_model()
+
+    @overrides
+    def _build_model(self):
+        self.encoder = AutoModel.from_config(self.model_config)
+        self.classifier = torch.nn.Sequential(
+            torch.nn.Dropout(self.model_config.hidden_dropout_prob),
+            torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),
+            torch.nn.ReLU(),
+            torch.nn.LayerNorm(self.model_config.hidden_size),
+            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels)
+        )
 
     @overrides
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, **kwargs):
@@ -75,15 +85,3 @@ class LtCustomLabse(BaseModule):
 
     def training_epoch_end(self, _):
         pass
-
-    def validation_epoch_end(self, test_step_outputs: List[dict]):
-        all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])
-        all_probs = F.softmax(all_logits, dim=-1)
-        labels_probs = all_probs.numpy()
-
-        self.log_eval_report(labels_probs)
-        self.valid_scorer.reset()
-
-    def test_epoch_end(self, outputs) -> None:
-        print(self.test_scorer.get_table())
-        self.test_scorer.reset()

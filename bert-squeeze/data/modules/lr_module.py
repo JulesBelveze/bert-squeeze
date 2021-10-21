@@ -70,7 +70,7 @@ class LrDataModule(pl.LightningDataModule):
         featurized_dataset = self.featurize()
 
         self.train = featurized_dataset["train"]
-        self.val = featurized_dataset["dev"]
+        self.val = featurized_dataset["validation"]
         self.test = featurized_dataset["test"]
 
     def train_dataloader(self) -> DataLoader:

@@ -38,7 +38,10 @@ def get_neptune_tags(args) -> List[str]:
         tags.append(f"alpha-{args.train.alpha}")
         tags.append(args.data.student_module.dataset_config.name)
     else:
-        tags.append(args.model.model_config)
+        if args.model.get("model_config", None) is not None:
+            tags.append(args.model.model_config)
+        else:
+            tags.append(args.model.name)
         tags.append(args.data.dataset_config.name)
     tags.append(args.train.objective)
     tags.append(args.train.optimizer)

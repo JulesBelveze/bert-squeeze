@@ -25,7 +25,7 @@ train:
   dropout: 0.2
   objective: lsl
   smoothing: 0.1
-  optimizer: adamw
+  optimizer: bertadam
   weight_decay: 0.01
   discriminative_learning: false
   learning_rates: [ 2e-5 ]
@@ -96,7 +96,7 @@ data:
 
 neptune:
   user_name: julesbelveze
-  project: bert-squeeze
+  project: bert-tricks
   tags: [ ]
   logger:
     _target_: neptune.new.integrations.pytorch_lightning.NeptuneLogger
