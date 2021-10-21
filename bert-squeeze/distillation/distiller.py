@@ -31,7 +31,6 @@ class Distiller(pl.LightningModule):
         self.config = training_config
 
         self.teacher = self.build_teacher(teacher_config=teacher_config)
-        self.teacher.eval()
         self.student = instantiate(student_config)
 
         self._set_objectives()
@@ -119,12 +118,12 @@ class Distiller(pl.LightningModule):
 
     def configure_optimizers(self) -> Tuple[List, List]:
         """"""
+        optimizer_parameters = self._get_student_parameters()
         if self.student_config.architecture == "lr":
-            optimizer = torch.optim.SGD(self.student.parameters(), lr=self.params.learning_rates[0])
+            optimizer = torch.optim.SGD(optimizer_parameters, lr=self.params.learning_rates[0])
             return [optimizer], []
 
         elif self.student_config.architecture == "transformer":
-            optimizer_parameters = self._get_student_parameters()
             if self.params.optimizer == "adamw":
                 optimizer = AdamW(optimizer_parameters, lr=self.params.learning_rates[0],
                                   eps=self.params.adam_eps)
@@ -145,7 +144,7 @@ class Distiller(pl.LightningModule):
                 optimizer = BertAdam(optimizer_parameters, lr=self.params.learning_rates[0],
                                      warmup=self.params.warmup_ratio, t_total=num_training_steps)
             elif self.params.optimizer == "adam":
-                optimizer = torch.optim.Adam(self.parameters(), lr=self.params.learning_rates[0])
+                optimizer = torch.optim.Adam(optimizer_parameters, lr=self.params.learning_rates[0])
             else:
                 raise ValueError(f"Optimizer '{self.params.optimizer}' not supported.")
 
@@ -169,6 +168,7 @@ class Distiller(pl.LightningModule):
 
     def get_teacher_logits(self, batch) -> torch.Tensor:
         """"""
+        self.teacher.eval()
         teacher_inputs = {key[2:]: val for key, val in batch.items() if key.startswith("t_")}
         with torch.no_grad():
             logits = self.teacher.forward(**teacher_inputs)
