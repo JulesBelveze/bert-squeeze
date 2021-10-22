@@ -23,12 +23,12 @@ train:
   eval_batch_size: 16
   num_epochs: 10
   dropout: 0.2
-  objective: lsl
+  objective: ce
   smoothing: 0.1
   optimizer: sgd
   weight_decay: 0.01
-  discriminative_learning: true
-  learning_rates: [ 2e-5 ]
+  discriminative_learning: false
+  learning_rates: [ 2e-1 ]
   auto_lr: false
   layer_lr_decay: 0.95
   lr_scheduler: true
@@ -40,12 +40,12 @@ train:
   logging_steps: 100
 
 model:
-  _target_: bert-squeeze.models.lr.EmbeddingLogisticRegression
+  _target_: bert-squeeze.models.lr.BowLogisticRegression
   training_config: ${train}
-  vocab_size: 10000
-  embed_dim: 64
+  vocab_size: 5000
+  embed_dim: 256
   num_labels: 6
-  name: embed_lr
+  name: bow_lr
 
 data:
   _target_: bert-squeeze.data.modules.lr_module.LrDataModule

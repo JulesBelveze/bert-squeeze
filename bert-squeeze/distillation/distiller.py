@@ -1,3 +1,6 @@
+import math
+from typing import Dict, List, Tuple
+
 import logging
 import math
 from typing import Dict, List, Tuple
@@ -9,16 +12,16 @@ import seaborn as sns
 import torch
 import torch.nn.functional as F
 from hydra.utils import instantiate, get_class
-from pkg_resources import resource_filename
 from omegaconf import DictConfig, ListConfig
+from pkg_resources import resource_filename
 from torch.nn import CrossEntropyLoss
-from transformers import AutoConfig, AdamW, get_linear_schedule_with_warmup
-import logging
+from transformers import AdamW, get_linear_schedule_with_warmup
+
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.losses.distillation_losses import KLDivLoss
 from ..utils.optimizers import BertAdam
 from ..utils.scorer import Scorer
-from ..utils.types import DistillationLoss, LossType
+from ..utils.types import DistillationLoss
 
 
 class Distiller(pl.LightningModule):
