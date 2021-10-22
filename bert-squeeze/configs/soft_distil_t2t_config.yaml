@@ -1,45 +1,29 @@
 task:
-  name: soft_distil
+  name: distil
   strategy: t2t
 
-soft_dataset:
-  name: unlabeled
-  split: default
-  text_col: text
-  truncate_mode: head
-  is_local: True
+general:
+  do_train: true
+  do_eval: false
+  debug: false
+  labels:
+    - sadness
+    - joy
+    - love
+    - anger
+    - fear
+    - surprise
+  output_dir: outputs
+  save_steps: 1000
+  validation_every_n_epoch: 1
+  evaluate_during_training: true
+  get_mismated: true
 
-dataset:
-  is_local: true
-  name: conference
-  split: default
-  text_col: title
-  label_col: label
-  truncate_mode: head
-
-teacher:
-  architecture: transformer
-  model_type: labse
-  pretrained_model: sentence-transformers/LaBSE
-  pretrained_tokenizer: ${teacher.pretrained_model}
-  num_labels: 5
-  max_seq_length: 300
-  checkpoint_path: "../outputs/BER-184"
-
-student:
-  type: transformer
-  model: bert
-  pretrained_model: bert-base-multilingual-cased
-  pretrained_tokenizer: ${student.pretrained_model}
-  num_labels: ${teacher.num_labels}
-  max_seq_length: 300
 
 train:
-  batch_size: 2
   num_epochs: 10
   dropout: 0.2
   objective: lsl
-  distillation_loss: kl
   smoothing: 0.1
   optimizer: adamw
   weight_decay: 0.01
@@ -53,26 +37,78 @@ train:
   warmup_steps: true
   max_grad_norm: 1.0
   accumulation_steps: 1
-
-distil:
+  eval_batch_size: 2
+  training_batch_size: 2
+  num_labels: 6
   alpha: 0.5
-
-general:
-  do_train: true
-  do_eval: false
-  debug: false
-  labels: [ ISCAS, INFOCOM, WWW, SIGGRAPH, VLDB ]
-  output_dir: outputs
-  save_steps: 1000
   logging_steps: 100
-  validation_every_n_epoch: 1
-  evaluate_during_training: true
-  get_mismated: true
+
+
+model:
+  _target_: bert-squeeze.distillation.distiller.Distiller
+  teacher_config:
+    _target_: bert-squeeze.models.custom_labse.LtCustomLabse
+    training_config: ${train} # for the sake of compatibility but useless as model won't be finetuned
+    model_config: "sentence-transformers/LaBSE"
+    num_labels: ${train.num_labels}
+    checkpoint_path: ../checkpoints/BER-511/checkpoints/N-Step-Checkpoint_9_4500.ckpt
+    name: labse
+  student_config:
+    _target_: bert-squeeze.models.custom_bert.LtCustomBert
+    architecture: "transformer"
+    training_config: ${train} # for the sake of compatibility but useless as model won't be finetuned
+    model_config: "bert-base-cased"
+    num_labels: ${train.num_labels}
+    name: bert
+  training_config: ${train}
+
+
+data:
+  train_batch_size: ${train.training_batch_size}
+  eval_batch_size: ${train.eval_batch_size}
+  _target_: bert-squeeze.data.modules.distillation_module.DistillationDataModule
+  teacher_module:
+    _target_: bert-squeeze.data.modules.transformer_module.TransformerDataModule
+    dataset_config:
+      is_local: false
+      name: emotion
+      split:
+      text_col: text
+      label_col: label
+      truncate_mode: head
+    tokenizer_name: ${model.teacher_config.model_config}
+    max_length: 256
+    train_batch_size: ${train.training_batch_size}
+    eval_batch_size: ${train.eval_batch_size}
+  student_module:
+    _target_: bert-squeeze.data.modules.transformer_module.TransformerDataModule
+    dataset_config:
+      is_local: false
+      name: emotion
+      split:
+      text_col: text
+      label_col: label
+      truncate_mode: head
+    tokenizer_name: ${model.student_config.model_config}
+    max_length: 256
+    train_batch_size: ${train.training_batch_size}
+    eval_batch_size: ${train.eval_batch_size}
+  soft_data_config:
+    is_local: false
+    name: go_emotions
+    split: raw
+    text_col: text
+
 
 neptune:
   user_name: julesbelveze
   project: bert-tricks
   tags: [ ]
+  logger:
+    _target_: neptune.new.integrations.pytorch_lightning.NeptuneLogger
+    project: ${neptune.user_name}/${neptune.project}
+    name: ${task.name}
+
 
 hydra:
   run:

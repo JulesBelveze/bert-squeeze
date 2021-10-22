@@ -22,7 +22,7 @@ class DistillationDataModule(pl.LightningDataModule):
         self.train_batch_size = kwargs.get("train_batch_size", 32)
         self.eval_batch_size = kwargs.get("eval_batch_size", 32)
 
-        self.soft_data_config = soft_data_config
+        self.soft_dataset_config = soft_data_config
         self.labeler = hard_labeler
 
         self.dataset = None
@@ -73,13 +73,15 @@ class DistillationDataModule(pl.LightningDataModule):
 
         # adding a "fake label" to the soft dataset for consistency with the labeled one
         soft_dataset = soft_dataset.map(lambda example: _create_fake_label(example), batched=False)
-        return soft_dataset
+
+        columns_to_remove = list(set(soft_dataset.column_names["train"]) - {"text", "label"})
+        return soft_dataset.remove_columns(columns_to_remove)
 
     def featurize(self) -> datasets.DatasetDict:
         """Featurize dataset"""
 
         # In case of a soft distillation
-        if self.soft_data_config is not None:
+        if self.soft_dataset_config is not None:
             soft_dataset = self.get_soft_dataset()
 
             # Overriding the teacher & students datasets to integrate the soft dataset
