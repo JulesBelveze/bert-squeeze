@@ -54,12 +54,12 @@ model:
     checkpoint_path: ../checkpoints/BER-511/checkpoints/N-Step-Checkpoint_9_4500.ckpt
     name: labse
   student_config:
-    _target_: bert-squeeze.models.lr.EmbeddingLogisticRegression
+    _target_: bert-squeeze.models.lr.BowLogisticRegression
     architecture: "lr"
-    vocab_size: 30000
-    embed_dim: 64
+    vocab_size: 10000
+    embed_dim: 256
     num_labels: ${train.num_labels}
-    name: embed_lr
+    name: bow_lr
   training_config: ${train}
 
 

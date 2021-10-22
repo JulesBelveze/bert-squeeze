@@ -22,7 +22,7 @@ class LrDataModule(pl.LightningDataModule):
         self.train_batch_size = kwargs.get("train_batch_size", 32)
         self.eval_batch_size = kwargs.get("eval_batch_size", 32)
 
-        self.cv = CountVectorizer(ngram_range=(1, 2), max_features=max_features)
+        self.cv = CountVectorizer(ngram_range=(1, kwargs.get("max_ngrams", 1)), max_features=max_features)
 
         self.dataset = None
         self.train = None
