@@ -122,6 +122,7 @@ class DistillationDataModule(pl.LightningDataModule):
             )
             for key in ["train", "test", "validation"]
         })
+        concat_dataset = concat_dataset.shuffle()
         concat_dataset.set_format(type="torch")
         return concat_dataset
 
