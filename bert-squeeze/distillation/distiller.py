@@ -190,7 +190,7 @@ class Distiller(pl.LightningModule):
         if active_idx.sum().item() > 0:
             objective = self.l_lce(student_logits[active_idx], labels[active_idx])
         else:
-            objective = torch.Tensor([0.0])
+            objective = torch.tensor(0.0).to(labels.device)
 
         kd_loss = self.l_distill(teacher_logits, student_logits)
         full_loss = (1 - self.params.alpha) * kd_loss + self.params.alpha * objective
