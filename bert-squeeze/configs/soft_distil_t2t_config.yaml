@@ -98,6 +98,7 @@ data:
     name: go_emotions
     split: raw
     text_col: text
+    max_samples: 10000
 
 
 neptune:

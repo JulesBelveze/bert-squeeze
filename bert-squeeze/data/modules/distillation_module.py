@@ -52,7 +52,7 @@ class DistillationDataModule(pl.LightningDataModule):
         hard_dataset = hard_dataset.remove_columns(["id"])
         return hard_dataset["train"]
 
-    def get_soft_dataset(self) -> datasets.DatasetDict:
+    def get_soft_dataset(self) -> datasets.Dataset:
         """"""
 
         def _create_fake_label(example):
@@ -72,9 +72,11 @@ class DistillationDataModule(pl.LightningDataModule):
             self.soft_dataset_config.text_col = "text"
 
         # adding a "fake label" to the soft dataset for consistency with the labeled one
+        max_samples = self.soft_dataset_config.get("max_samples", len(soft_dataset["train"]))
+        soft_dataset = soft_dataset["train"].select(range(max_samples))
         soft_dataset = soft_dataset.map(lambda example: _create_fake_label(example), batched=False)
 
-        columns_to_remove = list(set(soft_dataset.column_names["train"]) - {"text", "label"})
+        columns_to_remove = list(set(soft_dataset.column_names) - {"text", "label"})
         return soft_dataset.remove_columns(columns_to_remove)
 
     def featurize(self) -> datasets.DatasetDict:
@@ -83,14 +85,13 @@ class DistillationDataModule(pl.LightningDataModule):
         # In case of a soft distillation
         if self.soft_dataset_config is not None:
             soft_dataset = self.get_soft_dataset()
-
             # Overriding the teacher & students datasets to integrate the soft dataset
             # Note: this is only done for the train set.
             self.teacher_module.dataset["train"] = datasets.concatenate_datasets(
-                [self.teacher_module.dataset["train"], soft_dataset["train"]]
+                [self.teacher_module.dataset["train"], soft_dataset]
             )
             self.student_module.dataset["train"] = datasets.concatenate_datasets(
-                [self.student_module.dataset["train"], soft_dataset["train"]]
+                [self.student_module.dataset["train"], soft_dataset]
             )
 
         # In case of a hard distillation
