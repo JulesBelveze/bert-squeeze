@@ -183,9 +183,15 @@ class Distiller(pl.LightningModule):
         logits = self.student.forward(**student_inputs)
         return logits
 
-    def loss(self, teacher_logits, student_logits, labels) -> DistillationLoss:
+    def loss(self, teacher_logits, student_logits, labels, ignore_index: int = -100) -> DistillationLoss:
         """Return loss for knowledge distillation"""
-        objective = self.l_lce(student_logits, labels)
+        # Ignore soft labeled indices (where label is -100)
+        active_idx = (labels != ignore_index)
+        if active_idx.sum().item() > 0:
+            objective = self.l_lce(student_logits[active_idx], labels[active_idx])
+        else:
+            objective = torch.tensor(0.0).to(labels.device)
+
         kd_loss = self.l_distill(teacher_logits, student_logits)
         full_loss = (1 - self.params.alpha) * kd_loss + self.params.alpha * objective
         return DistillationLoss(
@@ -201,7 +207,7 @@ class Distiller(pl.LightningModule):
 
         loss = self.loss(t_logits, s_logits, batch["s_labels"])
 
-        self.s_scorer.add(s_logits.detach().cpu(), batch["s_labels"], loss)
+        self.s_scorer.add(s_logits.detach().cpu(), batch["s_labels"].cpu(), loss)
         if self.config.logging_steps > 0 and self.global_step % self.config.logging_steps == 0:
             logging_loss = {key: torch.stack(val).mean() for key, val in self.s_scorer.losses.items()}
             for key, value in logging_loss.items():
