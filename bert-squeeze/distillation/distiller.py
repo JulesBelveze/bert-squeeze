@@ -163,7 +163,7 @@ class Distiller(pl.LightningModule):
         teacher = teacher_class.load_from_checkpoint(
             checkpoint_path,
             training_config=teacher_config,
-            model_config=teacher_config.model_config,
+            pretrained_model=teacher_config.pretrained_model,
             num_labels=self.params.num_labels
         )
         logging.info("Teacher successfully loaded.")

@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 from omegaconf import ListConfig, DictConfig
 from torch.nn import CrossEntropyLoss
-from transformers import AutoModel, AutoConfig, AdamW, get_linear_schedule_with_warmup
+from transformers import AutoConfig, AdamW, get_linear_schedule_with_warmup
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.optimizers import BertAdam
@@ -18,14 +18,13 @@ from ..utils.scorer import Scorer
 
 
 class BaseModule(pl.LightningModule):
-
-    def __init__(self, training_config: DictConfig, num_labels: int, model_config: str = None, **kwargs):
+    def __init__(self, training_config: DictConfig, num_labels: int, pretrained_model: str = None, **kwargs):
         super(BaseModule, self).__init__()
         self.config = training_config
         self.num_labels = num_labels
 
-        if model_config is not None:
-            self.model_config = AutoConfig.from_pretrained(model_config, num_labels=num_labels)
+        if pretrained_model is not None:
+            self.model_config = AutoConfig.from_pretrained(pretrained_model, num_labels=num_labels)
 
         self._set_scorers()
         self._set_objective()

@@ -21,7 +21,7 @@ def load_model_from_exp(path_to_folder: str, module):
     model = get_class(module).load_from_checkpoint(
         checkpoint_path,
         training_config=config,
-        model_config=config.model.model_config,
+        pretrained_model=config.model.pretrained_model,
         num_labels=config.model.num_labels
     )
     logging.info(f"Model '{module}' successfully loaded.")
@@ -38,8 +38,8 @@ def get_neptune_tags(args) -> List[str]:
         tags.append(f"alpha-{args.train.alpha}")
         tags.append(args.data.student_module.dataset_config.name)
     else:
-        if args.model.get("model_config", None) is not None:
-            tags.append(args.model.model_config)
+        if args.model.get("pretrained_model", None) is not None:
+            tags.append(args.model.pretrained_model)
         else:
             tags.append(args.model.name)
         tags.append(args.data.dataset_config.name)

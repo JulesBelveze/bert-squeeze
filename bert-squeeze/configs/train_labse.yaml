@@ -2,8 +2,8 @@ task:
   name: train
 
 general:
-  do_train: false
-  do_eval: true
+  do_train: true
+  do_eval: false
   debug: false
   labels:
     - sadness
@@ -43,7 +43,7 @@ train:
 model:
   _target_: bert-squeeze.models.custom_labse.LtCustomLabse
   training_config: ${train}
-  model_config: "sentence-transformers/LaBSE"
+  pretrained_model: "sentence-transformers/LaBSE"
   num_labels: 6
 
 data:
@@ -55,14 +55,14 @@ data:
     text_col: text
     label_col: label
     truncate_mode: head
-  tokenizer_name: ${model.model_config}
+  tokenizer_name: ${model.pretrained_model}
   max_length: 256
   train_batch_size: ${train.training_batch_size}
   eval_batch_size: ${train.eval_batch_size}
 
 neptune:
   user_name: julesbelveze
-  project: bert-squeeze
+  project: bert-tricks
   tags: [ ]
   logger:
     _target_: neptune.new.integrations.pytorch_lightning.NeptuneLogger

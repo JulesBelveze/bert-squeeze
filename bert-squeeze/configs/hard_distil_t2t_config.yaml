@@ -49,7 +49,7 @@ model:
   teacher_config:
     _target_: bert-squeeze.models.custom_labse.LtCustomLabse
     training_config: ${train} # for the sake of compatibility but useless as model won't be finetuned
-    model_config: "sentence-transformers/LaBSE"
+    pretrained_model: "sentence-transformers/LaBSE"
     num_labels: ${train.num_labels}
     checkpoint_path: ../checkpoints/BER-511/checkpoints/N-Step-Checkpoint_9_4500.ckpt
     name: labse
@@ -57,7 +57,7 @@ model:
     _target_: bert-squeeze.models.custom_bert.LtCustomBert
     architecture: "transformer"
     training_config: ${train} # for the sake of compatibility but useless as model won't be finetuned
-    model_config: "bert-base-cased"
+    pretrained_model: "bert-base-cased"
     num_labels: ${train.num_labels}
     name: bert
   training_config: ${train}
@@ -76,7 +76,7 @@ data:
       text_col: text
       label_col: label
       truncate_mode: head
-    tokenizer_name: ${model.teacher_config.model_config}
+    tokenizer_name: ${model.teacher_config.pretrained_model}
     max_length: 256
     train_batch_size: ${train.training_batch_size}
     eval_batch_size: ${train.eval_batch_size}
@@ -89,7 +89,7 @@ data:
       text_col: text
       label_col: label
       truncate_mode: head
-    tokenizer_name: ${model.student_config.model_config}
+    tokenizer_name: ${model.student_config.pretrained_model}
     max_length: 256
     train_batch_size: ${train.training_batch_size}
     eval_batch_size: ${train.eval_batch_size}
@@ -97,7 +97,7 @@ data:
     _target_: bert-squeeze.distillation.utils.labeler.HardLabeler
     labeler_config:
       teacher: ${model.teacher_config}
-      model_config: ${model.teacher_config.model_config}
+      pretrained_model: ${model.teacher_config.pretrained_model}
       num_labels: ${model.teacher_config.num_labels}
       checkpoint_path: ${model.teacher_config.checkpoint_path}
       max_length: ${data.teacher_module.max_length}
