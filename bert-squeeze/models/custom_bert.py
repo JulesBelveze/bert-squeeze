@@ -60,9 +60,8 @@ class LtCustomBert(BaseModule):
         if self.config.logging_steps > 0 and self.global_step % self.config.logging_steps == 0:
             logging_loss = {key: torch.stack(val).mean() for key, val in self.scorer.losses.items()}
             for key, value in logging_loss.items():
-                self.logger.experiment[f"loss_{key}"].log(value)
+                self.logger.experiment[f"train/loss_{key}"].log(value)
 
-            self.logger.experiment["train/loss"].log(value=logging_loss, step=self.global_step)
             self.logger.experiment["train/acc"].log(self.scorer.acc, step=self.global_step)
             self.scorer.reset()
 

@@ -43,6 +43,8 @@ def get_neptune_tags(args) -> List[str]:
         else:
             tags.append(args.model.name)
         tags.append(args.data.dataset_config.name)
-    tags.append(args.train.objective)
+
+    if args.train.get("objective", None):
+        tags.append(args.train.objective)
     tags.append(args.train.optimizer)
     return tags

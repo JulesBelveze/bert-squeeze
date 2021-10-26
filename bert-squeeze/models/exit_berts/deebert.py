@@ -15,9 +15,10 @@ from omegaconf import DictConfig
 
 
 class DeeBert(BaseModule):
-    def __init__(self, training_config: DictConfig, model_config: str, num_labels: int, **kwargs):
-        super().__init__(training_config, num_labels, model_config, **kwargs)
+    def __init__(self, training_config: DictConfig, pretrained_model: str, num_labels: int, **kwargs):
+        super().__init__(training_config, num_labels, pretrained_model, **kwargs)
         self.train_highway = training_config.train_highway
+        self._build_model()
 
     @overrides
     def _build_model(self):
@@ -27,7 +28,7 @@ class DeeBert(BaseModule):
         self.classifier = nn.Linear(self.model_config.hidden_size, self.model_config.num_labels)
 
         self.bert.init_weights()
-        self.bert.encoder.set_early_exit_entropy(self.config.train.early_exit_entropy)
+        self.bert.encoder.set_early_exit_entropy(self.config.early_exit_entropy)
         self.bert.init_highway_pooler()
 
     @overrides
@@ -65,13 +66,13 @@ class DeeBert(BaseModule):
     def _get_optimizer_parameters(self):
         no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight']
 
-        if self.params.discriminative_learning:
-            if isinstance(self.params.learning_rates, ListConfig) and len(self.params.learning_rates) > 1:
-                groups = [(f'layer.{i}.', self.params.learning_rates[i]) for i in range(12)]
+        if self.config.discriminative_learning:
+            if isinstance(self.config.learning_rates, ListConfig) and len(self.config.learning_rates) > 1:
+                groups = [(f'layer.{i}.', self.config.learning_rates[i]) for i in range(12)]
             else:
-                lr = self.params.learning_rates[0] if isinstance(self.params.learning_rates,
-                                                                 ListConfig) else self.params.learning_rates
-                groups = [(f'layer.{i}.', lr * pow(self.params.layer_lr_decay, 11 - i)) for i in range(12)]
+                lr = self.config.learning_rates[0] if isinstance(self.config.learning_rates,
+                                                                 ListConfig) else self.config.learning_rates
+                groups = [(f'layer.{i}.', lr * pow(self.config.layer_lr_decay, 11 - i)) for i in range(12)]
 
             group_all = [f'layer.{i}.' for i in range(12)]
             no_decay_optimizer_parameters, decay_optimizer_parameters = [], []
@@ -79,7 +80,7 @@ class DeeBert(BaseModule):
                 no_decay_optimizer_parameters.append(
                     {'params': [p for n, p in self.named_parameters() if ("highway" not in n) and
                                 not any(nd in n for nd in no_decay) and any(nd in n for nd in [g])],
-                     'weight_decay_rate': self.params.weight_decay, 'lr': l}
+                     'weight_decay_rate': self.config.weight_decay, 'lr': l}
                 )
                 decay_optimizer_parameters.append(
                     {'params': [p for n, p in self.named_parameters() if ("highway" not in n) and
@@ -90,7 +91,7 @@ class DeeBert(BaseModule):
             group_all_parameters = [
                 {'params': [p for n, p in self.named_parameters() if ("highway" not in n) and
                             not any(nd in n for nd in no_decay) and not any(nd in n for nd in group_all)],
-                 'weight_decay_rate': self.params.weight_decay},
+                 'weight_decay_rate': self.config.weight_decay},
                 {'params': [p for n, p in self.named_parameters() if ("highway" not in n) and
                             any(nd in n for nd in no_decay) and not any(nd in n for nd in group_all)],
                  'weight_decay_rate': 0.0},
@@ -98,11 +99,11 @@ class DeeBert(BaseModule):
             optimizer_grouped_parameters = no_decay_optimizer_parameters + decay_optimizer_parameters \
                                            + group_all_parameters
         else:
-            if self.params.train_highway:
+            if self.config.train_highway:
                 optimizer_grouped_parameters = [
                     {'params': [p for n, p in self.named_parameters() if
                                 ("highway" in n) and (not any(nd in n for nd in no_decay))],
-                     'weight_decay': self.params.weight_decay},
+                     'weight_decay': self.config.weight_decay},
                     {'params': [p for n, p in self.named_parameters() if
                                 ("highway" in n) and (any(nd in n for nd in no_decay))],
                      'weight_decay': 0.0}
@@ -111,7 +112,7 @@ class DeeBert(BaseModule):
                 optimizer_grouped_parameters = [
                     {'params': [p for n, p in self.named_parameters() if
                                 ("highway" not in n) and (not any(nd in n for nd in no_decay))],
-                     'weight_decay': self.params.weight_decay},
+                     'weight_decay': self.config.weight_decay},
                     {'params': [p for n, p in self.named_parameters() if
                                 ("highway" not in n) and (any(nd in n for nd in no_decay))],
                      'weight_decay': 0.0}
@@ -148,10 +149,11 @@ class DeeBert(BaseModule):
         loss, logits = self.shared_step(batch)
 
         self.scorer.add(logits.detach().cpu(), batch["labels"], loss.detach().cpu())
-        if self.config.general.logging_steps > 0 and self.global_step % self.config.general.logging_steps == 0:
-            logging_loss = torch.stack([l for l in self.scorer.losses]).mean()
+        if self.config.logging_steps > 0 and self.global_step % self.config.logging_steps == 0:
+            logging_loss = {key: torch.stack(val).mean() for key, val in self.scorer.losses.items()}
+            for key, value in logging_loss.items():
+                self.logger.experiment[f"train/loss_{key}"].log(value)
 
-            self.logger.experiment["train/loss"].log(value=logging_loss, step=self.global_step)
             self.logger.experiment["train/acc"].log(self.scorer.acc, step=self.global_step)
             self.scorer.reset()
 
