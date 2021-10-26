@@ -28,14 +28,13 @@ class HardLabeler(object):
         checkpoint_path = resource_filename("bert-squeeze", config.checkpoint_path)
         teacher_class = config.teacher
 
-        # tokenizer = AutoTokenizer.from_pretrained(labeler_config.model_config, model_max_len=max_length)
         teacher = teacher_class.load_from_checkpoint(
             checkpoint_path,
             training_config=config,
-            model_config=config.model_config,
+            pretrained_model=config.pretrained_model,
             num_labels=config.num_labels
         )
-        tokenizer = AutoTokenizer.from_pretrained(config.model_config, model_max_len=config.max_length)
+        tokenizer = AutoTokenizer.from_pretrained(config.pretrained_model, model_max_len=config.max_length)
         return teacher, tokenizer
 
     def featurize(self, dataset):

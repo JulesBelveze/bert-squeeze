@@ -7,8 +7,8 @@ from .base_lt_module import BaseModule
 
 
 class LtCustomLabse(BaseModule):
-    def __init__(self, training_config: DictConfig, model_config: str, num_labels: int, **kwargs):
-        super().__init__(training_config, num_labels, model_config, **kwargs)
+    def __init__(self, training_config: DictConfig, pretrained_model: str, num_labels: int, **kwargs):
+        super().__init__(training_config, num_labels, pretrained_model, **kwargs)
         self._build_model()
 
     @overrides

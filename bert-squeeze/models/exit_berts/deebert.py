@@ -1,3 +1,4 @@
+from transformers import AutoConfig
 from typing import List
 
 import torch
@@ -10,13 +11,13 @@ from torch.nn import CrossEntropyLoss
 from .layers import DeeBertModel
 from ..base_lt_module import BaseModule
 from ...utils.errors import RampException
+from omegaconf import DictConfig
 
 
 class DeeBert(BaseModule):
-
-    def __init__(self, config, model_config):
-        super().__init__(config, model_config)
-        self.train_highway = config.train.train_highway
+    def __init__(self, training_config: DictConfig, model_config: str, num_labels: int, **kwargs):
+        super().__init__(training_config, num_labels, model_config, **kwargs)
+        self.train_highway = training_config.train_highway
 
     @overrides
     def _build_model(self):

@@ -1,28 +1,29 @@
 task:
   name: train
-  strategy:
 
-model:
-  model_type: deebert
-  pretrained_model: bert-base-cased
-  pretrained_tokenizer: ${model.pretrained_model}
-  num_labels: 5
-  max_seq_length: 300
-
-dataset:
-  is_local: true
-  name: conference
-  split: default
-  text_col: title
-  label_col: label
-  truncate_mode: head
+general:
+  do_train: true
+  do_eval: false
+  debug: false
+  labels:
+    - sadness
+    - joy
+    - love
+    - anger
+    - fear
+    - surprise
+  output_dir: outputs
+  save_steps: 500
+  logging_steps: 50
+  validation_every_n_epoch: 1
+  evaluate_during_training: true
+  get_mismated: true
 
 train:
-  training_batch_size: 8
-  num_epochs: 10
-  dropout: 0.2
   train_highway: true
   early_exit_entropy: -1
+
+  dropout: 0.2
   optimizer: bertadam
   weight_decay: 0.01
   discriminative_learning: true
@@ -36,23 +37,37 @@ train:
   max_grad_norm: 1.0
   accumulation_steps: 1
   eval_batch_size: 16
+  training_batch_size: 8
+  num_epochs: 10
 
-general:
-  do_train: true
-  do_eval: false
-  debug: false
-  labels: [ ISCAS, INFOCOM, WWW, SIGGRAPH, VLDB ]
-  output_dir: outputs
-  save_steps: 500
-  logging_steps: 50
-  validation_every_n_epoch: 1
-  evaluate_during_training: true
-  get_mismated: true
+model:
+  _target_: bert-squeeze.models.exit_berts.deebert.DeeBert
+  training_config: ${train}
+  model_config: "sentence-transformers/LaBSE"
+  num_labels: 6
+
+data:
+  _target_: bert-squeeze.data.modules.transformer_module.TransformerDataModule
+  dataset_config:
+    is_local: false
+    name: emotion
+    split:
+    text_col: text
+    label_col: label
+    truncate_mode: head
+  tokenizer_name: ${model.model_config}
+  max_length: 256
+  train_batch_size: ${train.training_batch_size}
+  eval_batch_size: ${train.eval_batch_size}
 
 neptune:
   user_name: julesbelveze
   project: bert-tricks
   tags: [ ]
+  logger:
+    _target_: neptune.new.integrations.pytorch_lightning.NeptuneLogger
+    project: ${neptune.user_name}/${neptune.project}
+    name: ${task.name}
 
 hydra:
   run:
