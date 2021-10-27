@@ -51,7 +51,7 @@ class LtCustomLabse(BaseModule):
         loss, logits = self.shared_step(batch)
 
         self.scorer.add(logits, batch["labels"], loss.detach().cpu())
-        if self.config.logging_steps > 0 and self.global_step % self.config.logging_steps == 0:
+        if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
             logging_loss = {key: torch.stack(val).mean() for key, val in self.scorer.losses.items()}
             for key, value in logging_loss.items():
                 self.logger.experiment[f"loss_{key}"].log(value)

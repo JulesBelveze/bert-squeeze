@@ -18,6 +18,7 @@ from ..utils.scorer import Scorer
 class BowLogisticRegression(pl.LightningModule):
     def __init__(self, vocab_size: int, num_labels: int, training_config: DictConfig, **kwargs):
         super().__init__()
+        self._sanity_check(training_config)
         self.config = training_config
         self.num_labels = num_labels
         self.vocab_size = vocab_size
@@ -25,6 +26,13 @@ class BowLogisticRegression(pl.LightningModule):
         self._build_model()
         self._set_objective()
         self._set_scorers()
+
+    @staticmethod
+    def _sanity_check(training_config):
+        assert training_config.logging_steps > 0, \
+            "'logging_steps' should be strictly greater than 0"
+        assert training_config.accumulation_steps > training_config.logging_steps, \
+            "'logging_steps' should be greater than 'accumulation_steps'"
 
     def _set_scorers(self):
         self.scorer = Scorer(self.num_labels)
@@ -70,7 +78,7 @@ class BowLogisticRegression(pl.LightningModule):
         loss, logits = self.shared_step(batch)
         self.scorer.add(logits, batch["labels"], loss.detach().cpu())
 
-        if self.config.logging_steps > 0 and self.global_step % self.config.logging_steps == 0:
+        if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
             logging_loss = {key: torch.stack(val).mean() for key, val in self.scorer.losses.items()}
             for key, value in logging_loss.items():
                 self.logger.experiment[f"loss_{key}"].log(value)

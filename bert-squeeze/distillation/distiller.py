@@ -208,7 +208,7 @@ class Distiller(pl.LightningModule):
         loss = self.loss(t_logits, s_logits, batch["s_labels"])
 
         self.s_scorer.add(s_logits.detach().cpu(), batch["s_labels"].cpu(), loss)
-        if self.config.logging_steps > 0 and self.global_step % self.config.logging_steps == 0:
+        if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
             logging_loss = {key: torch.stack(val).mean() for key, val in self.s_scorer.losses.items()}
             for key, value in logging_loss.items():
                 self.logger.experiment[f"loss_{key}"].log(value)

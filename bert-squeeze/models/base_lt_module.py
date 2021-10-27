@@ -20,6 +20,8 @@ from ..utils.scorer import Scorer
 class BaseModule(pl.LightningModule):
     def __init__(self, training_config: DictConfig, num_labels: int, pretrained_model: str = None, **kwargs):
         super(BaseModule, self).__init__()
+        self._sanity_check(training_config)
+
         self.config = training_config
         self.num_labels = num_labels
 
@@ -28,6 +30,13 @@ class BaseModule(pl.LightningModule):
 
         self._set_scorers()
         self._set_objective()
+
+    @staticmethod
+    def _sanity_check(training_config):
+        assert training_config.logging_steps > 0, \
+            "'logging_steps' should be strictly greater than 0"
+        assert training_config.accumulation_steps > training_config.logging_steps, \
+            "'logging_steps' should be greater than 'accumulation_steps'"
 
     def _set_scorers(self):
         self.scorer = Scorer(self.num_labels)
