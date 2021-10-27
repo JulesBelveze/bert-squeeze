@@ -35,7 +35,7 @@ class BaseModule(pl.LightningModule):
     def _sanity_check(training_config):
         assert training_config.logging_steps > 0, \
             "'logging_steps' should be strictly greater than 0"
-        assert training_config.accumulation_steps > training_config.logging_steps, \
+        assert training_config.logging_steps > training_config.accumulation_steps, \
             "'logging_steps' should be greater than 'accumulation_steps'"
 
     def _set_scorers(self):

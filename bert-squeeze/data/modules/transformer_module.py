@@ -51,7 +51,11 @@ class TransformerDataModule(pl.LightningDataModule):
         if self.label_col != "labels":
             tokenized_dataset = tokenized_dataset.rename_column(self.label_col, "labels")
 
-        tokenized_dataset.set_format(type='torch', columns=["input_ids", "token_type_ids", "attention_mask", "labels"])
+        columns = ["input_ids", "attention_mask", "labels"]
+        if "distilbert" not in self.tokenizer.name_or_path:
+            columns += ["token_type_ids"]
+
+        tokenized_dataset.set_format(type='torch', columns=columns)
         return tokenized_dataset
 
     def prepare_data(self) -> None:
