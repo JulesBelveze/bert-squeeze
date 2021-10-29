@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from omegaconf import DictConfig
 from overrides import overrides
 from transformers import AutoModel
+
 from .base_lt_module import BaseModule
 
 
@@ -54,9 +55,8 @@ class LtCustomLabse(BaseModule):
         if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
             logging_loss = {key: torch.stack(val).mean() for key, val in self.scorer.losses.items()}
             for key, value in logging_loss.items():
-                self.logger.experiment[f"loss_{key}"].log(value)
+                self.logger.experiment[f"train/loss_{key}"].log(value=value, step=self.global_step)
 
-            self.logger.experiment["train/loss"].log(value=logging_loss, step=self.global_step)
             self.logger.experiment["train/acc"].log(self.scorer.acc, step=self.global_step)
             self.scorer.reset()
 
@@ -77,7 +77,7 @@ class LtCustomLabse(BaseModule):
     def shared_step(self, batch):
         inputs = {"input_ids": batch["input_ids"],
                   "attention_mask": batch["attention_mask"],
-                  "token_type_ids": None}
+                  "token_type_ids": batch["token_type_ids"]}
 
         logits = self.forward(**inputs)
         loss = self.loss(logits, batch["labels"])
