@@ -44,6 +44,10 @@ def run(args):
             quantization_callback = instantiate(args.general.quantization)
             callbacks.append(quantization_callback)
 
+        if args.general.get("pruning", None) is not None:
+            pruning_callback = instantiate(args.general.pruning)
+            callbacks.append(pruning_callback)
+
         # NOTE: when performing manual optimization the 'gradient_clip_val' flag needs
         # to be set to None.
         # Issue here: https://github.com/PyTorchLightning/pytorch-lightning/issues/7698

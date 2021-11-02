@@ -24,9 +24,8 @@ class LtCustomBert(BaseModule):
 
     @overrides
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
-                inputs_embeds=None, **kwargs):
+                inputs_embeds=None, output_attentions: bool = False, **kwargs):
         """
-        :param inputs_embeds:
         :param input_ids: sentence or sentences represented as tokens
         :param attention_mask: tells the model which tokens in the input_ids are words and which are padding.
                                1 indicates a token and 0 indicates padding.
@@ -35,6 +34,8 @@ class LtCustomBert(BaseModule):
         :param position_ids: indices of positions of each input sequence tokens in the position embeddings. Selected
                              in the range ``[0, config.max_position_embeddings - 1]
         :param head_mask: mask to nullify selected heads of the self-attention modules
+        :param inputs_embeds:
+        :param output_attentions:
         :return:
 
         For specifications about model output, please refer to:
@@ -47,10 +48,13 @@ class LtCustomBert(BaseModule):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions
         )
 
         pooled_output = outputs[1]
         logits = self.classifier(pooled_output)
+        if output_attentions:
+            return logits, outputs.attentions
         return logits
 
     @overrides

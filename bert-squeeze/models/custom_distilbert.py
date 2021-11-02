@@ -22,16 +22,21 @@ class LtCustomDistilBert(BaseModule):
         )
 
     @overrides
-    def forward(self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, **kwargs):
+    def forward(self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None,
+                output_attentions: bool = False, **kwargs):
         """"""
         outputs = self.encoder(
             input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
-            inputs_embeds=inputs_embeds
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions
         )
         hidden_state = outputs[0]
         logits = self.classifier(hidden_state)
+
+        if output_attentions:
+            return logits, outputs.attentions
         return logits
 
     @overrides
