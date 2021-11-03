@@ -11,24 +11,40 @@ from transformers.models.bert.modeling_bert import BertPooler, BertPreTrainedMod
 from ...utils.errors import RampException
 from ...utils.losses import entropy
 from ...utils.optimizers import gradient_rescale
-from ...utils.types import DeeBertEncoderOutput, DeeBertModelOutput, RomeBertEncoderOutput, RomeBertModelOutput
+from ...utils.types import DeeBertEncoderOutput, DeeBertModelOutput, RomeBertEncoderOutput, RomeBertModelOutput, \
+    RampOutput
 
 
 class OffRamp(nn.Module):
+    """
+    In charge of taking the hidden state corresponding to the [CLS] token.
+    It is usually used after the encoder.
+    """
+
     def __init__(self, config):
         super(OffRamp, self).__init__()
         self.pooler = BertPooler(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-    def forward(self, encoded):
-        pooled_output = self.pooler(encoded[0])
+    def forward(self, hidden_states: torch.Tensor) -> RampOutput:
+        """"""
+        # accessing the first token
+        pooled_output = self.pooler(hidden_states[:, 0].unsqueeze(1))
         output = self.dropout(pooled_output)
         logits = self.classifier(output)
-        return logits, output
+        return RampOutput(
+            logits=logits,
+            pooled_output=pooled_output
+        )
 
 
 class DeeBertEncoder(nn.Module):
+    """
+    We construct the DeeBertEncoder as a regular BertEncoder except that we squeeze
+    an OffRamp (a pooler layer) between each BertLayer.
+    """
+
     def __init__(self, config):
         super(DeeBertEncoder, self).__init__()
         self.config = config
@@ -38,6 +54,7 @@ class DeeBertEncoder(nn.Module):
         self.early_exit_entropy = [-1] * config.num_hidden_layers
 
     def set_early_exit_entropy(self, x: Union[List[float], float]):
+        """Assigning an entropy threshold to every layer."""
         if isinstance(x, float) or isinstance(x, int):
             for i in range(self.config.num_hidden_layers):
                 self.early_exit_entropy[i] = x
@@ -47,6 +64,7 @@ class DeeBertEncoder(nn.Module):
             raise TypeError(f"Expected 'x' to be of type 'float' or 'list' but got :'{type(x)}'")
 
     def init_highway_pooler(self, pooler):
+        """Initialize the pooling layer of each ramp based on a given pooling layer."""
         loaded_model = pooler.state_dict()
         for ramp in self.ramp:
             for name, param in ramp.pooler.state_dict().items():
@@ -56,12 +74,14 @@ class DeeBertEncoder(nn.Module):
                 encoder_hidden_states: torch.Tensor = None, encoder_attention_mask: torch.Tensor = None,
                 output_attentions: bool = False, output_hidden_states: bool = False, return_dict: bool = True):
 
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-        all_ramps = ()
+        all_hidden_states = tuple() if output_hidden_states else None
+        all_attentions = tuple() if output_attentions else None
+        all_ramps = tuple()
+
         for i, layer_module in enumerate(self.layer):
+
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                all_hidden_states += (hidden_states,)
 
             layer_outputs = layer_module(
                 hidden_states=hidden_states,
@@ -70,126 +90,36 @@ class DeeBertEncoder(nn.Module):
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask
             )
-            hidden_states = layer_outputs[0]
+            hidden_states = layer_outputs[0]  # (bs * seq_len * hidden_dim)
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                attention = layer_outputs[1]
+                all_attentions += (attention,)
 
-            current_outputs = (hidden_states,)
-            if output_hidden_states:
-                current_outputs = current_outputs + (all_hidden_states,)
-            if output_attentions:
-                current_outputs = current_outputs + (all_attentions,)
+            ramp_exit = self.ramp[i](hidden_states)  # logits, pooled_output
 
-            ramp_exit = self.ramp[i](current_outputs)  # logits, pooled_output
-
-            # At test time we compute the entropy of the output for each ramp
+            # At test time we compute the entropy of the output for each ramp.
+            # During training we want to train all the layers regardless the entropy.
             if not self.training:
-                ramp_logits = ramp_exit[0]
-                ramp_entropy = entropy(ramp_logits)
-                ramp_exit = ramp_exit + (ramp_entropy,)  # logits, hidden_states(?), entropy
-                all_ramps = all_ramps + (ramp_exit,)
+                ramp_exit.entropy = entropy(ramp_exit.logits)
+                all_ramps += (ramp_exit,)
 
                 # we don't go deeper if the entropy is lower than the set threshold
-                if ramp_entropy < self.early_exit_entropy[i]:
-                    new_output = (ramp_logits,) + current_outputs[1:] + (all_ramps,)
-                    raise RampException(new_output, i + 1)
+                if ramp_exit.entropy < self.early_exit_entropy[i]:
+                    raise RampException(all_ramps, i + 1)
             else:
-                all_ramps = all_ramps + (ramp_exit,)
+                all_ramps += (ramp_exit,)
 
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        outputs = (hidden_states,)
-        if output_hidden_states:
-            outputs = outputs + (all_hidden_states,)
-        if output_attentions:
-            outputs = outputs + (all_attentions,)
-
-        if not return_dict:
-            outputs = outputs + (all_ramps,)
-            return outputs  # last-layer hidden state, (all hidden states), (all attentions), all ramps exits
-        else:
-            return DeeBertEncoderOutput(
-                last_hidden_state=hidden_states,
-                hidden_states=all_hidden_states,
-                attentions=all_attentions,
-                ramps_exit=all_ramps
-            )
-
-
-class RomeBertEncoder(DeeBertEncoder):
-    def __init__(self, config, gradient_equilibrium: bool = False):
-        super().__init__(config)
-        self.gradient_equilibrium = gradient_equilibrium
-
-    @overrides
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor = None, head_mask: torch.Tensor = None,
-                encoder_hidden_states: torch.Tensor = None, encoder_attention_mask: torch.Tensor = None,
-                output_attentions: bool = False, output_hidden_states: bool = False, return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-        all_ramps = ()
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                head_mask=head_mask[i],
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask
-            )
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-            current_outputs = (hidden_states,)
-            if output_hidden_states:
-                current_outputs = current_outputs + (all_hidden_states,)
-            if output_attentions:
-                current_outputs = current_outputs + (all_attentions,)
-
-            ramp_exit = self.ramp[i](current_outputs)  # logits, pooled_output
-
-            ramp_logits = ramp_exit[0]
-            ramp_hidden_states = ramp_exit[1]
-            if self.gradient_equilibrium:
-                ramp_logits = gradient_rescale(ramp_logits, 1.0 / (self.config.num_hidden_layers - i))
-
-            ramp_entropy = entropy(ramp_logits)
-            ramp_exit = (ramp_logits, ramp_hidden_states, ramp_entropy)  # logits, hidden_states(?), entropy
-            all_ramps = all_ramps + (ramp_exit,)
-
-            if not self.training:
-                # we don't go deeper if the entropy is lower than the set threshold
-                if ramp_entropy < self.early_exit_entropy[i]:
-                    new_output = (ramp_logits,) + current_outputs[1:] + (all_ramps,)
-                    raise RampException(new_output, i + 1)
-
-        # Add last layer
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        outputs = (hidden_states,)
-        if output_hidden_states:
-            outputs = outputs + (all_hidden_states,)
-        if output_attentions:
-            outputs = outputs + (all_attentions,)
-
-        if not return_dict:
-            outputs = outputs + (all_ramps,)
-            return outputs  # last-layer hidden state, (all hidden states), (all attentions), all ramps exits
-        else:
-            return RomeBertEncoderOutput(
-                last_hidden_state=hidden_states,
-                hidden_states=all_hidden_states,
-                attentions=all_attentions,
-                ramps_exit=all_ramps
-            )
+        return DeeBertEncoderOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+            ramps_exit=all_ramps
+        )
 
 
 class DeeBertModel(BertPreTrainedModel):
@@ -322,6 +252,79 @@ class DeeBertModel(BertPreTrainedModel):
             attentions=encoder_outputs[2],
             ramps_exits=encoder_outputs[-1]
         )
+
+
+class RomeBertEncoder(DeeBertEncoder):
+    def __init__(self, config, gradient_equilibrium: bool = False):
+        super().__init__(config)
+        self.gradient_equilibrium = gradient_equilibrium
+
+    @overrides
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor = None, head_mask: torch.Tensor = None,
+                encoder_hidden_states: torch.Tensor = None, encoder_attention_mask: torch.Tensor = None,
+                output_attentions: bool = False, output_hidden_states: bool = False, return_dict: bool = True):
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+        all_ramps = ()
+        for i, layer_module in enumerate(self.layer):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_outputs = layer_module(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                head_mask=head_mask[i],
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask
+            )
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
+            current_outputs = (hidden_states,)
+            if output_hidden_states:
+                current_outputs = current_outputs + (all_hidden_states,)
+            if output_attentions:
+                current_outputs = current_outputs + (all_attentions,)
+
+            ramp_exit = self.ramp[i](current_outputs)  # logits, pooled_output
+
+            ramp_logits = ramp_exit[0]
+            ramp_hidden_states = ramp_exit[1]
+            if self.gradient_equilibrium:
+                ramp_logits = gradient_rescale(ramp_logits, 1.0 / (self.config.num_hidden_layers - i))
+
+            ramp_entropy = entropy(ramp_logits)
+            ramp_exit = (ramp_logits, ramp_hidden_states, ramp_entropy)  # logits, hidden_states(?), entropy
+            all_ramps = all_ramps + (ramp_exit,)
+
+            if not self.training:
+                # we don't go deeper if the entropy is lower than the set threshold
+                if ramp_entropy < self.early_exit_entropy[i]:
+                    new_output = (ramp_logits,) + current_outputs[1:] + (all_ramps,)
+                    raise RampException(new_output, i + 1)
+
+        # Add last layer
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        outputs = (hidden_states,)
+        if output_hidden_states:
+            outputs = outputs + (all_hidden_states,)
+        if output_attentions:
+            outputs = outputs + (all_attentions,)
+
+        if not return_dict:
+            outputs = outputs + (all_ramps,)
+            return outputs  # last-layer hidden state, (all hidden states), (all attentions), all ramps exits
+        else:
+            return RomeBertEncoderOutput(
+                last_hidden_state=hidden_states,
+                hidden_states=all_hidden_states,
+                attentions=all_attentions,
+                ramps_exit=all_ramps
+            )
 
 
 class RomeBertModel(BertPreTrainedModel):
