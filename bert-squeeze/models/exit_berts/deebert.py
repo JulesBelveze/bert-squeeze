@@ -8,7 +8,7 @@ from omegaconf import ListConfig
 from overrides import overrides
 from torch.nn import CrossEntropyLoss
 
-from .layers import DeeBertModel
+from .deebert_layers import DeeBertModel
 from ..base_lt_module import BaseModule
 from ...utils.errors import RampException
 from omegaconf import DictConfig

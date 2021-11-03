@@ -29,23 +29,6 @@ class DeeBertModelOutput:
 
 
 @dataclass
-class RomeBertEncoderOutput:
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: torch.FloatTensor = None
-    attentions: torch.FloatTensor = None
-    ramps_exit: torch.FloatTensor = None
-
-
-@dataclass
-class RomeBertModelOutput:
-    sequence_output: torch.FloatTensor = None
-    pooled_output: torch.FloatTensor = None
-    hidden_states: torch.FloatTensor = None
-    attentions: torch.FloatTensor = None
-    ramps_exits: torch.FloatTensor = None
-
-
-@dataclass
 class DistillationLoss:
     kd_loss: torch.Tensor
     objective: torch.Tensor
