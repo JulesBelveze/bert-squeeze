@@ -40,6 +40,10 @@ def run(args):
         if args.train.get("lr_scheduler", False):
             callbacks.append(LearningRateMonitor(logging_interval='epoch'))
 
+        if args.general.get("quantization", None) is not None:
+            quantization_callback = instantiate(args.general.quantization)
+            callbacks.append(quantization_callback)
+
         # NOTE: when performing manual optimization the 'gradient_clip_val' flag needs
         # to be set to None.
         # Issue here: https://github.com/PyTorchLightning/pytorch-lightning/issues/7698

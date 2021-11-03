@@ -18,12 +18,21 @@ def load_model_from_exp(path_to_folder: str, module):
 
     logging.info(f"Loading model '{module}'")
 
-    model = get_class(module).load_from_checkpoint(
-        checkpoint_path,
-        training_config=config,
-        pretrained_model=config.model.pretrained_model,
-        num_labels=config.model.num_labels
-    )
+    if config.model.name == "lstm":
+        model = get_class(module).load_from_checkpoint(
+            checkpoint_path,
+            training_config=config.train,
+            vocab_len=config.model.vocab_len,
+            hidden_dim=config.model.hidden_dim,
+            num_labels=config.model.num_labels
+        )
+    else:
+        model = get_class(module).load_from_checkpoint(
+            checkpoint_path,
+            training_config=config,
+            pretrained_model=config.model.pretrained_model,
+            num_labels=config.model.num_labels
+        )
     logging.info(f"Model '{module}' successfully loaded.")
     return model
 
