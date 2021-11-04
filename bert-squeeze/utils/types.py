@@ -1,34 +1,26 @@
-import torch
-from transformers.modeling_outputs import ModelOutput
 from dataclasses import dataclass
-from typing import TypeVar, Optional
+from typing import TypeVar, Optional, Tuple
+
+import torch
 
 
-class DeeBertEncoderOutput(ModelOutput):
-    # TODO: check type
+@dataclass
+class RampOutput:
+    logits: torch.Tensor
+    pooled_output: torch.Tensor
+    entropy: Optional[float] = None
+
+
+@dataclass
+class DeeBertEncoderOutput:
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: torch.FloatTensor = None
-    attentions: torch.FloatTensor = None
-    ramps_exit: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    ramps_exit: Tuple[torch.FloatTensor] = None
 
 
-class DeeBertModelOutput(ModelOutput):
-    sequence_output: torch.FloatTensor = None
-    pooled_output: torch.FloatTensor = None
-    hidden_states: torch.FloatTensor = None
-    attentions: torch.FloatTensor = None
-    ramps_exits: torch.FloatTensor = None
-
-
-class RomeBertEncoderOutput(ModelOutput):
-    # TODO: check type
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: torch.FloatTensor = None
-    attentions: torch.FloatTensor = None
-    ramps_exit: torch.FloatTensor = None
-
-
-class RomeBertModelOutput(ModelOutput):
+@dataclass
+class DeeBertModelOutput:
     sequence_output: torch.FloatTensor = None
     pooled_output: torch.FloatTensor = None
     hidden_states: torch.FloatTensor = None
