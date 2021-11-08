@@ -47,14 +47,14 @@ train:
 model:
   _target_: bert-squeeze.distillation.distiller.Distiller
   teacher_config:
-    _target_: bert-squeeze.models.custom_labse.LtCustomLabse
+    _target_: bert-squeeze.models.lt_labse.LtCustomLabse
     training_config: ${train} # for the sake of compatibility but useless as model won't be finetuned
     pretrained_model: "sentence-transformers/LaBSE"
     num_labels: ${train.num_labels}
     checkpoint_path: ../checkpoints/BER-511/checkpoints/N-Step-Checkpoint_9_4500.ckpt
     name: labse
   student_config:
-    _target_: bert-squeeze.models.custom_bert.LtCustomBert
+    _target_: bert-squeeze.models.lt_bert.LtCustomBert
     architecture: "transformer"
     training_config: ${train} # for the sake of compatibility but useless as model won't be finetuned
     pretrained_model: "bert-base-cased"

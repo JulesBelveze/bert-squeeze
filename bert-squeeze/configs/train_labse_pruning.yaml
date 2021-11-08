@@ -43,7 +43,7 @@ train:
   logging_steps: 50
 
 model:
-  _target_: bert-squeeze.models.custom_labse.LtCustomLabse
+  _target_: bert-squeeze.models.lt_labse.LtCustomLabse
   training_config: ${train}
   pretrained_model: "sentence-transformers/LaBSE"
   num_labels: 6

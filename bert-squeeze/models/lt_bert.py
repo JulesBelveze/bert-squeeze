@@ -1,7 +1,7 @@
 import torch
 from omegaconf import DictConfig
 from overrides import overrides
-from transformers import AutoModel
+from .transformers import CustomBertModel
 
 from .base_lt_module import BaseModule
 
@@ -13,7 +13,7 @@ class LtCustomBert(BaseModule):
 
     @overrides
     def _build_model(self):
-        self.encoder = AutoModel.from_config(self.model_config)
+        self.encoder = CustomBertModel.from_config(self.model_config)
         self.classifier = torch.nn.Sequential(
             torch.nn.Dropout(self.model_config.hidden_dropout_prob),
             torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),

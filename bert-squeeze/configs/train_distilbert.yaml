@@ -40,7 +40,7 @@ train:
   logging_steps: 50
 
 model:
-  _target_: bert-squeeze.models.custom_distilbert.LtCustomDistilBert
+  _target_: bert-squeeze.models.lt_distilbert.LtCustomDistilBert
   training_config: ${train}
   pretrained_model: "distilbert-base-uncased"
   num_labels: 6

@@ -47,7 +47,7 @@ train:
 model:
   _target_: bert-squeeze.distillation.distiller.Distiller
   teacher_config:
-    _target_: bert-squeeze.models.custom_labse.LtCustomLabse
+    _target_: bert-squeeze.models.lt_labse.LtCustomLabse
     training_config: ${train} # for the sake of compatibility but useless as model won't be finetuned
     pretrained_model: "sentence-transformers/LaBSE"
     num_labels: ${train.num_labels}
