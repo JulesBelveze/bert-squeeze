@@ -7,11 +7,11 @@ from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttenti
 
 
 class BertCustomEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, **kwargs):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
-        self.layerdrop = 0.2
+        self.layerdrop = kwargs.get("layerdrop", 0.1)
         self.gradient_checkpointing = False
 
     def forward(
