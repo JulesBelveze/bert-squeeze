@@ -7,12 +7,42 @@ from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttenti
 
 
 class BertCustomEncoder(nn.Module):
+    """Custom Bert encoder"""
+
     def __init__(self, config, **kwargs):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
         self.layerdrop = kwargs.get("layerdrop", 0.1)
+
+        if kwargs.get("poor_man_technique", None) is not None:
+            self.layer_to_drop = self.get_layer_to_prune(kwargs["poor_man_technique"], kwargs["K"])
+        else:
+            self.layer_to_drop = None
+
         self.gradient_checkpointing = False
+
+    def get_layer_to_prune(self, dropping_technique: str, K: int):
+        """Implementing layer dropping as suggested in https://arxiv.org/abs/2004.03844"""
+        assert dropping_technique in ["top", "bottom", "alternate", "symmetric"], \
+            f"Dropping technique '{dropping_technique} not supported."
+
+        N = len(self.layer)
+        if dropping_technique == "bottom":
+            layer_to_drop = [True] * K + [False] * (N - K)
+        elif dropping_technique == "top":
+            layer_to_drop = [False] * (N - K) + [True] * K
+        elif dropping_technique == "alternate":
+            layer_to_drop = []
+            for _ in range(K):
+                layer_to_drop += [True, False]
+
+            layer_to_drop += [False] * (N - 2 * K)
+        else:
+            layer_to_drop = [False] * N
+            middle = N // 2
+            layer_to_drop[middle - K // 2: middle + K // 2] = [True] * K
+        return layer_to_drop
 
     def forward(
             self,
@@ -35,6 +65,9 @@ class BertCustomEncoder(nn.Module):
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
+
+            if self.layer_to_drop and self.layer_to_drop[i]:
+                continue
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
