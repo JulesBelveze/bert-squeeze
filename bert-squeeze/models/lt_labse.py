@@ -24,13 +24,16 @@ class LtCustomLabse(BaseModule):
         )
 
     @overrides
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, **kwargs):
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, head_mask=None,
+                output_attentions: bool = False, **kwargs):
         """
         :param input_ids: sentence or sentences represented as tokens
         :param attention_mask: tells the model which tokens in the input_ids are words and which are padding.
                                1 indicates a token and 0 indicates padding.
         :param token_type_ids: used when there are two sentences that need to be part of the input. It indicate which
                                tokens are part of sentence1 and which are part of sentence2.
+        :param head_mask:
+        :param output_attentions:
         :return:
 
         For specifications about model output, please refer to:
@@ -39,12 +42,16 @@ class LtCustomLabse(BaseModule):
         model_output = self.encoder(
             input_ids=input_ids,
             token_type_ids=token_type_ids,
-            attention_mask=attention_mask
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions
         )
 
         embeddings = model_output.pooler_output
         embeddings = torch.nn.functional.normalize(embeddings)
         logits = self.classifier(embeddings)
+        if output_attentions:
+            return logits, model_output.attentions
         return logits
 
     @overrides
