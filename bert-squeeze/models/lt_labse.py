@@ -2,9 +2,9 @@ import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
 from overrides import overrides
-from transformers import AutoModel
 
 from .base_lt_module import BaseModule
+from .transformers import CustomLabseModel
 
 
 class LtCustomLabse(BaseModule):
@@ -14,7 +14,7 @@ class LtCustomLabse(BaseModule):
 
     @overrides
     def _build_model(self):
-        self.encoder = AutoModel.from_config(self.model_config)
+        self.encoder = CustomLabseModel.from_pretrained(self.pretrained_model)
         self.classifier = torch.nn.Sequential(
             torch.nn.Dropout(self.model_config.hidden_dropout_prob),
             torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),

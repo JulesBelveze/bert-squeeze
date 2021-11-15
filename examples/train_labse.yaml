@@ -41,9 +41,9 @@ train:
   logging_steps: 50
 
 model:
-  _target_: bert-squeeze.models.lt_bert.LtCustomBert
+  _target_: bert-squeeze.models.lt_labse.LtCustomLabse
   training_config: ${train}
-  pretrained_model: "bert-base-cased"
+  pretrained_model: "sentence-transformers/LaBSE"
   num_labels: 6
 
 data:

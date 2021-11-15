@@ -1,9 +1,10 @@
-import torch.nn as nn
 import logging
-import torch
 import random
-from transformers.models.bert import BertLayer, BertModel
+
+import torch
+import torch.nn as nn
 from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
+from transformers.models.bert import BertLayer, BertModel
 
 
 class BertCustomEncoder(nn.Module):

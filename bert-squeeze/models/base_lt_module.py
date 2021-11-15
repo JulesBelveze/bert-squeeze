@@ -25,8 +25,8 @@ class BaseModule(pl.LightningModule):
         self.config = training_config
         self.num_labels = num_labels
 
-        if pretrained_model is not None:
-            self.model_config = AutoConfig.from_pretrained(pretrained_model, num_labels=num_labels)
+        self.pretrained_model = pretrained_model
+        self.model_config = AutoConfig.from_pretrained(pretrained_model, num_labels=num_labels)
 
         self._set_scorers()
         self._set_objective()

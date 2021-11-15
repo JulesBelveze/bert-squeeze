@@ -2,6 +2,7 @@ import torch
 from omegaconf import DictConfig
 from overrides import overrides
 from transformers import AutoModel
+
 from .base_lt_module import BaseModule
 
 
@@ -12,7 +13,7 @@ class LtCustomDistilBert(BaseModule):
 
     @overrides
     def _build_model(self):
-        self.encoder = AutoModel.from_config(self.model_config)
+        self.encoder = AutoModel.from_pretrained(self.pretrained_model)
         self.classifier = torch.nn.Sequential(
             torch.nn.Dropout(self.model_config.seq_classif_dropout),
             torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),
