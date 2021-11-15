@@ -65,6 +65,10 @@ def run(args):
         logging.info(f"Starting training: {model}")
         trainer.fit(model, data)
 
+        # exporting trained model to ONNX
+        input_sample = iter(data.test_dataloader).next()
+        model.to_onnx(f"{args.general.output_dir}/model.onnx", input_sample, export_params=True)
+
     if args.general.do_eval:
         if not hasattr(args.general, "model_path"):
             raise ConfigurationException("You are on 'eval' mode you need to specify path to model checkpoint.")

@@ -51,15 +51,15 @@ model:
     training_config: ${train} # for the sake of compatibility but useless as model won't be finetuned
     pretrained_model: "sentence-transformers/LaBSE"
     num_labels: ${train.num_labels}
-    checkpoint_path: ../checkpoints/BER-511/checkpoints/N-Step-Checkpoint_9_4500.ckpt
+    checkpoint_path: ../checkpoints/BER-769/N-Step-Checkpoint_1_2000.ckpt
     name: labse
   student_config:
     _target_: bert-squeeze.models.lr.BowLogisticRegression
     architecture: "lr"
     vocab_size: 10000
-    embed_dim: 256
     num_labels: ${train.num_labels}
     name: bow_lr
+    training_config: ${train}
   training_config: ${train}
 
 
