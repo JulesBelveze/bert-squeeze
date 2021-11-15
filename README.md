@@ -1,5 +1,11 @@
 <img src="./images/bert-squeeze.png" height="25%" align="right"/>
 
+<p align="center">
+   <img src="https://img.shields.io/badge/Python-FFD43B?style=for-the-badge&logo=python&logoColor=darkgreen" height="20px">
+   <img src="https://hitcounter.pythonanywhere.com/count/tag.svg?url=https%3A%2F%2Fgithub.com%2FJulesBelveze%2Fbert-squeeze" alt="Hits">
+   <img src="https://img.shields.io/badge/PyTorch Lightning-792EE5?style=for-the-badge&logo=PyTorch Lightning&logoColor=white" height=20px>
+</p>
+
 # Bert-squeeze
 
 **Bert-squeeze** is a repository aiming to provide code to reduce the size of Transformer-based models or decrease their
