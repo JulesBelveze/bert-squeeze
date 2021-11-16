@@ -14,7 +14,7 @@ class BertCustomEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
-        self.layerdrop = kwargs.get("layerdrop", 0.1)
+        self.layerdrop = kwargs.get("layerdrop", 0.0)
 
         if kwargs.get("poor_man_technique", None) is not None:
             self.layer_to_drop = self.get_layer_to_prune(kwargs["poor_man_technique"], kwargs["K"])

@@ -18,6 +18,7 @@ from ..utils.scorer import Scorer
 class BowLogisticRegression(pl.LightningModule):
     def __init__(self, vocab_size: int, num_labels: int, training_config: DictConfig, **kwargs):
         super().__init__()
+        print(training_config)
         self._sanity_check(training_config)
         self.config = training_config
         self.num_labels = num_labels
@@ -31,7 +32,7 @@ class BowLogisticRegression(pl.LightningModule):
     def _sanity_check(training_config):
         assert training_config.logging_steps > 0, \
             "'logging_steps' should be strictly greater than 0"
-        assert training_config.accumulation_steps > training_config.logging_steps, \
+        assert training_config.logging_steps > training_config.accumulation_steps, \
             "'logging_steps' should be greater than 'accumulation_steps'"
 
     def _set_scorers(self):
