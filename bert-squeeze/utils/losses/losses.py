@@ -1,4 +1,11 @@
+import numpy as np
 import torch
+
+
+def normal_shannon_entropy(p: torch.Tensor, num_labels: int) -> float:
+    entrop = torch.distributions.Categorical(probs=p).entropy()
+    normal = -np.log(1.0 / num_labels)
+    return entrop / normal
 
 
 def entropy(x: torch.Tensor) -> float:
