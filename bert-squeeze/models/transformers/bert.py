@@ -3,6 +3,7 @@ import random
 
 import torch
 import torch.nn as nn
+from transformers import BertConfig
 from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from transformers.models.bert import BertLayer, BertModel
 
@@ -145,7 +146,7 @@ class BertCustomEncoder(nn.Module):
 
 
 class CustomBertModel(BertModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: BertConfig, add_pooling_layer: bool = True):
         super().__init__(config, add_pooling_layer)
         self.encoder = BertCustomEncoder(config)
 

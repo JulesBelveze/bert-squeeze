@@ -8,18 +8,34 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks.base import Callback
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 
 class LotteryTicket(Callback):
-    def __init__(self, masking_threshold: float = 0.9, masking_amount: float = 0.1, normalize_by_layer: bool = False,
-                 normalize_global: bool = False):
+    def __init__(self, normalize_by_layer: bool = False, normalize_global_importance: bool = False,
+                 masking_threshold: float = 0.9, masking_amount: float = 0.1, metric: str = "acc"):
+        """
+        :param normalize_by_layer: normalize importance score by layers
+        :param normalize_global_importance: normalize all importance scores between 0 and 1
+        :param masking_threshold: masking threshold in term of metrics (stop masking when metric < threshold * original
+                                  metric value)
+        :param masking_amount: Amount of heads to mask at each masking step
+        """
+        assert 0.0 < masking_threshold < 1.0, f"Masking threshold needs to be in [0.0, 1.0] got {masking_threshold}"
+
         self.normalize_by_layer = normalize_by_layer
-        self.normalize_global = normalize_global
+        self.normalize_global_importance = normalize_global_importance
         self.masking_threshold = masking_threshold
         self.masking_amount = masking_amount
+
+        self.metric = {
+            "acc": accuracy_score,
+            "f1": f1_score,
+            "prec": precision_score,
+            "rec": recall_score
+        }[metric]
 
     @staticmethod
     def entropy(p: torch.Tensor) -> float:
@@ -41,9 +57,9 @@ class LotteryTicket(Callback):
             else:
                 logging.info(f"layer {row + 1}:\t" + "\t".join(f"{x:d}" for x in tensor[row].cpu().data))
 
-    def compute_heads_importance(self, model, eval_dataloader: DataLoader, compute_entropy: bool = True,
-                                 compute_importance: bool = True, head_mask: torch.Tensor = None,
-                                 actually_pruned: bool = False):
+    def compute_heads_importance(self, model: pl.LightningModule, eval_dataloader: DataLoader,
+                                 compute_entropy: bool = True, compute_importance: bool = True,
+                                 head_mask: torch.Tensor = None, actually_pruned: bool = False):
         """This method shows how to compute:
         - head attention entropy
         - head importance scores according to http://arxiv.org/abs/1905.10650
@@ -67,9 +83,7 @@ class LotteryTicket(Callback):
         labels = None
         tot_tokens = 0.0
 
-        for step, inputs in enumerate(
-                tqdm(eval_dataloader, desc="Iteration")):  # , disable=args.local_rank not in [-1, 0])):
-
+        for step, inputs in enumerate(tqdm(eval_dataloader, desc="Iteration")):
             inputs = {key: value.to(device) for key, value in inputs.items()}
 
             # Do a forward pass (not with torch.no_grad() since we need gradients for importance score - see below)
@@ -135,15 +149,15 @@ class LotteryTicket(Callback):
         """
         _, head_importance, preds, labels = self.compute_heads_importance(model, eval_dataloader, compute_entropy=False)
         preds = np.argmax(preds, axis=1)
-        original_score = accuracy_score(preds, labels)
-        logging.info("Pruning: original score: %f, threshold: %f", original_score,
-                     original_score * self.masking_threshold)
+        original_score = self.metric(preds, labels)
+        logging.info(f"Pruning: original score: {original_score}, threshold: {original_score * self.masking_threshold}")
 
         new_head_mask = torch.ones_like(head_importance)
         num_to_mask = max(1, int(new_head_mask.numel() * self.masking_amount))
 
         current_score = original_score
         while current_score >= original_score * self.masking_threshold:
+            new_head_mask = new_head_mask.clone()
             head_mask = new_head_mask.clone()  # save current head mask
             # heads from least important to most - keep only not-masked heads
             head_importance[head_mask == 0.0] = float("Inf")
@@ -154,7 +168,7 @@ class LotteryTicket(Callback):
 
             # mask heads
             current_heads_to_mask = current_heads_to_mask[:num_to_mask]
-            logging.info("Heads to mask: %s", str(current_heads_to_mask.tolist()))
+            logging.info(f"Heads to mask: {current_heads_to_mask.tolist()}")
 
             new_head_mask = new_head_mask.view(-1).detach()
             new_head_mask[current_heads_to_mask] = 0.0
@@ -167,13 +181,9 @@ class LotteryTicket(Callback):
                 model, eval_dataloader, compute_entropy=False, head_mask=new_head_mask
             )
             preds = np.argmax(preds, axis=1)
-            current_score = accuracy_score(preds, labels)
-            logging.info(
-                "Masking: current score: %f, remaining heads %d (%.1f percents)",
-                current_score,
-                new_head_mask.sum(),
-                new_head_mask.sum() / new_head_mask.numel() * 100,
-            )
+            current_score = self.metric(preds, labels)
+            logging.info(f"Masking: current score: {current_score}, remaining heads {new_head_mask.sum()} "
+                         f"({new_head_mask.sum() / new_head_mask.numel() * 100} percents)")
 
         logging.info("Final head mask")
         self.print_2d_tensor(head_mask)
@@ -181,7 +191,7 @@ class LotteryTicket(Callback):
 
         return head_mask
 
-    def prune_heads(self, model, eval_dataloader, head_mask):
+    def prune_heads(self, model: pl.LightningModule, eval_dataloader: DataLoader, head_mask: torch.Tensor = None):
         """This method shows how to prune head (remove heads weights) based on
         the head importance scores as described in Michel et al. (http://arxiv.org/abs/1905.10650)
         """
@@ -192,7 +202,7 @@ class LotteryTicket(Callback):
             model, eval_dataloader, compute_entropy=False, compute_importance=False, head_mask=head_mask
         )
         preds = np.argmax(preds, axis=1)
-        score_masking = accuracy_score(preds, labels)
+        score_masking = self.metric(preds, labels)
         original_time = datetime.now() - before_time
 
         original_num_params = sum(p.numel() for p in model.parameters())
@@ -214,19 +224,15 @@ class LotteryTicket(Callback):
             actually_pruned=True,
         )
         preds = np.argmax(preds, axis=1)
-        score_pruning = accuracy_score(preds, labels)
+        score_pruning = self.metric(preds, labels)
         new_time = datetime.now() - before_time
 
-        logging.info(
-            "Pruning: original num of params: %.2e, after pruning %.2e (%.1f percents)",
-            original_num_params,
-            pruned_num_params,
-            pruned_num_params / original_num_params * 100,
-        )
-        logging.info("Pruning: score with masking: %f score with pruning: %f", score_masking, score_pruning)
-        logging.info("Pruning: speed ratio (new timing / original timing): %f percents", original_time / new_time * 100)
+        logging.info(f"Pruning: original num of params: {original_num_params}, after pruning {pruned_num_params} "
+                     f"({pruned_num_params / original_num_params * 100} percents)")
+        logging.info(f"Pruning: score with masking: {score_masking} score with pruning: {score_pruning}")
+        logging.info(f"Pruning: speed ratio (new timing / original timing): {original_time / new_time * 100} percents")
 
-    def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         """"""
         head_mask = self.mask_heads(model=pl_module, eval_dataloader=trainer.datamodule.val_dataloader())
         self.prune_heads(model=pl_module, eval_dataloader=trainer.datamodule.val_dataloader(), head_mask=head_mask)
