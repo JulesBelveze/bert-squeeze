@@ -1,4 +1,5 @@
 import logging
+import os
 from collections import defaultdict
 from typing import Dict, Tuple, Union, List
 
@@ -6,7 +7,8 @@ import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
 from overrides import overrides
-from transformers.models.bert.modeling_bert import BertEmbeddings
+from transformers.models.bert.modeling_bert import BertEmbeddings, BertConfig
+from transformers import AutoModel
 
 from .base_lt_module import BaseModule
 from .custom_transformers.fastbert import FastBertGraph
@@ -16,14 +18,27 @@ from ..utils.types import FastBertLoss
 class LtFastBert(BaseModule):
     def __init__(self, training_config: DictConfig, pretrained_model: str, num_labels: int, scorer_type: str, **kwargs):
         super().__init__(training_config, num_labels, pretrained_model, scorer_type, **kwargs)
-        self.training_stage = 0
+        self.training_stage = getattr(kwargs, "training_stage", 0)
 
         self._build_model()
+        if self.training_stage == 0:
+            self._load_pretrained_bert_model(getattr(kwargs, "pretrained_model_path", None))
 
     @overrides
     def _build_model(self):
         self.embeddings = BertEmbeddings(self.model_config)
-        self.graph = FastBertGraph(self.model_config)
+        self.encoder = FastBertGraph(self.model_config)
+
+    def _load_pretrained_bert_model(self, pretrained_model_path: str = None) -> None:
+        """"""
+        if pretrained_model_path is None:
+            tmp_model = AutoModel.from_pretrained(self.pretrained_model)
+            tmp_model.save_pretrained("tmp_model")
+
+            pretrained_model_path = os.path.join("tmp_model", "pytorch_model.bin")
+
+        pretrained_model_weights = torch.load(pretrained_model_path, map_location='cpu')
+        self.load_state_dict(pretrained_model_weights, strict=False)
 
     @overrides
     def prune_heads(self, heads_to_prune):
@@ -93,7 +108,7 @@ class LtFastBert(BaseModule):
 
         embedding_output = self.embeddings(input_ids, token_type_ids)
 
-        output = self.graph(
+        output = self.encoder(
             hidden_states=embedding_output,
             attention_mask=extended_attention_mask,
             inference=inference,
@@ -147,4 +162,3 @@ class LtFastBert(BaseModule):
         losses, logits = self.shared_step(batch)
         self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), losses)
         return {"loss": losses.full_loss, "logits": logits.cpu()}
-

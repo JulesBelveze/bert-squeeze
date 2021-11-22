@@ -32,7 +32,7 @@ class FastBertClassifier(nn.Module):
 class FastBertGraph(nn.Module):
     def __init__(self, bert_config: BertConfig):
         super(FastBertGraph, self).__init__()
-        self.layers = nn.ModuleList([BertLayer(bert_config) for _ in range(bert_config.num_hidden_layers)])
+        self.layer = nn.ModuleList([BertLayer(bert_config) for _ in range(bert_config.num_hidden_layers)])
 
         self.layer_classifier = FastBertClassifier(bert_config)
         # creating branches
@@ -52,10 +52,11 @@ class FastBertGraph(nn.Module):
         hidden_states = (hidden_states,)
         # In the Inference stage, if the uncertainty of the i-th student is low
         # it will be returned early.
+        # Note: during inference batch_size needs to be 1
         if inference:
             uncertain_infos = []
             for i, (layer_module, (k, layer_classifier_module)) in enumerate(
-                    zip(self.layers, self.layer_classifiers.items())):
+                    zip(self.layer, self.layer_classifiers.items())):
                 hidden_states = layer_module(hidden_states[0], attention_mask)
                 logits = layer_classifier_module(hidden_states[0])
                 prob = F.softmax(logits, dim=-1)
@@ -73,7 +74,7 @@ class FastBertGraph(nn.Module):
         else:
             # Initial training (consistent with normal fine-tuning)
             if training_stage == 0:
-                for layer_module in self.layers:
+                for layer_module in self.layer:
                     hidden_states = layer_module(hidden_states[0], attention_mask)
 
                 logits = self.layer_classifier(hidden_states[0])
@@ -82,7 +83,7 @@ class FastBertGraph(nn.Module):
             # Distillation training, the KL divergence of students and teachers in each layer is used as loss
             else:
                 all_encoder_layers = []
-                for layer_module in self.layers:
+                for layer_module in self.layer:
                     hidden_states = layer_module(hidden_states[0], attention_mask)
                     all_encoder_layers.append(hidden_states[0])
 
