@@ -89,6 +89,3 @@ class LtCustomLabse(BaseModule):
         logits = self.forward(**inputs)
         loss = self.loss(logits, batch["labels"])
         return loss, logits
-
-    def training_epoch_end(self, _):
-        pass
