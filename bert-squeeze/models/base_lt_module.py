@@ -1,5 +1,6 @@
 import logging
 import math
+from copy import deepcopy
 from typing import List
 
 import matplotlib.pyplot as plt
@@ -14,11 +15,12 @@ from transformers import AutoConfig, AdamW, get_linear_schedule_with_warmup
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.optimizers import BertAdam
-from ..utils.scorer import Scorer
+from ..utils.scorer import Scorer, LooseScorer, FastBertScorer
 
 
 class BaseModule(pl.LightningModule):
-    def __init__(self, training_config: DictConfig, num_labels: int, pretrained_model: str = None, **kwargs):
+    def __init__(self, training_config: DictConfig, num_labels: int, pretrained_model: str = None,
+                 scorer_type: str = "regular", **kwargs):
         super(BaseModule, self).__init__()
         self._sanity_check(training_config)
 
@@ -28,7 +30,7 @@ class BaseModule(pl.LightningModule):
         self.pretrained_model = pretrained_model
         self.model_config = AutoConfig.from_pretrained(pretrained_model, num_labels=num_labels)
 
-        self._set_scorers()
+        self._set_scorers(scorer_type)
         self._set_objective()
 
     @staticmethod
@@ -38,10 +40,15 @@ class BaseModule(pl.LightningModule):
         assert training_config.logging_steps > training_config.accumulation_steps, \
             "'logging_steps' should be greater than 'accumulation_steps'"
 
-    def _set_scorers(self):
-        self.scorer = Scorer(self.num_labels)
-        self.valid_scorer = Scorer(self.num_labels)
-        self.test_scorer = Scorer(self.num_labels)
+    def _set_scorers(self, scorer_type: str):
+        scorer = {
+            "loose": LooseScorer(self.num_labels),
+            "regular": Scorer(self.num_labels),
+            "fast": FastBertScorer(self.num_labels)
+        }[scorer_type]
+        self.scorer = deepcopy(scorer)
+        self.valid_scorer = deepcopy(scorer)
+        self.test_scorer = deepcopy(scorer)
 
     def prune_heads(self, heads_to_prune):
         """
@@ -192,6 +199,9 @@ class BaseModule(pl.LightningModule):
         """Unfreeze encoder layers"""
         for param in self.encoder.parameters():
             param.requires_grad = True
+
+    def training_epoch_end(self, _) -> None:
+        self.scorer.reset()
 
     def validation_epoch_end(self, test_step_outputs: List[dict]):
         all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])

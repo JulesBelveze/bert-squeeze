@@ -3,7 +3,7 @@ from omegaconf import DictConfig
 from overrides import overrides
 
 from .base_lt_module import BaseModule
-from .transformers import CustomBertModel
+from .custom_transformers import CustomBertModel
 
 
 class LtCustomBert(BaseModule):

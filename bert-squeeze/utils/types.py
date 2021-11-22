@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import dataclasses
+from dataclasses import dataclass, field
 from typing import TypeVar, Optional, Tuple
 
 import torch
@@ -43,5 +44,12 @@ class KDLossOutput:
     last_loss: torch.Tensor
 
 
-Loss = TypeVar("Loss", KDLossOutput, DistillationLoss)
+# TODO: find a way not to hardcode the number of layers
+FastBertLoss = dataclasses.make_dataclass(
+    cls_name="FastBertLoss",
+    fields=[("full_loss", torch.Tensor)] + [(f"kl_layer_{i}", Optional[torch.Tensor], field(default=None)) for i in
+                                            range(11)]
+)
+
+Loss = TypeVar("Loss", KDLossOutput, DistillationLoss, FastBertLoss)
 LossType = Optional[Loss]

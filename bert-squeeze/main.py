@@ -48,6 +48,9 @@ def run(args):
             pruning_callback = instantiate(args.general.pruning)
             callbacks.append(pruning_callback)
 
+        if "fast" in args.model._target_:
+            callbacks.append(instantiate(args.finetuning_callback))
+
         # NOTE: when performing manual optimization the 'gradient_clip_val' flag needs
         # to be set to None.
         # Issue here: https://github.com/PyTorchLightning/pytorch-lightning/issues/7698

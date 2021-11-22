@@ -4,7 +4,7 @@ from omegaconf import DictConfig
 from overrides import overrides
 
 from .base_lt_module import BaseModule
-from .transformers import CustomLabseModel
+from .custom_transformers import CustomLabseModel
 
 
 class LtCustomLabse(BaseModule):
@@ -89,6 +89,3 @@ class LtCustomLabse(BaseModule):
         logits = self.forward(**inputs)
         loss = self.loss(logits, batch["labels"])
         return loss, logits
-
-    def training_epoch_end(self, _):
-        pass

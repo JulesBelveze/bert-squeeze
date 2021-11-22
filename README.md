@@ -118,3 +118,6 @@ Also, if you have any questions or suggestions feel free to ask!
    One?_](http://arxiv.org/abs/1905.10650)
 7. Fangxiaoyu Feng and Yinfei Yang and Daniel Cer and Naveen Arivazhagan and Wei Wang (2020). [_Language-agnostic BERT
    Sentence Embedding_](https://arxiv.org/abs/2007.01852)
+8. Weijie Liu and Peng Zhou and Zhe Zhao and Zhiruo Wang and Haotang Deng and Qi Ju (2020). [_FastBERT: a Self-distilling
+   {BERT} with Adaptive Inference Time_](https://arxiv.org/abs/2004.02178). \
+   Repository: https://github.com/BitVoyage/FastBERT
