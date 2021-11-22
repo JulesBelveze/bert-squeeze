@@ -18,6 +18,9 @@ general:
   evaluate_during_training: true
   get_mismated: true
 
+finetuning_callback:
+  _target_: bert-squeeze.utils.callbacks.fastbert_logic.FastBertLogic
+
 train:
   training_batch_size: 8
   num_epochs: 10
