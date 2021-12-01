@@ -33,7 +33,7 @@ class LrDataModule(pl.LightningDataModule):
         """Load dataset"""
         if self.dataset_config.is_local:
             self.dataset = datasets.load_dataset(
-                resource_filename("bert-squeeze", f"data/{self.dataset_config.name}_dataset.py"),
+                resource_filename("bert-squeeze", f"data/datasets/{self.dataset_config.name}_dataset.py"),
                 self.dataset_config.split
             )
         else:

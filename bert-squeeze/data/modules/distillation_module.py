@@ -44,7 +44,7 @@ class DistillationDataModule(pl.LightningDataModule):
 
         if self.soft_dataset_config.is_local:
             soft_dataset = datasets.load_dataset(
-                resource_filename("bert-squeeze", f"data/{self.soft_dataset_config.name}_dataset.py"),
+                resource_filename("bert-squeeze", f"data/datasets/{self.soft_dataset_config.name}_dataset.py"),
                 self.soft_dataset_config.split
             )
         else:
