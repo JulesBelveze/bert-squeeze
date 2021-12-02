@@ -33,54 +33,32 @@ class BaseModule(pl.LightningModule):
         self._set_scorers(scorer_type)
         self._set_objective()
 
-    @staticmethod
-    def _sanity_check(training_config):
-        assert training_config.logging_steps > 0, \
-            "'logging_steps' should be strictly greater than 0"
-        assert training_config.logging_steps > training_config.accumulation_steps, \
-            "'logging_steps' should be greater than 'accumulation_steps'"
-
-    def _set_scorers(self, scorer_type: str):
-        scorer = {
-            "loose": LooseScorer(self.num_labels),
-            "regular": Scorer(self.num_labels),
-            "fast": FastBertScorer(self.num_labels)
-        }[scorer_type]
-        self.scorer = deepcopy(scorer)
-        self.valid_scorer = deepcopy(scorer)
-        self.test_scorer = deepcopy(scorer)
-
-    def prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.encoder.layer[layer].attention.prune_heads(heads)
-
-    def _build_model(self):
+    def forward(self, **kwargs):
         raise NotImplementedError()
 
-    def _set_objective(self):
-        objective = self.config.get("objective", "ce")
-        self.smoothing = self.config.get("smoothing", 0.0)
-        self.class_weights = self.config.get("class_weights", [1.0] * self.num_labels)
+    def training_step(self, batch, batch_idx, *args, **kwargs):
+        raise NotImplementedError()
 
-        if objective == "lsl" and self.smoothing == 0.0:
-            logging.warning("You are using label smoothing and the smoothing parameter"
-                            "is set to 0.0.")
-        elif objective == "weighted" and all([w == 1.0 for w in self.class_weights]):
-            logging.warning("You are using a weighted CrossEntropy but the class"
-                            "weights are all equal to 1.0.")
-        self.objective = {
-            "ce": CrossEntropyLoss(),
-            "lsl": LabelSmoothingLoss(classes=self.num_labels,
-                                      smoothing=self.smoothing),
-            "weighted": CrossEntropyLoss(weight=torch.Tensor(self.class_weights)),
-        }[objective]
+    def training_epoch_end(self, _) -> None:
+        self.scorer.reset()
 
-    def loss(self, logits: torch.Tensor, labels: torch.Tensor, *args, **kwargs):
-        return self.objective(logits.view(-1, self.num_labels), labels.view(-1))
+    def validation_step(self, batch, batch_idx, *args, **kwargs):
+        raise NotImplementedError()
+
+    def validation_epoch_end(self, test_step_outputs: List[dict]):
+        all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])
+        all_probs = F.softmax(all_logits, dim=-1)
+        labels_probs = all_probs.numpy()
+
+        self.log_eval_report(labels_probs)
+        self.valid_scorer.reset()
+
+    def test_step(self, batch, batch_idx, *args, **kwargs):
+        raise NotImplementedError()
+
+    def test_epoch_end(self, outputs) -> None:
+        print(self.test_scorer.get_table())
+        self.test_scorer.reset()
 
     def configure_optimizers(self):
         optimizer_parameters = self._get_optimizer_parameters()
@@ -113,6 +91,34 @@ class BaseModule(pl.LightningModule):
             raise ValueError(f"Optimizer '{self.config.optimizer}' not supported.")
 
         return [optimizer], []
+
+    def _build_model(self):
+        raise NotImplementedError()
+
+    def _set_objective(self):
+        objective = self.config.get("objective", "ce")
+        self.smoothing = self.config.get("smoothing", 0.0)
+        self.class_weights = self.config.get("class_weights", [1.0] * self.num_labels)
+
+        if objective == "lsl" and self.smoothing == 0.0:
+            logging.warning("You are using label smoothing and the smoothing parameter"
+                            "is set to 0.0.")
+        elif objective == "weighted" and all([w == 1.0 for w in self.class_weights]):
+            logging.warning("You are using a weighted CrossEntropy but the class"
+                            "weights are all equal to 1.0.")
+        self.objective = {
+            "ce": CrossEntropyLoss(),
+            "lsl": LabelSmoothingLoss(classes=self.num_labels,
+                                      smoothing=self.smoothing),
+            "weighted": CrossEntropyLoss(weight=torch.Tensor(self.class_weights)),
+        }[objective]
+
+    @staticmethod
+    def _sanity_check(training_config):
+        assert training_config.logging_steps > 0, \
+            "'logging_steps' should be strictly greater than 0"
+        assert training_config.logging_steps > training_config.accumulation_steps, \
+            "'logging_steps' should be greater than 'accumulation_steps'"
 
     def _get_optimizer_parameters(self):
         no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight']
@@ -158,6 +164,37 @@ class BaseModule(pl.LightningModule):
             ]
         return optimizer_grouped_parameters
 
+    def _set_scorers(self, scorer_type: str):
+        scorer = {
+            "loose": LooseScorer(self.num_labels),
+            "regular": Scorer(self.num_labels),
+            "fast": FastBertScorer(self.num_labels)
+        }[scorer_type]
+        self.scorer = deepcopy(scorer)
+        self.valid_scorer = deepcopy(scorer)
+        self.test_scorer = deepcopy(scorer)
+
+    def prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.encoder.layer[layer].attention.prune_heads(heads)
+
+    def freeze_encoder(self):
+        """Freeze encoder layers"""
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+
+    def unfreeze_encoder(self):
+        """Unfreeze encoder layers"""
+        for param in self.encoder.parameters():
+            param.requires_grad = True
+
+    def loss(self, logits: torch.Tensor, labels: torch.Tensor, *args, **kwargs):
+        return self.objective(logits.view(-1, self.num_labels), labels.view(-1))
+
     def log_eval_report(self, probs: np.array):
         table = self.valid_scorer.get_table()
         self.logger.experiment["eval/report"].log(table)
@@ -177,40 +214,3 @@ class BaseModule(pl.LightningModule):
             plt.title("Probability boxplot for label {}".format(i))
             self.logger.experiment["eval/dist_label_{}".format(i)].log(fig)
             plt.close("all")
-
-    def forward(self, **kwargs):
-        raise NotImplementedError()
-
-    def training_step(self, batch, batch_idx, *args, **kwargs):
-        raise NotImplementedError()
-
-    def test_step(self, batch, batch_idx, *args, **kwargs):
-        raise NotImplementedError()
-
-    def validation_step(self, batch, batch_idx, *args, **kwargs):
-        raise NotImplementedError()
-
-    def freeze_encoder(self):
-        """Freeze encoder layers"""
-        for param in self.encoder.parameters():
-            param.requires_grad = False
-
-    def unfreeze_encoder(self):
-        """Unfreeze encoder layers"""
-        for param in self.encoder.parameters():
-            param.requires_grad = True
-
-    def training_epoch_end(self, _) -> None:
-        self.scorer.reset()
-
-    def validation_epoch_end(self, test_step_outputs: List[dict]):
-        all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])
-        all_probs = F.softmax(all_logits, dim=-1)
-        labels_probs = all_probs.numpy()
-
-        self.log_eval_report(labels_probs)
-        self.valid_scorer.reset()
-
-    def test_epoch_end(self, outputs) -> None:
-        print(self.test_scorer.get_table())
-        self.test_scorer.reset()

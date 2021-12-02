@@ -28,6 +28,46 @@ class BowLogisticRegression(pl.LightningModule):
         self._set_objective()
         self._set_scorers()
 
+    def forward(self, features: torch.Tensor = None, **kwargs):
+        return self.classifier(features.float())
+
+    def training_step(self, batch, batch_idx, *args, **kwargs):
+        loss, logits = self.shared_step(batch)
+        self.scorer.add(logits, batch["labels"], loss.detach().cpu())
+
+        if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
+            logging_loss = {key: torch.stack(val).mean() for key, val in self.scorer.losses.items()}
+            for key, value in logging_loss.items():
+                self.logger.experiment[f"train/loss_{key}"].log(value=value, step=self.global_step)
+
+            self.logger.experiment["train/acc"].log(self.scorer.acc, step=self.global_step)
+            self.scorer.reset()
+        return loss
+
+    def validation_step(self, batch, batch_idx, *args, **kwargs) -> dict:
+        loss, logits = self.shared_step(batch)
+        self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
+        return {"loss": loss, "logits": logits.cpu()}
+
+    def validation_epoch_end(self, test_step_outputs: List[dict]):
+        all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])
+        all_probs = F.softmax(all_logits, dim=-1)
+        labels_probs = all_probs.numpy()
+
+        self.log_eval_report(labels_probs)
+        self.valid_scorer.reset()
+
+    def test_step(self, batch, batch_idx, *args, **kwargs) -> dict:
+        loss, logits = self.shared_step(batch)
+        self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
+        return {"loss": loss, "logits": logits.cpu()}
+
+    def configure_optimizers(self):
+        return Adam(self.parameters(), lr=self.config.learning_rates[0])
+
+    def _build_model(self):
+        self.classifier = torch.nn.Linear(self.vocab_size, self.num_labels)
+
     @staticmethod
     def _sanity_check(training_config):
         assert training_config.logging_steps > 0, \
@@ -58,15 +98,6 @@ class BowLogisticRegression(pl.LightningModule):
             "weighted": CrossEntropyLoss(weight=torch.Tensor(self.class_weights)),
         }[objective]
 
-    def _build_model(self):
-        self.classifier = torch.nn.Linear(self.vocab_size, self.num_labels)
-
-    def configure_optimizers(self):
-        return Adam(self.parameters(), lr=self.config.learning_rates[0])
-
-    def forward(self, features: torch.Tensor = None, **kwargs):
-        return self.classifier(features.float())
-
     def loss(self, logits: torch.Tensor, labels: torch.Tensor, *args, **kwargs):
         return self.objective(logits.view(-1, self.num_labels), labels.view(-1))
 
@@ -74,37 +105,6 @@ class BowLogisticRegression(pl.LightningModule):
         logits = self.forward(**batch)
         loss = self.loss(logits, batch["labels"])
         return loss, logits
-
-    def training_step(self, batch, batch_idx, *args, **kwargs):
-        loss, logits = self.shared_step(batch)
-        self.scorer.add(logits, batch["labels"], loss.detach().cpu())
-
-        if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
-            logging_loss = {key: torch.stack(val).mean() for key, val in self.scorer.losses.items()}
-            for key, value in logging_loss.items():
-                self.logger.experiment[f"train/loss_{key}"].log(value=value, step=self.global_step)
-
-            self.logger.experiment["train/acc"].log(self.scorer.acc, step=self.global_step)
-            self.scorer.reset()
-        return loss
-
-    def validation_step(self, batch, batch_idx, *args, **kwargs) -> dict:
-        loss, logits = self.shared_step(batch)
-        self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        return {"loss": loss, "logits": logits.cpu()}
-
-    def test_step(self, batch, batch_idx, *args, **kwargs) -> dict:
-        loss, logits = self.shared_step(batch)
-        self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        return {"loss": loss, "logits": logits.cpu()}
-
-    def validation_epoch_end(self, test_step_outputs: List[dict]):
-        all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])
-        all_probs = F.softmax(all_logits, dim=-1)
-        labels_probs = all_probs.numpy()
-
-        self.log_eval_report(labels_probs)
-        self.valid_scorer.reset()
 
     def log_eval_report(self, probs: np.array):
         table = self.valid_scorer.get_table()
