@@ -1,5 +1,3 @@
-from typing import Union
-
 import torch
 from omegaconf import DictConfig
 from overrides import overrides
@@ -21,21 +19,6 @@ class LtTheseusBert(BaseModule):
             "constant": ConstantReplacementScheduler
         }[replacement_scheduler.type](self.encoder.encoder,
                                       **{k: v for k, v in replacement_scheduler.items() if k != "type"})
-
-    @overrides
-    def _build_model(self):
-        encoder = TheseusBertModel(AutoConfig.from_pretrained(self.pretrained_model))
-        encoder.from_pretrained(self.pretrained_model)
-        encoder.encoder.init_successor_layers()
-        self.encoder = encoder
-
-        self.classifier = torch.nn.Sequential(
-            torch.nn.Dropout(self.model_config.hidden_dropout_prob),
-            torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),
-            torch.nn.ReLU(),
-            torch.nn.LayerNorm(self.model_config.hidden_size),
-            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels)
-        )
 
     @overrides
     def forward(self, input_ids: torch.Tensor = None, attention_mask: torch.Tensor = None,
@@ -97,6 +80,21 @@ class LtTheseusBert(BaseModule):
         loss, logits = self.shared_step(batch)
         self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
         return {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
+
+    @overrides
+    def _build_model(self):
+        encoder = TheseusBertModel(AutoConfig.from_pretrained(self.pretrained_model))
+        encoder.from_pretrained(self.pretrained_model)
+        encoder.encoder.init_successor_layers()
+        self.encoder = encoder
+
+        self.classifier = torch.nn.Sequential(
+            torch.nn.Dropout(self.model_config.hidden_dropout_prob),
+            torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),
+            torch.nn.ReLU(),
+            torch.nn.LayerNorm(self.model_config.hidden_size),
+            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels)
+        )
 
     def shared_step(self, batch):
         inputs = {"input_ids": batch["input_ids"],

@@ -13,17 +13,6 @@ class LtCustomLabse(BaseModule):
         self._build_model()
 
     @overrides
-    def _build_model(self):
-        self.encoder = CustomLabseModel.from_pretrained(self.pretrained_model)
-        self.classifier = torch.nn.Sequential(
-            torch.nn.Dropout(self.model_config.hidden_dropout_prob),
-            torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),
-            torch.nn.ReLU(),
-            torch.nn.LayerNorm(self.model_config.hidden_size),
-            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels)
-        )
-
-    @overrides
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, head_mask=None,
                 output_attentions: bool = False, **kwargs):
         """
@@ -80,6 +69,17 @@ class LtCustomLabse(BaseModule):
         loss, logits = self.shared_step(batch)
         self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
         return {"loss": loss, "logits": logits.cpu()}
+
+    @overrides
+    def _build_model(self):
+        self.encoder = CustomLabseModel.from_pretrained(self.pretrained_model)
+        self.classifier = torch.nn.Sequential(
+            torch.nn.Dropout(self.model_config.hidden_dropout_prob),
+            torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),
+            torch.nn.ReLU(),
+            torch.nn.LayerNorm(self.model_config.hidden_size),
+            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels)
+        )
 
     def shared_step(self, batch):
         inputs = {"input_ids": batch["input_ids"],
