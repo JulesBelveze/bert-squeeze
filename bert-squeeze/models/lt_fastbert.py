@@ -53,6 +53,7 @@ class LtFastBert(BaseModule):
         output = self.encoder(
             hidden_states=embedding_output,
             attention_mask=extended_attention_mask,
+            device=self.device,
             inference=inference,
             inference_speed=inference_speed,
             training_stage=training_stage

@@ -46,28 +46,45 @@ class FastBertGraph(nn.Module):
         self.ce_loss_fct = nn.CrossEntropyLoss()
         self.num_class = torch.tensor(bert_config.num_labels, dtype=torch.float32)
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, inference: bool = False,
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, device: str, inference: bool = False,
                 inference_speed: float = 0.5, training_stage: int = 1):
         """"""
         hidden_states = (hidden_states,)
-        # In the Inference stage, if the uncertainty of the i-th student is low
-        # it will be returned early.
-        # Note: during inference batch_size needs to be 1
+        # In the Inference stage, if the uncertainty of the i-th student is low it will be
+        # returned earlier.
+        # To handle batches we have to compute the uncertainty and regroup the low-confidence
+        # examples into a new batch that is fed to the next layer.
         if inference:
-            uncertain_infos = []
+            # positions will keep track of the original position of each element in the
+            # batch when elements will be removed
+            final_probs = torch.zeros((hidden_states[0].shape[0], 2), device=device)
+            positions = torch.arange(start=0, end=hidden_states[0].shape[0], device=device).long()
+
             for i, (layer_module, (k, layer_classifier_module)) in enumerate(
                     zip(self.layer, self.layer_classifiers.items())):
+
                 hidden_states = layer_module(hidden_states[0], attention_mask)
                 logits = layer_classifier_module(hidden_states[0])
                 prob = F.softmax(logits, dim=-1)
                 log_prob = F.log_softmax(logits, dim=-1)
                 uncertain = torch.sum(prob * log_prob, 1) / (-torch.log(self.num_class))
-                uncertain_infos.append([uncertain, prob])
 
-                # return early results
-                if uncertain < inference_speed:
-                    return prob, i, uncertain_infos
-            return prob, i, uncertain_infos
+                # checking if there's enough information
+                enough_info = uncertain < inference_speed
+
+                right_pos = positions[enough_info]
+                final_probs[right_pos] = prob[enough_info]
+
+                hidden_states = (hidden_states[0][~enough_info],)
+                attention_mask = attention_mask[~enough_info]
+
+                # if we have processed all the samples
+                if hidden_states[0].shape[0] == 0:
+                    return final_probs, i
+
+                positions = positions[~enough_info]  # updating the positions to fit the new batch
+
+            return final_probs, i
 
         # Training phase: the first phase corresponds to the backbone training
         # the second phase to the branches training (actual distillation)
