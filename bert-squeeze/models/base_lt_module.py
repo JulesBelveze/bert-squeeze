@@ -1,5 +1,4 @@
 import logging
-import math
 from copy import deepcopy
 from typing import List
 
@@ -11,7 +10,8 @@ import torch
 import torch.nn.functional as F
 from omegaconf import ListConfig, DictConfig
 from torch.nn import CrossEntropyLoss
-from transformers import AutoConfig, AdamW, get_linear_schedule_with_warmup
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from transformers import AutoConfig, AdamW
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.optimizers import BertAdam
@@ -67,21 +67,13 @@ class BaseModule(pl.LightningModule):
                               eps=self.config.adam_eps)
 
             if self.config.lr_scheduler:
-                num_training_steps = len(self.train_dataloader()) * self.config.num_epochs // \
-                                     self.config.accumulation_steps
-
-                warmup_steps = math.ceil(num_training_steps * self.config.warmup_ratio)
-                scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                            num_warmup_steps=warmup_steps,
-                                                            num_training_steps=num_training_steps)
+                scheduler = ReduceLROnPlateau(optimizer)
                 lr_scheduler = {"scheduler": scheduler, "name": "NeptuneLogger"}
                 return [optimizer], [lr_scheduler]
 
         elif self.config.optimizer == "bertadam":
-            num_training_steps = len(self.train_dataloader()) * self.config.num_epochs // \
-                                 self.config.accumulation_steps
             optimizer = BertAdam(optimizer_parameters, lr=self.config.learning_rates[0],
-                                 warmup=self.config.warmup_ratio, t_total=num_training_steps)
+                                 warmup=self.config.warmup_ratio)
 
         elif self.config.optimizer == "adam":
             optimizer = torch.optim.Adam(optimizer_parameters, lr=self.config.learning_rates[0])

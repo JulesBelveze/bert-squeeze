@@ -15,7 +15,8 @@ from hydra.utils import instantiate, get_class
 from omegaconf import DictConfig, ListConfig
 from pkg_resources import resource_filename
 from torch.nn import CrossEntropyLoss
-from transformers import AdamW, get_linear_schedule_with_warmup
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from transformers import AdamW
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.losses.distillation_losses import KLDivLoss
@@ -132,13 +133,7 @@ class Distiller(pl.LightningModule):
                                   eps=self.params.adam_eps)
 
                 if self.params.lr_scheduler:
-                    num_training_steps = len(self.train_dataloader()) * self.params.num_epochs // \
-                                         self.params.accumulation_steps
-
-                    warmup_steps = math.ceil(num_training_steps * self.params.warmup_ratio)
-                    scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                                num_warmup_steps=warmup_steps,
-                                                                num_training_steps=num_training_steps)
+                    scheduler = ReduceLROnPlateau(optimizer)
                     lr_scheduler = {"scheduler": scheduler, "name": "NeptuneLogger"}
                     return [optimizer], [lr_scheduler]
             elif self.params.optimizer == "bertadam":
@@ -162,7 +157,7 @@ class Distiller(pl.LightningModule):
         teacher_class = get_class(teacher_config._target_)
         teacher = teacher_class.load_from_checkpoint(
             checkpoint_path,
-            training_config=teacher_config,
+            training_config=teacher_config.training_config,
             pretrained_model=teacher_config.pretrained_model,
             num_labels=self.params.num_labels
         )

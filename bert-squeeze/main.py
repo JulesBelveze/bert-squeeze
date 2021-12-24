@@ -28,6 +28,8 @@ def run(args):
     logging.info(f"Using config: {args}")
 
     data = instantiate(args.data)
+    data.prepare_data()
+    data.setup()
 
     if args.general.do_train:
         neptune_logger = instantiate(args.neptune.logger)
@@ -66,7 +68,12 @@ def run(args):
         )
 
         logging.info(f"Starting training: {model}")
-        trainer.fit(model, data)
+
+        trainer.fit(
+            model=model,
+            train_dataloaders=data.train_dataloader(),
+            val_dataloaders=data.val_dataloader()
+        )
 
         # exporting trained model to ONNX
         input_sample = iter(data.test_dataloader).next()
