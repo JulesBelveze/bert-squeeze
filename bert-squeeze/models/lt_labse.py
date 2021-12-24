@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 from omegaconf import DictConfig
 from overrides import overrides
 

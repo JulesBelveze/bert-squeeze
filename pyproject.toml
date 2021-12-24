@@ -13,18 +13,18 @@ tabulate = "^0.8.9"
 overrides = "^6.1.0"
 python-dotenv = "^0.18.0"
 datasets = "^1.8.0"
-neptune-client = {extras = ["pytorch-lightning"], version = "^0.9.19"}
+neptune-client = {extras = ["pytorch-lightning"], version = "^0.14.0"}
 omegaconf = "^2.1.0"
 matplotlib = "^3.4.2"
 seaborn = "^0.11.1"
-pytorch-lightning = "^1.3.7"
+pytorch-lightning = "1.5.7"
 psutil = "^5.8.0"
 sklearn = "^0.0"
 hydra-core = "^1.1.1"
 spacy = "^3.1.3"
 
 [tool.poetry.dependencies.xx_ent_wiki_sm]
-url = "https://github.com/explosion/spacy-models/releases/download/xx_ent_wiki_sm-3.1.3/xx_ent_wiki_sm-3.1.3.tar.gz"
+url = "https://github.com/explosion/spacy-models/releases/download/xx_ent_wiki_sm-3.1.0/xx_ent_wiki_sm-3.1.0.tar.gz"
 
 [tool.poetry.dev-dependencies]
 
