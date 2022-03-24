@@ -8,6 +8,7 @@ class FastBertLogic(BaseFinetuning):
     """
 
     def __init__(self, freeze_at_epoch=10):
+        super(FastBertLogic, self).__init__()
         self.freeze_at_epoch = freeze_at_epoch
 
     def freeze_before_training(self, pl_module: pl.LightningModule):
