@@ -1,6 +1,6 @@
 import logging
 from copy import deepcopy
-from typing import List
+from typing import Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,19 +8,37 @@ import pytorch_lightning as pl
 import seaborn as sns
 import torch
 import torch.nn.functional as F
-from omegaconf import ListConfig, DictConfig
+from omegaconf import DictConfig, ListConfig
 from torch.nn import CrossEntropyLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from transformers import AutoConfig, AdamW
+from transformers import AdamW, AutoConfig
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.optimizers import BertAdam
-from ..utils.scorer import Scorer, LooseScorer, FastBertScorer
+from ..utils.scorers import FastBertScorer, LooseScorer, Scorer
 
 
 class BaseModule(pl.LightningModule):
+    """
+    Base class to extend for all modules.
+    """
+
     def __init__(self, training_config: DictConfig, num_labels: int, pretrained_model: str = None,
                  scorer_type: str = "regular", **kwargs):
+        """
+        Args:
+            training_config (DictConfig):
+                training configuration
+            num_labels (int):
+                number of labels
+            pretrained_model (str):
+                name of the pretrained Transformer model to use
+            scorer_type:
+                type of bert-squeeze.utils.scorer to use for evaluation. Possible
+                values ("regular", "loose" or "fast").
+            **kwargs:
+
+        """
         super(BaseModule, self).__init__()
         self._sanity_check(training_config)
 
@@ -34,18 +52,27 @@ class BaseModule(pl.LightningModule):
         self._set_objective()
 
     def forward(self, **kwargs):
+        """"""
         raise NotImplementedError()
 
     def training_step(self, batch, batch_idx, *args, **kwargs):
+        """"""
+        raise NotImplementedError()
+
+    def validation_step(self, batch, batch_idx, *args, **kwargs):
+        """"""
+        raise NotImplementedError()
+
+    def test_step(self, batch, batch_idx, *args, **kwargs):
+        """"""
         raise NotImplementedError()
 
     def training_epoch_end(self, _) -> None:
+        """"""
         self.scorer.reset()
 
-    def validation_step(self, batch, batch_idx, *args, **kwargs):
-        raise NotImplementedError()
-
     def validation_epoch_end(self, test_step_outputs: List[dict]):
+        """"""
         all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])
         all_probs = F.softmax(all_logits, dim=-1)
         labels_probs = all_probs.numpy()
@@ -53,14 +80,19 @@ class BaseModule(pl.LightningModule):
         self.log_eval_report(labels_probs)
         self.valid_scorer.reset()
 
-    def test_step(self, batch, batch_idx, *args, **kwargs):
-        raise NotImplementedError()
-
     def test_epoch_end(self, outputs) -> None:
-        print(self.test_scorer.get_table())
+        """"""
+        self.log("Test results", self.test_scorer.get_table())
         self.test_scorer.reset()
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> Tuple[List, List]:
+        """
+        Method to define optimizers and learning rate schedulers
+
+        Returns:
+            Tuple[List, List]: a tuple of containing a list of optimizers and
+                               a list of schedulers to use during training
+        """
         optimizer_parameters = self._get_optimizer_parameters()
         if self.config.optimizer == "adamw":
             optimizer = AdamW(optimizer_parameters, lr=self.config.learning_rates[0],
@@ -85,9 +117,11 @@ class BaseModule(pl.LightningModule):
         return [optimizer], []
 
     def _build_model(self):
+        """Method that constructs the model to train."""
         raise NotImplementedError()
 
-    def _set_objective(self):
+    def _set_objective(self) -> None:
+        """"""
         objective = self.config.get("objective", "ce")
         self.smoothing = self.config.get("smoothing", 0.0)
         self.class_weights = self.config.get("class_weights", [1.0] * self.num_labels)
@@ -106,13 +140,15 @@ class BaseModule(pl.LightningModule):
         }[objective]
 
     @staticmethod
-    def _sanity_check(training_config):
+    def _sanity_check(training_config) -> None:
+        """"""
         assert training_config.logging_steps > 0, \
             "'logging_steps' should be strictly greater than 0"
         assert training_config.logging_steps > training_config.accumulation_steps, \
             "'logging_steps' should be greater than 'accumulation_steps'"
 
-    def _get_optimizer_parameters(self):
+    def _get_optimizer_parameters(self) -> List[Dict]:
+        """Method that defines the parameter to optimize."""
         no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight']
 
         if self.config.discriminative_learning:
@@ -156,7 +192,8 @@ class BaseModule(pl.LightningModule):
             ]
         return optimizer_grouped_parameters
 
-    def _set_scorers(self, scorer_type: str):
+    def _set_scorers(self, scorer_type: str) -> None:
+        """Method to set the scorer to use to evaluate the model.s"""
         scorer = {
             "loose": LooseScorer(self.num_labels),
             "regular": Scorer(self.num_labels),
@@ -166,28 +203,50 @@ class BaseModule(pl.LightningModule):
         self.valid_scorer = deepcopy(scorer)
         self.test_scorer = deepcopy(scorer)
 
-    def prune_heads(self, heads_to_prune):
+    def prune_heads(self, heads_to_prune: Dict[str, List[int]]) -> None:
         """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
+        Prunes heads of the model.
+
+        Args:
+            heads_to_prune (Dict[str, List[int]]):
+                dict of {layer_num: list of heads to prune in this layer}
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.encoder.layer[layer].attention.prune_heads(heads)
 
-    def freeze_encoder(self):
+    def freeze_encoder(self) -> None:
         """Freeze encoder layers"""
         for param in self.encoder.parameters():
             param.requires_grad = False
 
-    def unfreeze_encoder(self):
+    def unfreeze_encoder(self) -> None:
         """Unfreeze encoder layers"""
         for param in self.encoder.parameters():
             param.requires_grad = True
 
-    def loss(self, logits: torch.Tensor, labels: torch.Tensor, *args, **kwargs):
+    def loss(self, logits: torch.Tensor, labels: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+        """
+        Method called for loss computation
+
+        Args:
+            logits (torch.Tensor):
+                predicted logits
+            labels (torch.Tensor):
+                ground truth labels
+        """
         return self.objective(logits.view(-1, self.num_labels), labels.view(-1))
 
-    def log_eval_report(self, probs: np.array):
+    def log_eval_report(self, probs: np.array) -> None:
+        """
+        Method that logs an evaluation report.
+
+        It uses the evaluation scorer to log all the available losses, metrics as well as
+        the probability distribution of all labels.
+
+        Args:
+            probs (np.array):
+                predicted probabilities
+        """
         table = self.valid_scorer.get_table()
         self.logger.experiment["eval/report"].log(table)
 
