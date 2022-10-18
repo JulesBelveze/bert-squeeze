@@ -1,15 +1,14 @@
 import torch
 from transformers import AutoConfig
 
-from ...models import LtCustomLabse, LtCustomBert, DeeBert, RomeBert
+from ...models import DeeBert, LtCustomBert, LtCustomLabse
 
 
 class TransformerArtifactsLoader:
     MODEL_CLASSES = {
         "labse": LtCustomLabse,
         "bert": LtCustomBert,
-        "deebert": DeeBert,
-        "romebert": RomeBert
+        "deebert": DeeBert
     }
 
     def __init__(self, config):

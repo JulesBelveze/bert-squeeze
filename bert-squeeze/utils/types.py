@@ -1,6 +1,6 @@
 import dataclasses
 from dataclasses import dataclass, field
-from typing import TypeVar, Optional, Tuple
+from typing import Optional, Tuple, TypeVar
 
 import torch
 
@@ -36,14 +36,6 @@ class DistillationLoss:
     full_loss: torch.Tensor
 
 
-@dataclass
-class KDLossOutput:
-    full_loss: torch.Tensor
-    distill_loss: torch.Tensor
-    multi_loss: torch.Tensor
-    last_loss: torch.Tensor
-
-
 # TODO: find a way not to hardcode the number of layers
 FastBertLoss = dataclasses.make_dataclass(
     cls_name="FastBertLoss",
@@ -51,5 +43,5 @@ FastBertLoss = dataclasses.make_dataclass(
                                             range(11)]
 )
 
-Loss = TypeVar("Loss", KDLossOutput, DistillationLoss, FastBertLoss)
+Loss = TypeVar("Loss", DistillationLoss, FastBertLoss)
 LossType = Optional[Loss]

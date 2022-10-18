@@ -2,18 +2,34 @@ import numpy as np
 import torch
 
 
-def normal_shannon_entropy(p: torch.Tensor, num_labels: int) -> float:
+def normal_shannon_entropy(p: torch.Tensor, num_labels: int) -> torch.Tensor:
+    """
+    Computes the normalized Shannon Entropy (aka efficiency).
+    See here: https://en.wikipedia.org/wiki/Entropy_(information_theory)#Efficiency_(normalized_entropy)
+
+    Args:
+        p (torch.Tensor):
+            predicted probabilities
+        num_labels (int):
+            number of labels
+
+    Returns:
+        torch.Tensor:
+            normalized Shannon entropy
+    """
     entrop = torch.distributions.Categorical(probs=p).entropy()
     normal = -np.log(1.0 / num_labels)
     return entrop / normal
 
 
-def entropy(x: torch.Tensor) -> float:
+def entropy(p: torch.Tensor) -> torch.Tensor:
     """
-    :param x: logits before softmax
-    :return: entropy
+
+    Args:
+        p (torch.Tensor):
+            tensor of predicted probabilities
+    Returns:
+        torch.Tensor:
+            entropy of the predicted probabilities
     """
-    exp_x = torch.exp(x)
-    A = torch.sum(exp_x, dim=1)  # sum of exp(x_i)
-    B = torch.sum(x * exp_x, dim=1)  # sum of x_i * exp(x_i)
-    return torch.log(A) - B / A
+    return torch.distributions.Categorical(probs=p).entropy()
