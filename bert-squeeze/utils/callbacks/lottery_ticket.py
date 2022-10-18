@@ -3,6 +3,7 @@
 
 import logging
 from datetime import datetime
+from typing import Tuple
 
 import numpy as np
 import pytorch_lightning as pl
@@ -14,15 +15,27 @@ from tqdm import tqdm
 
 
 class LotteryTicket(Callback):
-    def __init__(self, normalize_by_layer: bool = False, normalize_global_importance: bool = False,
-                 masking_threshold: float = 0.9, masking_amount: float = 0.1, metric: str = "acc"):
+    def __init__(
+            self,
+            normalize_by_layer: bool = False,
+            normalize_global_importance: bool = False,
+            masking_threshold: float = 0.9,
+            masking_amount: float = 0.1,
+            metric: str = "acc"
+    ) -> None:
         """
-        :param normalize_by_layer: normalize importance score by layers
-        :param normalize_global_importance: normalize all importance scores between 0 and 1
-        :param masking_threshold: masking threshold in term of metrics (stop masking when metric < threshold * original
-                                  metric value)
-        :param masking_amount: Amount of heads to mask at each masking step
+        Args:
+            normalize_by_layer (bool):
+                normalize importance score by layers
+            normalize_global_importance (bool):
+                normalize all importance scores between 0 and 1
+            masking_threshold (float):
+                masking threshold in terms of metrics (stop masking when
+                metric < threshold * original metric value)
+            masking_amount (float):
+                Amount of heads to mask at each masking step
         """
+        super().__init__()
         assert 0.0 < masking_threshold < 1.0, f"Masking threshold needs to be in [0.0, 1.0] got {masking_threshold}"
 
         self.normalize_by_layer = normalize_by_layer
@@ -42,6 +55,13 @@ class LotteryTicket(Callback):
         """
         Computes the entropy of a probability distribution which represents
         the expected amount of information drawn from that distribution.
+
+        Args:
+            p (torch.Tensor):
+                tensor of probabilities
+        Returns:
+            float:
+                entropy value
         """
         plogp = p * torch.log(p)
         plogp[p == 0] = 0
@@ -49,7 +69,13 @@ class LotteryTicket(Callback):
 
     @staticmethod
     def print_2d_tensor(tensor: torch.Tensor) -> None:
-        """Print a 2D tensor"""
+        """
+        Print a 2D tensor
+
+        Args:
+            tensor (torch.Tensor):
+                tensor to print
+        """
         logging.info("lv, h >\t" + "\t".join(f"{x + 1}" for x in range(len(tensor))))
         for row in range(len(tensor)):
             if tensor.dtype != torch.long:
@@ -59,10 +85,34 @@ class LotteryTicket(Callback):
 
     def compute_heads_importance(self, model: pl.LightningModule, eval_dataloader: DataLoader,
                                  compute_entropy: bool = True, compute_importance: bool = True,
-                                 head_mask: torch.Tensor = None, actually_pruned: bool = False):
-        """This method shows how to compute:
+                                 head_mask: torch.Tensor = None, actually_pruned: bool = False) \
+            -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, np.array]:
+        """
+        This method shows how to compute:
         - head attention entropy
-        - head importance scores according to http://arxiv.org/abs/1905.10650
+        - head importance scores according to https://arxiv.org/abs/1905.10650
+
+        Args:
+            model (pl.LightningModule):
+                lightning model for which to compute heads importance
+            eval_dataloader (DataLoader):
+                dataloader to use to compute the heads importance
+            compute_entropy (bool):
+                whether to compute the entropy of every attention layer
+            compute_importance (bool):
+                whether to compute the importance of every attention layer
+            head_mask (torch.Tensor):
+            actually_pruned (bool):
+
+        Returns:
+            torch.Tensor:
+                computed entropy for every attention layer
+            torch.Tensor:
+                computed head importance of every head
+            torch.Tensor:
+                model's predictions
+            np.array:
+                ground truth labels
         """
         device = model.device  # since we are out of the `trainer` we need to specify the hardware
 
@@ -115,13 +165,13 @@ class LotteryTicket(Callback):
         attn_entropy /= tot_tokens
         head_importance /= tot_tokens
 
-        # Layerwise importance normalization
+        # Layer wise importance normalization
         if not self.normalize_by_layer:
             exponent = 2
             norm_by_layer = torch.pow(torch.pow(head_importance, exponent).sum(-1), 1 / exponent)
             head_importance /= norm_by_layer.unsqueeze(-1) + 1e-20
 
-        if not self.normalize_global:
+        if not self.normalize_global_importance:
             head_importance = (head_importance - head_importance.min()) / (
                     head_importance.max() - head_importance.min())
 
@@ -134,6 +184,7 @@ class LotteryTicket(Callback):
         logging.info("Head importance scores")
         self.print_2d_tensor(head_importance)
         logging.info("Head ranked by importance scores")
+
         head_ranks = torch.zeros(head_importance.numel(), dtype=torch.long, device=device)
         head_ranks[head_importance.view(-1).sort(descending=True)[1]] = torch.arange(
             head_importance.numel(), device=device
@@ -143,9 +194,19 @@ class LotteryTicket(Callback):
 
         return attn_entropy, head_importance, preds, labels
 
-    def mask_heads(self, model, eval_dataloader):
-        """This method shows how to mask head (set some heads to zero), to test the effect on the network,
+    def mask_heads(self, model: pl.LightningModule, eval_dataloader: DataLoader) -> torch.Tensor:
+        """
+        This method shows how to mask head (set some heads to zero), to test the effect on the network,
         based on the head importance scores, as described in Michel et al. (http://arxiv.org/abs/1905.10650)
+
+        Args:
+            model (pl.LightningModule):
+                model to use
+            eval_dataloader (DataLoader):
+                dataloader to use to mask heads
+        Returns:
+            torch.Tensor:
+                boolean mask for which heads to prune and not to prune
         """
         _, head_importance, preds, labels = self.compute_heads_importance(model, eval_dataloader, compute_entropy=False)
         preds = np.argmax(preds, axis=1)
@@ -191,9 +252,19 @@ class LotteryTicket(Callback):
 
         return head_mask
 
-    def prune_heads(self, model: pl.LightningModule, eval_dataloader: DataLoader, head_mask: torch.Tensor = None):
-        """This method shows how to prune head (remove heads weights) based on
-        the head importance scores as described in Michel et al. (http://arxiv.org/abs/1905.10650)
+    def prune_heads(self, model: pl.LightningModule, eval_dataloader: DataLoader, head_mask: torch.Tensor = None) \
+            -> None:
+        """
+        This method shows how to prune head (remove heads weights) based on the head
+        importance scores as described in Michel et al. (http://arxiv.org/abs/1905.10650)
+
+        Args:
+            model (pl.LightningModule):
+                model to use
+            eval_dataloader (DataLoader):
+                dataloader to use to mask heads
+            head_mask (torch.Tensor):
+                boolean mask for which heads to prune and not to prune
         """
         # Try pruning and test time speedup
         # Pruning is like masking but we actually remove the masked weights
@@ -233,6 +304,21 @@ class LotteryTicket(Callback):
         logging.info(f"Pruning: speed ratio (new timing / original timing): {original_time / new_time * 100} percents")
 
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        """"""
-        head_mask = self.mask_heads(model=pl_module, eval_dataloader=trainer.datamodule.val_dataloader())
-        self.prune_heads(model=pl_module, eval_dataloader=trainer.datamodule.val_dataloader(), head_mask=head_mask)
+        """
+        Method called at the end of training to prune the model's heads.
+
+        Args:
+            trainer (pl.Trainer):
+                lightning trainer
+            pl_module (pl.LightningModule):
+                lightning module
+        """
+        head_mask = self.mask_heads(
+            model=pl_module,
+            eval_dataloader=trainer.datamodule.val_dataloader()
+        )
+        self.prune_heads(
+            model=pl_module,
+            eval_dataloader=trainer.datamodule.val_dataloader(),
+            head_mask=head_mask
+        )
