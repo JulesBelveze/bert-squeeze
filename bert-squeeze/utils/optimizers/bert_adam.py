@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (c) 2019 NVIDIA CORPORATION. All rights reserved.
 # Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team.
 #
@@ -18,30 +17,67 @@
 
 import math
 import torch
+from typing import Union, List, Dict, Callable
 from torch.nn.utils import clip_grad_norm_
 from torch.optim import Optimizer
-from torch.optim.optimizer import required
 
 
-def warmup_cosine(x, warmup=0.002):
+def warmup_cosine(x: torch.Tensor, warmup: float = 0.002) -> torch.Tensor:
+    """
+
+    Args:
+        x:
+        warmup:
+
+    Returns:
+
+    """
     if x < warmup:
         return x / warmup
     return 0.5 * (1.0 + torch.cos(math.pi * x))
 
 
-def warmup_constant(x, warmup=0.002):
+def warmup_constant(x: torch.Tensor, warmup: float = 0.002) -> Union[torch.Tensor, float]:
+    """
+
+    Args:
+        x:
+        warmup:
+
+    Returns:
+
+    """
     if x < warmup:
         return x / warmup
     return 1.0
 
 
-def warmup_linear(x, warmup=0.002):
+def warmup_linear(x: torch.Tensor, warmup: float = 0.002) -> torch.Tensor:
+    """
+
+    Args:
+        x:
+        warmup:
+
+    Returns:
+
+    """
     if x < warmup:
         return x / warmup
     return max((x - 1.) / (warmup - 1.), 0.)
 
 
-def warmup_poly(x, warmup=0.002, degree=0.5):
+def warmup_poly(x: torch.Tensor, warmup: float = 0.002, degree: float = 0.5) -> torch.Tensor:
+    """
+
+    Args:
+        x:
+        warmup:
+        degree:
+
+    Returns:
+
+    """
     if x < warmup:
         return x / warmup
     return (1.0 - x) ** degree
@@ -56,24 +92,47 @@ SCHEDULES = {
 
 
 class BertAdam(Optimizer):
-    """Implements BERT version of Adam algorithm with weight decay fix.
-    Params:
-        lr: learning rate
-        warmup: portion of t_total for the warmup, -1  means no warmup. Default: -1
-        t_total: total number of training steps for the learning
-            rate schedule, -1  means constant learning rate. Default: -1
-        schedule: schedule to use for the warmup (see above). Default: 'warmup_linear'
-        b1: Adams b1. Default: 0.9
-        b2: Adams b2. Default: 0.999
-        e: Adams epsilon. Default: 1e-6
-        weight_decay: Weight decay. Default: 0.01
-        max_grad_norm: Maximum norm for the gradients (-1 means no clipping). Default: 1.0
+    """
+    Implementation of BERT version of Adam algorithm with weight decay fix.
+
+    Args:
+        params (List[Dict]):
+            list of parameters to be optimized
+        lr (float):
+            learning rate
+        warmup (float):
+            portion of t_total for the warmup, -1  means no warmup. Default: -1
+        t_total (int):
+            total number of training steps for the learning rate schedule,
+            -1  means constant learning rate. Default: -1
+        schedule (str):
+            schedule to use for the warmup (see above). Default: 'warmup_linear'
+        b1 (float):
+            Adams b1. Default: 0.9
+        b2 (float):
+            Adams b2. Default: 0.999
+        e (float):
+            Adams epsilon. Default: 1e-6
+        weight_decay (float):
+            Weight decay. Default: 0.01
+        max_grad_norm (float):
+            Maximum norm for the gradients (-1 means no clipping). Default: 1.0
     """
 
-    def __init__(self, params, lr=required, warmup=-1, t_total=-1, schedule='warmup_linear',
-                 b1=0.9, b2=0.999, e=1e-6, weight_decay=0.01,
-                 max_grad_norm=1.0):
-        if lr is not required and lr < 0.0:
+    def __init__(
+            self,
+            params: List[Dict],
+            lr: float,
+            warmup: float = -1.0,
+            t_total: int = -1,
+            schedule: str = 'warmup_linear',
+            b1: float = 0.9,
+            b2: float = 0.999,
+            e: float = 1e-6,
+            weight_decay: float = 0.01,
+            max_grad_norm: float = 1.0
+    ):
+        if lr < 0.0:
             raise ValueError("Invalid learning rate: {} - should be >= 0.0".format(lr))
         if schedule not in SCHEDULES:
             raise ValueError("Invalid schedule parameter: {}".format(schedule))
@@ -105,11 +164,13 @@ class BertAdam(Optimizer):
                 lr.append(lr_scheduled)
         return lr
 
-    def step(self, closure=None):
-        """Performs a single optimization step.
+    def step(self, closure: Callable = None):
+        """
+        Performs a single optimization step.
+
         Arguments:
-            closure (callable, optional): A closure that reevaluates the model
-                and returns the loss.
+            closure (callable, optional):
+                A closure that reevaluates the model and returns the loss.
         """
         loss = None
         if closure is not None:
@@ -149,7 +210,7 @@ class BertAdam(Optimizer):
                 # the correct way of using L2 regularization/weight decay with Adam,
                 # since that will interact with the m and v parameters in strange ways.
                 #
-                # Instead we want to decay the weights in a manner that doesn't interact
+                # Instead, we want to decay the weights in a manner that doesn't interact
                 # with the m/v parameters. This is equivalent to adding the square
                 # of the weights to the loss with plain (non-momentum) SGD.
                 if group['weight_decay'] > 0.0:
