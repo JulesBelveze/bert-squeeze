@@ -1,18 +1,33 @@
-import logging
-from typing import Optional
-
 import datasets
+import logging
 import pytorch_lightning as pl
 from omegaconf import DictConfig
 from pkg_resources import resource_filename
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
+from typing import Optional
 
 
 class TransformerDataModule(pl.LightningDataModule):
-    """DataModule for Transformer-based models."""
+    """
+    DataModule for Transformer-based models.
 
-    def __init__(self, dataset_config: DictConfig, tokenizer_name: str, max_length: int, **kwargs):
+    Args:
+        dataset_config (HydraConfig):
+            dataset configuration
+        tokenizer_name (str):
+            name of the pre-trained tokenizer to use
+        max_length (int):
+            maximum sequence length of the inputs to the tokenizer
+    """
+
+    def __init__(
+            self,
+            dataset_config: DictConfig,
+            tokenizer_name: str,
+            max_length: int,
+            **kwargs
+    ):
         super().__init__()
         self.dataset_config = dataset_config
         self.text_col = dataset_config.text_col
@@ -30,7 +45,7 @@ class TransformerDataModule(pl.LightningDataModule):
         self.val = None
 
     def load_dataset(self) -> None:
-        """Load dataset"""
+        """"""
         if self.dataset_config.is_local:
             self.dataset = datasets.load_dataset(
                 resource_filename("bert-squeeze", f"data/datasets/{self.dataset_config.name}_dataset.py"),
@@ -41,7 +56,10 @@ class TransformerDataModule(pl.LightningDataModule):
         logging.info(f"Dataset '{self.dataset_config.name}' successfully loaded.")
 
     def featurize(self) -> datasets.DatasetDict:
-        """Featurize dataset"""
+        """
+        Returns:
+            DatasetDict: featurized dataset
+        """
         tokenized_dataset = self.dataset.map(
             lambda x: self.tokenizer(x[self.text_col], padding="max_length", max_length=self.max_length,
                                      truncation=True)
@@ -63,6 +81,7 @@ class TransformerDataModule(pl.LightningDataModule):
         self.load_dataset()
 
     def setup(self, stage: Optional[str] = None):
+        """"""
         featurized_dataset = self.featurize()
         print(featurized_dataset)
         self.train = featurized_dataset["train"]
@@ -70,22 +89,33 @@ class TransformerDataModule(pl.LightningDataModule):
         self.test = featurized_dataset["test"]
 
     def _collate_fn(self):
+        """Helper function to merge a list of samples into a batch of Tensors"""
+
         def _collate(examples):
             return self.tokenizer.pad(examples, return_tensors="pt")
 
         return _collate
 
     def train_dataloader(self) -> DataLoader:
-        """Return train dataloader"""
+        """
+        Returns:
+            DataLoader: train dataloader
+        """
         return DataLoader(self.train, collate_fn=self._collate_fn(), batch_size=self.train_batch_size, drop_last=True,
                           num_workers=0)
 
     def test_dataloader(self) -> DataLoader:
-        """Return test dataloader"""
+        """
+        Returns:
+            DataLoader: test dataloader
+        """
         return DataLoader(self.test, collate_fn=self._collate_fn(), batch_size=self.eval_batch_size, drop_last=True,
                           num_workers=0)
 
     def val_dataloader(self) -> DataLoader:
-        """Return validation dataloader"""
+        """
+        Returns:
+            DataLoader: Validation dataloader
+        """
         return DataLoader(self.val, collate_fn=self._collate_fn(), batch_size=self.eval_batch_size, drop_last=True,
                           num_workers=0)

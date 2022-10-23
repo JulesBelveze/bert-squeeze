@@ -1,22 +1,29 @@
-import logging
-import re
-from typing import Optional
-
 import datasets
+import logging
+import numpy as np
 import pytorch_lightning as pl
+import re
 import spacy
+import torch
 from datasets import DatasetDict
 from hydra.core.hydra_config import HydraConfig
 from pkg_resources import resource_filename
 from torch.utils.data import DataLoader
+from typing import Any, Dict, List, Optional
 
 from ...utils.vocabulary import Vocabulary
 
-import numpy as np
-import torch
 
+def collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
+    """
+    Helper function to merge a list of samples into a batch of Tensors
 
-def collate_fn(batch):
+    Args:
+        batch (List[Dict[str, Any]]):
+            List of samples to merge to form a batch
+    Returns:
+        Dict[str, torch.Tensor]: batch of tensor features
+    """
     features = [elt["features"] for elt in batch]
     labels = [elt["labels"] for elt in batch]
 
@@ -26,9 +33,22 @@ def collate_fn(batch):
 
 
 class LSTMDataModule(pl.LightningDataModule):
-    """DataModule for LSTM."""
+    """
+    DataModule for LSTM models
 
-    def __init__(self, dataset_config: HydraConfig, max_features: int, **kwargs):
+    Args:
+        dataset_config (HydraConfig):
+            dataset configuration
+        max_features (int):
+            Number of maximum words to use to build a vocabulary.
+    """
+
+    def __init__(
+            self,
+            dataset_config: HydraConfig,
+            max_features: int,
+            **kwargs
+    ):
         super().__init__()
         self.dataset_config = dataset_config
         self.text_col = dataset_config.text_col
@@ -46,7 +66,7 @@ class LSTMDataModule(pl.LightningDataModule):
         self.val = None
 
     def load_dataset(self) -> None:
-        """Load dataset"""
+        """"""
         if self.dataset_config.is_local:
             self.dataset = datasets.load_dataset(
                 resource_filename("bert-squeeze", f"data/datasets/{self.dataset_config.name}_dataset.py"),
@@ -56,8 +76,17 @@ class LSTMDataModule(pl.LightningDataModule):
             self.dataset = datasets.load_dataset(self.dataset_config.name, self.dataset_config.split)
         logging.info(f"Dataset '{self.dataset_config.name}' successfully loaded.")
 
-    def clean_str(self, example):
-        """"""
+    def clean_str(self, example: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Utility method to properly format the `self.text_col` of an example
+        and avoid OOV tokens.
+
+        Args:
+            example (Dict[str, Any]):
+                sample for which to format the `self.text_col` column
+        Returns:
+            Dict[str, Any]: example with re-formatted text
+        """
         string = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", example[self.text_col])
         string = re.sub(r"\'s", " \'s", string)
         string = re.sub(r"\'ve", " \'ve", string)
@@ -73,8 +102,18 @@ class LSTMDataModule(pl.LightningDataModule):
         example[self.text_col] = string.strip().lower()
         return example
 
-    def tokens_to_ids(self, example):
-        """"""
+    def tokens_to_ids(self, example: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Utility method to tokenize the `self.text_col`. It will add a "features" key
+        to `example` which contains a List[int] corresponding to the vocabulary ids
+        of each token.
+
+        Args:
+            example (Dict[str, Any]):
+                sample for which to tokenize `self.text_col`
+        Returns:
+            Dict[str, Any]: featurized example
+        """
         tokenized_doc = self.tokenizer(example[self.text_col])
         ids = [self.vocabulary[token.text] for token in tokenized_doc]
 
@@ -82,7 +121,10 @@ class LSTMDataModule(pl.LightningDataModule):
         return example
 
     def featurize(self) -> DatasetDict:
-        """Featurize dataset"""
+        """
+        Returns:
+            DatasetDict: featurized dataset
+        """
         dataset = self.dataset.map(lambda x: self.clean_str(x), batched=False)
 
         corpus = self.dataset["train"][self.text_col]
@@ -101,10 +143,11 @@ class LSTMDataModule(pl.LightningDataModule):
         return featurized_dataset
 
     def prepare_data(self) -> None:
-        """Load and featurize dataset"""
+        """"""
         self.load_dataset()
 
     def setup(self, stage: Optional[str] = None):
+        """"""
         featurized_dataset = self.featurize()
 
         self.train = featurized_dataset["train"]
@@ -112,16 +155,25 @@ class LSTMDataModule(pl.LightningDataModule):
         self.test = featurized_dataset["test"]
 
     def train_dataloader(self) -> DataLoader:
-        """Return train dataloader"""
+        """
+        Returns:
+            DataLoader: train dataloader
+        """
         return DataLoader(self.train, collate_fn=collate_fn, batch_size=self.train_batch_size, drop_last=True,
                           num_workers=0)
 
     def test_dataloader(self) -> DataLoader:
-        """Return test dataloader"""
+        """
+        Returns:
+            DataLoader: test dataloader
+        """
         return DataLoader(self.test, collate_fn=collate_fn, batch_size=self.eval_batch_size, drop_last=True,
                           num_workers=0)
 
     def val_dataloader(self) -> DataLoader:
-        """Return validation dataloader"""
+        """
+        Returns:
+            DataLoader: Validation dataloader
+        """
         return DataLoader(self.val, collate_fn=collate_fn, batch_size=self.eval_batch_size, drop_last=True,
                           num_workers=0)

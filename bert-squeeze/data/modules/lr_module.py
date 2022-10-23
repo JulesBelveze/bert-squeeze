@@ -1,19 +1,32 @@
-import logging
-from typing import Optional
-
 import datasets
+import logging
 import pytorch_lightning as pl
 from datasets import Dataset, DatasetDict
 from hydra.core.hydra_config import HydraConfig
 from pkg_resources import resource_filename
 from sklearn.feature_extraction.text import CountVectorizer
 from torch.utils.data import DataLoader
+from typing import Optional
 
 
 class LrDataModule(pl.LightningDataModule):
-    """DataModule for Logistic Regressions."""
+    """
+    DataModule for Logistic Regression.
 
-    def __init__(self, dataset_config: HydraConfig, max_features: int, **kwargs):
+    Args:
+        dataset_config (HydraConfig):
+            dataset configuration
+        max_features (int):
+            Number of maximum features to use. This will be used to build a vocabulary
+            of `max_features` words.
+    """
+
+    def __init__(
+            self,
+            dataset_config: HydraConfig,
+            max_features: int,
+            **kwargs
+    ):
         super().__init__()
         self.dataset_config = dataset_config
         self.text_col = dataset_config.text_col
@@ -30,7 +43,9 @@ class LrDataModule(pl.LightningDataModule):
         self.val = None
 
     def load_dataset(self) -> None:
-        """Load dataset"""
+        """
+        Load dataset
+        """
         if self.dataset_config.is_local:
             self.dataset = datasets.load_dataset(
                 resource_filename("bert-squeeze", f"data/datasets/{self.dataset_config.name}_dataset.py"),
@@ -41,7 +56,10 @@ class LrDataModule(pl.LightningDataModule):
         logging.info(f"Dataset '{self.dataset_config.name}' successfully loaded.")
 
     def featurize(self) -> DatasetDict:
-        """Featurize dataset"""
+        """
+        Returns:
+            DatasetDict: featurized dataset
+        """
         train_text, train_labels = list(
             zip(*map(lambda d: (d[self.text_col], d[self.label_col]), self.dataset["train"]))
         )
@@ -63,10 +81,11 @@ class LrDataModule(pl.LightningDataModule):
         return dataset
 
     def prepare_data(self) -> None:
-        """Load and featurize dataset"""
+        """"""
         self.load_dataset()
 
     def setup(self, stage: Optional[str] = None):
+        """"""
         featurized_dataset = self.featurize()
 
         self.train = featurized_dataset["train"]
@@ -74,13 +93,22 @@ class LrDataModule(pl.LightningDataModule):
         self.test = featurized_dataset["test"]
 
     def train_dataloader(self) -> DataLoader:
-        """Return train dataloader"""
+        """
+        Returns:
+            DataLoader: training dataloader
+        """
         return DataLoader(self.train, batch_size=self.train_batch_size, drop_last=True, num_workers=0)
 
     def test_dataloader(self) -> DataLoader:
-        """Return test dataloader"""
+        """
+        Returns:
+            DataLoader: test dataloader
+        """
         return DataLoader(self.test, batch_size=self.eval_batch_size, drop_last=True, num_workers=0)
 
     def val_dataloader(self) -> DataLoader:
-        """Return validation dataloader"""
+        """
+        Returns:
+            DataLoader: Validation dataloader
+        """
         return DataLoader(self.val, batch_size=self.eval_batch_size, drop_last=True, num_workers=0)

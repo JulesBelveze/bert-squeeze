@@ -1,19 +1,50 @@
-from typing import Optional
-
 import datasets
 import pytorch_lightning as pl
 from hydra.core.hydra_config import HydraConfig
 from pkg_resources import resource_filename
 from torch.utils.data import DataLoader
+from typing import Optional, Union
 
+from .lr_module import LrDataModule
+from .lstm_module import LSTMDataModule
+from .transformer_module import TransformerDataModule
 from ...distillation.utils.labeler import HardLabeler
+
+TeacherDataModule = Union[LrDataModule, TransformerDataModule, LSTMDataModule]
+StudentDataModule = Union[LrDataModule, TransformerDataModule, LSTMDataModule]
 
 
 class DistillationDataModule(pl.LightningDataModule):
-    """DataModule for Distillation procedures."""
+    """
+    LightningDataModule for Distillation procedures.
 
-    def __init__(self, teacher_module: pl.LightningDataModule, student_module: pl.LightningDataModule,
-                 soft_data_config: HydraConfig = None, hard_labeler: HardLabeler = None, **kwargs):
+    The module stitches together the teacher and student DataModules as they
+    might require different processing steps depending on the models used.
+
+    The module features two extra options:
+    - It can generate extra labeled samples by using an `HardLabeler`.
+    - It accepts an additional dataset that will be softly labeled by the
+      teacher and used to further distil its knowledge.
+
+    Args:
+        teacher_module (TeacherDataModule):
+            LightningDataModule to use for the teacher model.
+        student_module (StudentDataModule):
+            LightningDataModule to use for the student model.
+        soft_data_config (HydraConfig):
+            Configuration to use for the "soft" dataset.
+        hard_labeler (HardLabeler):
+            Instance of HardLabeler to use to generate hardly labeled samples.
+    """
+
+    def __init__(
+            self,
+            teacher_module: TeacherDataModule,
+            student_module: StudentDataModule,
+            soft_data_config: HydraConfig = None,
+            hard_labeler: HardLabeler = None,
+            **kwargs
+    ):
         super().__init__()
         assert student_module.dataset_config.name == teacher_module.dataset_config.name
         self.teacher_module = teacher_module
@@ -30,13 +61,19 @@ class DistillationDataModule(pl.LightningDataModule):
         self.test = None
         self.val = None
 
-    def create_hard_dataset(self):
+    def create_hard_dataset(self) -> datasets.Dataset:
         """"""
         hard_dataset = self.labeler.label_dataset()
         return datasets.Dataset.from_dict(hard_dataset)
 
-    def get_soft_dataset(self) -> datasets.Dataset:
-        """"""
+    def get_soft_dataset(self) -> datasets.DatasetDict:
+        """
+        Loads and adds a "fake label" to the dataset that will later be used
+        for soft distillation.
+
+        Returns:
+            datasets.DatasetDict: dataset used for soft distillation
+        """
 
         def _create_fake_label(example):
             example["label"] = -100
@@ -63,8 +100,13 @@ class DistillationDataModule(pl.LightningDataModule):
         return soft_dataset.remove_columns(columns_to_remove)
 
     def featurize(self) -> datasets.DatasetDict:
-        """Featurize dataset"""
+        """
+        Method to featurize both teacher and student data and to concatenate them
+        into one dataset.
 
+        Returns:
+            datasets.DatasetDict: concatenated dataset ready to be used for distillation
+        """
         # In case of a soft distillation
         if self.soft_dataset_config is not None:
             soft_dataset = self.get_soft_dataset()
@@ -107,11 +149,14 @@ class DistillationDataModule(pl.LightningDataModule):
         return concat_dataset
 
     def prepare_data(self) -> None:
-        """Load and featurize dataset"""
+        """
+        Load teacher and student datasets
+        """
         self.teacher_module.prepare_data()
         self.student_module.prepare_data()
 
-    def setup(self, stage: Optional[str] = None):
+    def setup(self, stage: Optional[str] = None) -> None:
+        """"""
         featurized_dataset = self.featurize()
 
         self.train = featurized_dataset["train"]
@@ -119,13 +164,22 @@ class DistillationDataModule(pl.LightningDataModule):
         self.test = featurized_dataset["test"]
 
     def train_dataloader(self) -> DataLoader:
-        """Return train dataloader"""
+        """
+        Returns:
+            DataLoader: Train dataloader
+        """
         return DataLoader(self.train, batch_size=self.train_batch_size, drop_last=True, num_workers=0)
 
     def test_dataloader(self) -> DataLoader:
-        """Return test dataloader"""
+        """
+        Returns:
+            DataLoader: Test dataloader
+        """
         return DataLoader(self.test, batch_size=self.eval_batch_size, drop_last=True, num_workers=0)
 
     def val_dataloader(self) -> DataLoader:
-        """Return validation dataloader"""
+        """
+        Returns:
+            DataLoader: Validation dataloader
+        """
         return DataLoader(self.val, batch_size=self.eval_batch_size, drop_last=True, num_workers=0)
