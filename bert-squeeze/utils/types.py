@@ -1,8 +1,7 @@
 import dataclasses
+import torch
 from dataclasses import dataclass, field
 from typing import Optional, Tuple, TypeVar
-
-import torch
 
 
 @dataclass

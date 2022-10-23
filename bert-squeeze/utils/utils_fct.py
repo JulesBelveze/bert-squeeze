@@ -1,15 +1,38 @@
 import logging
 import os
+import pytorch_lightning as pl
 import sys
-from typing import List
-
 from hydra.utils import get_class
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
+from typing import List
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 
-def load_model_from_exp(path_to_folder: str, module):
+def load_model_from_exp(path_to_folder: str, module: pl.LightningModule) -> pl.LightningModule:
+    """
+    Helper function to load a `pl.LightningModule` from a previous experiment.
+    The folder needs to have the following structure:
+    ```
+    folder
+    ┣━━ .hydra/
+    ┃   ┗━━ config.yaml
+    ┗━━ checkpoints/
+        ┣━━ checkpoints_0.ckpt
+        ┃   ....
+        ┗━━ checkpoints_n.ckpt
+    ```
+
+    Args:
+        path_to_folder (str):
+            path to folder containing the checkpoints and the Hydra configuration from
+            a previous experiment.
+        module (pl.LightningModule):
+            Module to load the checkpoints from.
+
+    Returns:
+        pl.LightningModule: module resumed from the previous experiment.
+    """
     config_file = os.path.join(path_to_folder, ".hydra/config.yaml")
     config = OmegaConf.load(config_file)
 
@@ -37,8 +60,18 @@ def load_model_from_exp(path_to_folder: str, module):
     return model
 
 
-def get_neptune_tags(args) -> List[str]:
-    """Function returning Neptune experiment tags"""
+def get_neptune_tags(args: DictConfig) -> List[str]:
+    """
+    Function returning Neptune experiment tags from a Hydra configuration in order
+    to filter sort experiments in the Neptune UI.
+
+    Args:
+        args (DictConfig):
+            Configuration used to train the model.
+    Returns:
+        List[str]: list of tags that will be logged to the "tags" column of a Neptune
+                   experiment.
+    """
     tags = []
     if args.task.name == "distil":
         tags.append("-".join([args.task.name, args.task.strategy]))
