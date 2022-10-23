@@ -1,9 +1,8 @@
-from typing import List
-
 import datasets
 import pandas as pd
+from typing import List
 
-_DESCRIPTION = "Any dataset that has a 'text' column. This is to be used for soft distillation."
+_DESCRIPTION = "Helper dataset to perform soft distillation."
 
 
 class UnlabeledConfig(datasets.BuilderConfig):

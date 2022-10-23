@@ -1,10 +1,9 @@
-from typing import List
-
 import datasets
 import pandas as pd
+from typing import List
 
-_DESCRIPTION = "Dataset can be found here https://raw.githubusercontent.com/susanli2016/NLP-with-Python/master/data" \
-               "/title_conference.csv"
+_DESCRIPTION = "Dataset used for testing purposes. Taken from here: " \
+               "https://raw.githubusercontent.com/susanli2016/NLP-with-Python/master/data/title_conference.csv"
 
 
 class ConferenceConfig(datasets.BuilderConfig):
