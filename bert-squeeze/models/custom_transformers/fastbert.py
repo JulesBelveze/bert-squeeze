@@ -5,11 +5,27 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers.models.bert.modeling_bert import BertLayer, BertSelfAttention, BertConfig
+from transformers import PretrainedConfig
+from transformers.models.bert.modeling_bert import BertLayer, BertSelfAttention
+from typing import List, Tuple, Union
 
 
 class FastBertClassifier(nn.Module):
-    def __init__(self, config: BertConfig):
+    """
+    This module is a "branch", also defined as student classifier in the paper,
+    that mimics the teacher's architecture. A `FastBertClassifier` layer is
+    squeezed between each Transformer block to enable early outputs in simple cases.
+
+    Args:
+        config (PretrainedConfig):
+            Configuration to use to instantiate a model according to the specified
+            arguments, defining the model architecture.
+    """
+
+    def __init__(
+            self,
+            config: PretrainedConfig
+    ):
         super(FastBertClassifier, self).__init__()
 
         cls_hidden_size = config.hidden_size  # might need to be reduced
@@ -20,7 +36,8 @@ class FastBertClassifier(nn.Module):
         self.dense_prelogits = nn.Linear(cls_hidden_size, cls_hidden_size)
         self.dense_logits = nn.Linear(cls_hidden_size, num_class)
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor = None):
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor = None) -> torch.Tensor:
+        """"""
         states_output = self.dense_narrow(hidden_states)
         states_output = self.selfAttention(states_output, attention_mask)
         token_cls_output = states_output[0][:, 0]
@@ -30,26 +47,73 @@ class FastBertClassifier(nn.Module):
 
 
 class FastBertGraph(nn.Module):
-    def __init__(self, bert_config: BertConfig):
-        super(FastBertGraph, self).__init__()
-        self.layer = nn.ModuleList([BertLayer(bert_config) for _ in range(bert_config.num_hidden_layers)])
+    """
+    Implementation of the FastBERT model presented by in "FastBERT: a Self-distilling
+    BERT with Adaptive Inference Time" https://arxiv.org/abs/2004.02178.
 
-        self.layer_classifier = FastBertClassifier(bert_config)
+    FastBERT enables the user to adapt the inference speed by avoiding redundant
+    calculations. This is achieved by squeezing student classifier within every
+    Transformer block of the backbone.
+
+    The training procedure is done in two stage. First the backbone as well as the final
+    classifier are fine-tuned while the student classifiers are kept frozen. In the
+    second stage the model's knowledge is self-distilled to the student classifiers
+    which predictions are compared to the soft-labeled teacher outputs.
+
+    Args:
+        config (PretrainedConfig):
+            Configuration to use to instantiate a BERT model according to the
+            specified arguments, defining the model architecture.
+    """
+
+    def __init__(
+            self,
+            config: PretrainedConfig
+    ):
+        super(FastBertGraph, self).__init__()
+        self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer_classifier = FastBertClassifier(config)
+
         # creating branches
         self.layer_classifiers = nn.ModuleDict()
-        for i in range(bert_config.num_hidden_layers - 1):
-            self.layer_classifiers['branch_classifier_' + str(i)] = FastBertClassifier(bert_config)
+        for i in range(config.num_hidden_layers - 1):
+            self.layer_classifiers['branch_classifier_' + str(i)] = FastBertClassifier(config)
 
         # creating backbone classifier
         self.layer_classifiers['final_classifier'] = self.layer_classifier
 
         self.ce_loss_fct = nn.CrossEntropyLoss()
-        self.num_class = torch.tensor(bert_config.num_labels, dtype=torch.float32)
+        self.num_class = torch.tensor(config.num_labels, dtype=torch.float32)
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, device: str, inference: bool = False,
-                inference_speed: float = 0.5, training_stage: int = 1):
-        """"""
-        hidden_states = (hidden_states,)
+    def forward(self, embeddings: torch.Tensor, attention_mask: torch.Tensor, device: str, inference: bool = False,
+                inference_speed: float = 0.5, training_stage: int = 1) -> \
+            Union[Tuple[torch.Tensor, int], List[torch.Tensor]]:
+        """
+        Args:
+            embeddings (torch.Tensor):
+                embeddings constructed from word, position and token_type.
+            attention_mask (torch.Tensor):
+                tells the model which tokens in the input_ids are words and which are padding.
+                1 indicates a token and 0 indicates padding.
+            device (str):
+                device to move the tensors to.
+            inference (bool):
+                whether the model is inference mode. If yes, after each student layer we compute
+                the uncertainty and feeds it to the next layer until enough information is
+                has been collected.
+            inference_speed (float):
+                threshold to distinguish high and low uncertainty. The higher the `inference_speed`
+                the faster and less accurate the model is.
+            training_stage (training_stage):
+                current training stage. If equals to 0, fine-tuning both the major backbone and
+                the teacher classifier, while the student layers are frozen. If equals to 1 the
+                backbone is frozen and only the student layers are fine-tuned.
+        Returns:
+            Union[Tuple[torch.Tensor, int], List[torch.Tensor]]: at inference time the model returns
+                the predicted logits along with the index of the exit layer. At training time the
+                model returns a list containing the predicted logits of all the exit layers.
+        """
+        hidden_states = (embeddings,)
         # In the Inference stage, if the uncertainty of the i-th student is low it will be
         # returned earlier.
         # To handle batches we have to compute the uncertainty and regroup the low-confidence

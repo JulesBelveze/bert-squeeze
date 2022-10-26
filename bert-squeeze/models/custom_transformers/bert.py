@@ -1,17 +1,29 @@
 import logging
 import random
-
 import torch
 import torch.nn as nn
-from transformers import BertConfig
+from abc import ABC
+from transformers import PretrainedConfig
 from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from transformers.models.bert import BertLayer, BertModel
+from typing import List, Optional, Tuple, Union
 
 
 class BertCustomEncoder(nn.Module):
-    """Custom Bert encoder"""
+    """
+    Custom BERT encoder to enable layer dropping according to various techniques.
 
-    def __init__(self, config, **kwargs):
+    Args:
+        config (PretrainedConfig):
+            Configuration to use to instantiate a model according to the specified
+            arguments, defining the model architecture.
+    """
+
+    def __init__(
+            self,
+            config: PretrainedConfig,
+            **kwargs
+    ):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
@@ -24,8 +36,24 @@ class BertCustomEncoder(nn.Module):
 
         self.gradient_checkpointing = False
 
-    def get_layer_to_prune(self, dropping_technique: str, K: int):
-        """Implementing layer dropping as suggested in https://arxiv.org/abs/2004.03844"""
+    def get_layer_to_prune(self, dropping_technique: str, K: int) -> List[bool]:
+        """
+        Implementation of various layer dropping strategies as presented in
+        https://arxiv.org/abs/2004.03844.
+
+        Args:
+            dropping_technique (str):
+                dropping strategy to use to prune layers. The following strategies
+                are available:
+                - top: dropping the top K layers
+                - bottom: dropping the bottom K layers
+                - alternate: one layer is drop, the following is dropped, and so on.
+                - symmetric: drops the K middle layers.
+            K (int):
+                number of layers to drop
+        Returns:
+            List[bool]: list of boolean indicating whether to drop layer i.
+        """
         assert dropping_technique in ["top", "bottom", "alternate", "symmetric"], \
             f"Dropping technique '{dropping_technique} not supported."
 
@@ -48,17 +76,18 @@ class BertCustomEncoder(nn.Module):
 
     def forward(
             self,
-            hidden_states,
-            attention_mask=None,
-            head_mask=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            past_key_values=None,
-            use_cache=None,
-            output_attentions=False,
-            output_hidden_states=False,
-            return_dict=True,
-    ):
+            hidden_states: torch.Tensor,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            encoder_hidden_states: Optional[torch.FloatTensor] = None,
+            encoder_attention_mask: Optional[torch.FloatTensor] = None,
+            past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = False,
+            output_hidden_states: Optional[bool] = False,
+            return_dict: Optional[bool] = True,
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+        """"""
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -145,20 +174,30 @@ class BertCustomEncoder(nn.Module):
         )
 
 
-class CustomBertModel(BertModel):
-    def __init__(self, config: BertConfig, add_pooling_layer: bool = True):
+class CustomBertModel(BertModel, ABC):
+    """
+    Custom BERT model using `BertCustomEncoder` to perform layer dropping.
+
+    Args:
+        config (PretrainedConfig):
+            Configuration to use to instantiate a model according to the specified
+            arguments, defining the model architecture.
+        add_pooling_layer (bool):
+            whether to add a pooling layer on top of the model.
+    """
+
+    def __init__(
+            self,
+            config: PretrainedConfig,
+            add_pooling_layer: bool = True
+    ):
         super().__init__(config, add_pooling_layer)
         self.encoder = BertCustomEncoder(config)
 
     @classmethod
-    def from_config(cls, config, **kwargs):
+    def from_config(cls, config: PretrainedConfig, **kwargs):
         """
-        Taken from here: https://github.com/huggingface/transformers/blob/fd8136fa755a3c59e459e1168014f2bf2fca721a/src/transformers/modeling_utils.py#L488
-        to avoid downloading pretrained checkpoints every time.
-        All context managers that the model should be initialized under go here.
-        Args:
-            torch_dtype (:obj:`torch.dtype`, `optional`):
-                Override the default ``torch.dtype`` and load the model under this dtype.
+        Create a CustomBertModel object from a given config.
         """
         torch_dtype = kwargs.pop("torch_dtype", None)
 

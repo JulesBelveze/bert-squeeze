@@ -1,23 +1,44 @@
-# This piece of code was taken from:
+# This piece of code is heavily insipred by:
 # https://github.com/JetRunner/BERT-of-Theseus/blob/master/bert_of_theseus/modeling_bert_of_theseus.py
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-from copy import deepcopy
-
 import torch
+from abc import ABC
+from copy import deepcopy
 from torch import nn
 from torch.distributions.bernoulli import Bernoulli
-from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions, \
-    BaseModelOutputWithPastAndCrossAttentions
-from transformers.models.bert.modeling_bert import BertPreTrainedModel, BertEmbeddings, BertLayer, BertPooler
+from transformers import PretrainedConfig
+from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, \
+    BaseModelOutputWithPoolingAndCrossAttentions
+from transformers.models.bert.modeling_bert import BertEmbeddings, BertLayer, BertPooler, BertPreTrainedModel
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
 
 class TheseusBertEncoder(nn.Module):
-    def __init__(self, config, nb_successor_layers: int = 6):
+    """
+    Implementation of the TheseusBert encoder presented in the paper: "BERT-of-Theseus:
+    Compressing BERT by Progressive Module Replacing" (https://arxiv.org/pdf/2002.02925.pdf).
+
+    The general idea behind is to be able to compress the original BERT model by dividing
+    it into submodules which will be substituted by a compressed version (aka "successor_layers").
+
+    Args:
+        config (PretrainedConfig):
+            Configuration to use to instantiate a model according to the specified
+            arguments, defining the model architecture.
+        nb_successor_layers (int):
+            total number of layers in the compressed model.
+    """
+
+    def __init__(
+            self,
+            config: PretrainedConfig,
+            nb_successor_layers: int = 6
+    ):
         super(TheseusBertEncoder, self).__init__()
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
@@ -33,18 +54,45 @@ class TheseusBertEncoder(nn.Module):
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(self.nb_predecessor_layer)])
         self.successor_layers = nn.ModuleList([BertLayer(config) for _ in range(self.nb_successor_layers)])
 
-    def init_successor_layers(self):
-        """"""
+    def init_successor_layers(self) -> None:
+        """
+        Creates the successor layers by copying layers from the original model.
+        """
         self.successor_layers = nn.ModuleList([deepcopy(self.layer[ix]) for ix in range(self.nb_successor_layers)])
 
-    def set_replacing_rate(self, replacing_rate: float):
-        """"""
+    def set_replacing_rate(self, replacing_rate: float) -> None:
+        """
+        Sets the probability to use in the Bernoulli distribution which will later
+        be used to compute the model's outputs.
+
+        Args:
+            replacing_rate (float):
+                probability to use in the Bernoulli distribution
+        """
         if not 0.0 < replacing_rate <= 1.0:
             raise Exception('Replace rate must be in the range (0, 1]!')
         self.bernoulli = Bernoulli(torch.tensor([replacing_rate]))
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, encoder_hidden_states=None,
-                encoder_attention_mask=None):
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor = None, head_mask: torch.Tensor = None,
+                encoder_hidden_states: torch.Tensor = None, encoder_attention_mask: torch.Tensor = None) \
+            -> BaseModelOutputWithPastAndCrossAttentions:
+        """
+        During the training for every successor layer we sample the Bernoulli distribution and
+        replace the original layer with its corresponding successor layer  with probability
+        `replacing_rate` and keep the original with probability `1 - replacing_rate`.
+
+        At inference time all the original layers are replaced by their successor layers.
+
+        Args:
+            hidden_states:
+            attention_mask:
+            head_mask:
+            encoder_hidden_states:
+            encoder_attention_mask:
+
+        Returns:
+
+        """
         all_hidden_states = ()
         all_attentions = ()
         if self.training:
@@ -83,8 +131,24 @@ class TheseusBertEncoder(nn.Module):
         )
 
 
-class TheseusBertModel(BertPreTrainedModel):
-    def __init__(self, config):
+class TheseusBertModel(BertPreTrainedModel, ABC):
+    """
+    Implementation of the TheseusBert presented in the paper: "BERT-of-Theseus: Compressing
+    BERT by Progressive Module Replacing" (https://arxiv.org/pdf/2002.02925.pdf).
+
+    The implementation is similar to the `transformers.BertModel` one except that it uses
+    the previously defined `TheseusBertEncoder` as encoder.
+
+    Args:
+        config (PretrainedConfig):
+            Configuration to use to instantiate a model according to the specified
+            arguments, defining the model architecture.
+    """
+
+    def __init__(
+            self,
+            config: PretrainedConfig
+    ):
         super(TheseusBertModel, self).__init__(config)
         self.config = config
 
@@ -94,22 +158,23 @@ class TheseusBertModel(BertPreTrainedModel):
 
         self.init_weights()
 
-    def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
+        """
+        Prunes heads of the model.
 
-    def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-
-    def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
+        Args:
+            heads_to_prune (Dict[int, List[int]]):
+                dict of {layer_num: list of heads to prune in this layer}
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None,
-                head_mask=None, inputs_embeds=None, encoder_hidden_states=None, encoder_attention_mask=None):
+    def forward(self, input_ids: torch.Tensor = None, attention_mask: torch.Tensor = None,
+                token_type_ids: torch.Tensor = None, position_ids: torch.Tensor = None,
+                head_mask: torch.Tensor = None, inputs_embeds: torch.Tensor = None,
+                encoder_hidden_states: torch.Tensor = None, encoder_attention_mask: torch.Tensor = None) \
+            -> BaseModelOutputWithPoolingAndCrossAttentions:
+        """"""
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
