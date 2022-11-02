@@ -16,7 +16,7 @@ class DeeBertEncoderOutput:
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    ramps_exit: Tuple[torch.FloatTensor] = None
+    ramps_exit: Tuple[RampOutput] = None
 
 
 @dataclass

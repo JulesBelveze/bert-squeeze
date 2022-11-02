@@ -1,46 +1,44 @@
 import logging
-from copy import deepcopy
-from typing import Dict, List, Tuple
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
 import seaborn as sns
 import torch
 import torch.nn.functional as F
+from copy import deepcopy
 from omegaconf import DictConfig, ListConfig
 from torch.nn import CrossEntropyLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import AdamW, AutoConfig
+from typing import Dict, List, Tuple
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.optimizers import BertAdam
 from ..utils.scorers import FastBertScorer, LooseScorer, Scorer
 
 
-class BaseModule(pl.LightningModule):
+class BaseTransformerModule(pl.LightningModule):
     """
     Base class to extend for all modules.
+
+    Args:
+        training_config (DictConfig):
+            training configuration
+        num_labels (int):
+            number of labels
+        pretrained_model (str):
+            name of the pretrained Transformer model to use
     """
 
-    def __init__(self, training_config: DictConfig, num_labels: int, pretrained_model: str = None,
-                 scorer_type: str = "regular", **kwargs):
-        """
-        Args:
-            training_config (DictConfig):
-                training configuration
-            num_labels (int):
-                number of labels
-            pretrained_model (str):
-                name of the pretrained Transformer model to use
-            scorer_type:
-                type of bert-squeeze.utils.scorer to use for evaluation. Possible
-                values ("regular", "loose" or "fast").
-            **kwargs:
-
-        """
-        super(BaseModule, self).__init__()
-        self._sanity_check(training_config)
+    def __init__(
+            self,
+            training_config: DictConfig,
+            num_labels: int,
+            pretrained_model: str = None,
+            **kwargs
+    ):
+        super(BaseTransformerModule, self).__init__()
+        self._sanity_checks(training_config)
 
         self.config = training_config
         self.num_labels = num_labels
@@ -48,7 +46,7 @@ class BaseModule(pl.LightningModule):
         self.pretrained_model = pretrained_model
         self.model_config = AutoConfig.from_pretrained(pretrained_model, num_labels=num_labels)
 
-        self._set_scorers(scorer_type)
+        self._set_scorers(training_config.get("scorer_type", "regular"))
         self._set_objective()
 
     def forward(self, **kwargs):
@@ -134,21 +132,33 @@ class BaseModule(pl.LightningModule):
                             "weights are all equal to 1.0.")
         self.objective = {
             "ce": CrossEntropyLoss(),
-            "lsl": LabelSmoothingLoss(classes=self.num_labels,
-                                      smoothing=self.smoothing),
+            "lsl": LabelSmoothingLoss(nb_classes=self.num_labels, smoothing=self.smoothing),
             "weighted": CrossEntropyLoss(weight=torch.Tensor(self.class_weights)),
         }[objective]
 
     @staticmethod
-    def _sanity_check(training_config) -> None:
-        """"""
+    def _sanity_checks(training_config: DictConfig) -> None:
+        """
+        Args:
+            training_config (DictConfig):
+                training configuration
+        """
         assert training_config.logging_steps > 0, \
             "'logging_steps' should be strictly greater than 0"
         assert training_config.logging_steps > training_config.accumulation_steps, \
             "'logging_steps' should be greater than 'accumulation_steps'"
 
+        if training_config.scorer_type == "loose":
+            assert "loose_classes" in training_config.keys(), \
+                "To use a 'LooseScorer' you need to set a 'loose_classes' parameter in your training config."
+
     def _get_optimizer_parameters(self) -> List[Dict]:
-        """Method that defines the parameter to optimize."""
+        """
+        Method that defines the parameter to optimize.
+
+        Returns:
+            List[Dict]: group of parameters to optimize
+        """
         no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight']
 
         if self.config.discriminative_learning:
@@ -193,9 +203,15 @@ class BaseModule(pl.LightningModule):
         return optimizer_grouped_parameters
 
     def _set_scorers(self, scorer_type: str) -> None:
-        """Method to set the scorer to use to evaluate the model.s"""
+        """
+        Method to set the scorers to use to evaluate the model.
+
+        Args:
+            scorer_type (str):
+                Possible values: ["regular", "loose", "fast"]
+        """
         scorer = {
-            "loose": LooseScorer(self.num_labels),
+            "loose": LooseScorer(self.config.get("loose_classes", [])),
             "regular": Scorer(self.num_labels),
             "fast": FastBertScorer(self.num_labels)
         }[scorer_type]

@@ -16,7 +16,7 @@ general:
   save_steps: 500
   validation_every_n_epoch: 1
   evaluate_during_training: true
-  get_mismated: true
+  get_mismatched: true
 
 train:
   training_batch_size: 16

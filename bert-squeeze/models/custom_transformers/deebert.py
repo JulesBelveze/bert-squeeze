@@ -1,11 +1,11 @@
 # This is heavily inspired by the following repo:
 # https://github.com/castorini/DeeBERT
-
-from typing import List, Union
-
 import torch
 import torch.nn as nn
-from transformers.models.bert.modeling_bert import BertPooler, BertPreTrainedModel, BertLayer, BertEmbeddings
+from abc import ABC
+from transformers import PretrainedConfig
+from transformers.models.bert.modeling_bert import BertEmbeddings, BertLayer, BertPooler, BertPreTrainedModel
+from typing import List, Union
 
 from ...utils.errors import RampException
 from ...utils.losses import entropy
@@ -14,18 +14,32 @@ from ...utils.types import DeeBertEncoderOutput, DeeBertModelOutput, RampOutput
 
 class OffRamp(nn.Module):
     """
-    In charge of taking the hidden state corresponding to the [CLS] token.
-    It is usually used after the encoder.
+    Classification layers (referred to as off-ramps) in the paper.
+
+    Args:
+        config (PretrainedConfig):
+            Configuration to use to instantiate a model according to the specified
+            arguments, defining the model architecture
     """
 
-    def __init__(self, config):
+    def __init__(
+            self,
+            config: PretrainedConfig
+    ):
         super(OffRamp, self).__init__()
         self.pooler = BertPooler(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
     def forward(self, hidden_states: torch.Tensor) -> RampOutput:
-        """"""
+        """
+        Args:
+            hidden_states (torch.Tensor):
+                output of the previous transformer layer.
+        Returns:
+            RampOutput: output of the given off-ramp containing both the classification logits
+            and the pooled outputs.
+        """
         # accessing the first token
         pooled_output = self.pooler(hidden_states[:, 0].unsqueeze(1))
         output = self.dropout(pooled_output)
@@ -39,19 +53,34 @@ class OffRamp(nn.Module):
 class DeeBertEncoder(nn.Module):
     """
     We construct the DeeBertEncoder as a regular BertEncoder except that we squeeze
-    an OffRamp (a pooler layer) between each BertLayer.
+    an OffRamp (a classification layer) between each BertLayer.
+
+    Args:
+        config (PretrainedConfig):
+            Configuration to use to instantiate a model according to the specified
+            arguments, defining the model architecture
     """
 
-    def __init__(self, config):
+    def __init__(
+            self,
+            config: PretrainedConfig
+    ):
         super(DeeBertEncoder, self).__init__()
         self.config = config
         self.layer = nn.ModuleList([BertLayer(config)] * config.num_hidden_layers)
         self.ramp = nn.ModuleList([OffRamp(config)] * config.num_hidden_layers)
 
-        self.early_exit_entropy = [-1] * config.num_hidden_layers
+        self.early_exit_entropy = [-1, ] * config.num_hidden_layers
 
-    def set_early_exit_entropy(self, x: Union[List[float], float]):
-        """Assigning an entropy threshold to every layer."""
+    def set_early_exit_entropy(self, x: Union[List[float], float]) -> None:
+        """
+        Assigning an entropy threshold to every layer.
+
+        Args:
+            x (Union[List[float], float]):
+                entropy threshold to assign to the layer, can either be a float that will be
+                set to all layers or a list of different thresholds to set to individual layers.
+        """
         if isinstance(x, float) or isinstance(x, int):
             for i in range(self.config.num_hidden_layers):
                 self.early_exit_entropy[i] = x
@@ -60,8 +89,14 @@ class DeeBertEncoder(nn.Module):
         else:
             raise TypeError(f"Expected 'x' to be of type 'float' or 'list' but got :'{type(x)}'")
 
-    def init_highway_pooler(self, pooler):
-        """Initialize the pooling layer of each ramp based on a given pooling layer."""
+    def init_highway_pooler(self, pooler: torch.nn.ModuleDict) -> None:
+        """
+        Initialize the pooling layer of each ramp based on a given pooling layer.
+
+        Args:
+            pooler (torch.nn.ModuleDict):
+                holds modules in a dictionary.
+        """
         loaded_model = pooler.state_dict()
         for ramp in self.ramp:
             for name, param in ramp.pooler.state_dict().items():
@@ -69,8 +104,8 @@ class DeeBertEncoder(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor = None, head_mask: torch.Tensor = None,
                 encoder_hidden_states: torch.Tensor = None, encoder_attention_mask: torch.Tensor = None,
-                output_attentions: bool = False, output_hidden_states: bool = False, return_dict: bool = True):
-
+                output_attentions: bool = False, output_hidden_states: bool = False) -> DeeBertEncoderOutput:
+        """"""
         all_hidden_states = tuple() if output_hidden_states else None
         all_attentions = tuple() if output_attentions else None
         all_ramps = tuple()
@@ -86,22 +121,24 @@ class DeeBertEncoder(nn.Module):
                 head_mask=head_mask[i],
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask
-            )
+            )  # output of the BertLayer
             hidden_states = layer_outputs[0]  # (bs * seq_len * hidden_dim)
 
             if output_attentions:
                 attention = layer_outputs[1]
                 all_attentions += (attention,)
 
-            ramp_exit = self.ramp[i](hidden_states)  # logits, pooled_output
+            ramp_exit = self.ramp[i](hidden_states)  # RampOutput
 
-            # At test time we compute the entropy of the output for each ramp.
-            # During training we want to train all the layers regardless the entropy.
+            # At test time we sequentially compute the entropy of the output of each ramp
+            # and exit the model by throwing an exception when enough information has been
+            # computed.
+            # During training, we want to train all the layers regardless the entropy.
             if not self.training:
                 ramp_exit.entropy = entropy(ramp_exit.logits)
                 all_ramps += (ramp_exit,)
 
-                # we don't go deeper if the entropy is lower than the set threshold
+                # we don't go deeper in the model if the entropy is lower than the set threshold
                 if ramp_exit.entropy < self.early_exit_entropy[i]:
                     raise RampException(all_ramps, i + 1)
             else:
@@ -119,8 +156,20 @@ class DeeBertEncoder(nn.Module):
         )
 
 
-class DeeBertModel(BertPreTrainedModel):
-    def __init__(self, config):
+class DeeBertModel(BertPreTrainedModel, ABC):
+    """
+    Bare DeeBert model without head on top, outputting hidden states.
+
+    Args:
+        config (PretrainedConfig):
+            Configuration to use to instantiate a model according to the specified
+            arguments, defining the model architecture
+    """
+
+    def __init__(
+            self,
+            config: PretrainedConfig
+    ):
         super(DeeBertModel, self).__init__(config)
         self.config = config
 
@@ -130,20 +179,20 @@ class DeeBertModel(BertPreTrainedModel):
 
         self.init_weights()
 
-    def init_highway_pooler(self):
+    def init_highway_pooler(self) -> None:
         """
         Initializes the pooler layer from each ramp of the encoder with
         its current pooler layer
         """
         self.encoder.init_highway_pooler(self.pooler)
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> torch.Tensor:
         return self.embeddings.word_embeddings
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value) -> None:
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
+    def _prune_heads(self, heads_to_prune) -> None:
         """ Prunes heads of the model.
             heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
             See base class PreTrainedModel
@@ -151,19 +200,12 @@ class DeeBertModel(BertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None,
-                head_mask=None, inputs_embeds=None, encoder_hidden_states=None,
-                encoder_attention_mask=None) -> DeeBertModelOutput:
-        """ Forward pass on the Model.
-        The model can behave as an encoder (with only self-attention) as well
-        as a decoder, in which case a layer of cross-attention is added between
-        the self-attention layers, following the architecture described in `Attention is all you need`_ by Ashish Vaswani,
-        Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-        To behave as an decoder the model needs to be initialized with the
-        `is_decoder` argument of the configuration set to `True`; an
-        `encoder_hidden_states` is expected as an input to the forward pass.
-        .. _`Attention is all you need`:
-            https://arxiv.org/abs/1706.03762
+    def forward(self, input_ids: torch.Tensor = None, attention_mask: torch.Tensor = None,
+                token_type_ids: torch.Tensor = None, position_ids: torch.Tensor = None,
+                head_mask: torch.Tensor = None, inputs_embeds: torch.Tensor = None,
+                encoder_hidden_states: torch.Tensor = None, encoder_attention_mask: torch.Tensor = None) \
+            -> DeeBertModelOutput:
+        """
         """
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")

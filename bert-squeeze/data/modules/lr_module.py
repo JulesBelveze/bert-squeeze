@@ -11,7 +11,7 @@ from typing import Optional
 
 class LrDataModule(pl.LightningDataModule):
     """
-    DataModule for Logistic Regression.
+    DataModule for Logistic Regression which can be seen as a bag of n-grams.
 
     Args:
         dataset_config (HydraConfig):
