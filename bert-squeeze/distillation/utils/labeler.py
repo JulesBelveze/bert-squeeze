@@ -1,7 +1,8 @@
-import logging
 from collections import defaultdict
 
 import datasets
+import logging
+import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
@@ -9,10 +10,37 @@ from pkg_resources import resource_filename
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoTokenizer
+from typing import Any, Dict, List, Tuple
 
 
 class HardLabeler(object):
-    def __init__(self, labeler_config: DictConfig, dataset_config: DictConfig, max_length: int, **kwargs):
+    """
+    Helper object that will hard label a dataset using a model's predictions.
+
+    This is useful when lacking annotated data and performing model distillation. This
+    way we generate an annotated dataset from an unlabelled one.
+
+    The HardLabeler will load a pretrained a model as well as a dataset. It will then
+    tokenize the dataset and add a "labels" key to the features' dictionary.
+
+    NOTE: only the train dataset will be hard labeled.
+
+    Args:
+        labeler_config (DictConfig):
+            configuration of the model to load
+        dataset_config (DictConfig):
+            configuration of the dataset to load
+        max_length (int):
+            maximum sequence length
+    """
+
+    def __init__(
+            self,
+            labeler_config: DictConfig,
+            dataset_config: DictConfig,
+            max_length: int,
+            **kwargs
+    ):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model, tokenizer = self._get_model(labeler_config)
         self.model = model
@@ -23,8 +51,18 @@ class HardLabeler(object):
         self.max_length = max_length
         self.batch_size = kwargs.get("train_batch_size", 32)
 
-    def _get_model(self, config: DictConfig):
-        """"""
+    @staticmethod
+    def _get_model(config: DictConfig) -> Tuple[pl.LightningModule, AutoTokenizer]:
+        """
+        Loads the model checkpoints and the tokenizer.
+
+        Args:
+            config (DictConfig):
+                configuration of the model to load
+        Returns:
+            Tuple[pl.LightningModule, AutoTokenizer]:
+                fine-tuned model along with the associated tokenizer
+        """
         checkpoint_path = resource_filename("bert-squeeze", config.checkpoint_path)
         teacher_class = config.teacher
 
@@ -37,8 +75,14 @@ class HardLabeler(object):
         tokenizer = AutoTokenizer.from_pretrained(config.pretrained_model, model_max_len=config.max_length)
         return teacher, tokenizer
 
-    def featurize(self, dataset):
-        """"""
+    def featurize(self, dataset: datasets.DatasetDict) -> datasets.DatasetDict:
+        """
+        Args:
+            dataset (datasets.DatasetDict):
+                dataset to featurize
+        Returns:
+            DatasetDict: featurized dataset
+        """
         tokenized_dataset = dataset.map(
             lambda x: self.tokenizer(x[self.dataset_config.text_col], padding="max_length", max_length=self.max_length,
                                      truncation=True)
@@ -51,7 +95,7 @@ class HardLabeler(object):
         tokenized_dataset = tokenized_dataset.add_column("id", range(tokenized_dataset.num_rows))
         return tokenized_dataset
 
-    def get_dataloader(self):
+    def get_dataloader(self) -> torch.utils.data.DataLoader:
         """"""
 
         def _collate_fn():
@@ -73,13 +117,22 @@ class HardLabeler(object):
         featurized_dataset = self.featurize(dataset)
 
         featurized_dataset.set_format(type='torch', columns=["input_ids", "token_type_ids", "attention_mask", "id"])
-        return DataLoader(featurized_dataset, collate_fn=_collate_fn(), batch_size=self.batch_size,
-                          drop_last=True, num_workers=0)
 
-    def label_dataset(self):
+        return DataLoader(
+            featurized_dataset,
+            collate_fn=_collate_fn(),
+            batch_size=self.batch_size,
+            drop_last=True,
+            num_workers=0
+        )
+
+    def label_dataset(self) -> Dict[str, List[Any]]:
         """
-        Annotating the unlabeled dataset using the fine tuned teacher. We return a dictionary
-        mapping the document id to its corresponding label.
+        Annotates the unlabeled dataset using the fine-tuned teacher.
+
+        Returns:
+            Dict[str, List[Any]]:
+                dictionary containing features and hard labels
         """
         output_data = defaultdict(list)
         train_loader = self.get_dataloader()
@@ -89,7 +142,7 @@ class HardLabeler(object):
             with torch.no_grad():
                 logits = self.model(**batch.to(self.device))
                 probs = F.softmax(logits, dim=-1)
-                preds = probs.argmax(axis=-1)
+                preds = probs.argmax(dim=-1)
 
                 output_data["labels"].extend(preds.tolist())
 

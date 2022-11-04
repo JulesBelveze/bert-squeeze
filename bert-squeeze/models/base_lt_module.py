@@ -154,7 +154,7 @@ class BaseTransformerModule(pl.LightningModule):
 
     def _get_optimizer_parameters(self) -> List[Dict]:
         """
-        Method that defines the parameter to optimize.
+        Method that defines the parameters to optimize.
 
         Returns:
             List[Dict]: group of parameters to optimize
