@@ -2,12 +2,11 @@
 # python3 -m bert-squeeze.main -cp=configs -cn=training_config
 #
 # To override arguments of the config file run as follow:
-# python3 -m bert-squeeze.main -cp=configs -cn=training_config --task=test +new_attr=test
-
-import logging
-import sys
+# python3 -m bert_squeeze.main -cp=configs -cn=training_config --task=test +new_attr=test
 
 import hydra
+import logging
+import sys
 import torch
 from dotenv import load_dotenv
 from hydra.utils import instantiate
@@ -15,9 +14,9 @@ from pkg_resources import resource_filename
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import LearningRateMonitor
 
-from .utils import load_model_from_exp, get_neptune_tags
-from .utils.callbacks import CheckpointEveryNSteps
-from .utils.errors import ConfigurationException
+from bert_squeeze.utils import get_neptune_tags, load_model_from_exp
+from bert_squeeze.utils.callbacks import CheckpointEveryNSteps
+from bert_squeeze.utils.errors import ConfigurationException
 
 load_dotenv()
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
