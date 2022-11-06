@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional
 import datasets
 import numpy as np
 import pytorch_lightning as pl
-import spacy
 import torch
 from datasets import DatasetDict
 from hydra.core.hydra_config import HydraConfig
@@ -47,6 +46,7 @@ class LSTMDataModule(pl.LightningDataModule):
             self,
             dataset_config: HydraConfig,
             max_features: int,
+            token_pattern: str = r"(?u)\b\w\w+\b",
             **kwargs
     ):
         super().__init__()
@@ -55,7 +55,8 @@ class LSTMDataModule(pl.LightningDataModule):
         self.label_col = dataset_config.label_col
 
         self.vocabulary = Vocabulary(path_to_voc=kwargs.get("path_to_voc"), max_words=max_features)
-        self.tokenizer = spacy.load("xx_ent_wiki_sm").tokenizer
+        token_pattern = re.compile(token_pattern)
+        self.tokenizer = token_pattern.findall
 
         self.train_batch_size = kwargs.get("train_batch_size", 32)
         self.eval_batch_size = kwargs.get("eval_batch_size", 32)
@@ -115,7 +116,7 @@ class LSTMDataModule(pl.LightningDataModule):
             Dict[str, Any]: featurized example
         """
         tokenized_doc = self.tokenizer(example[self.text_col])
-        ids = [self.vocabulary[token.text] for token in tokenized_doc]
+        ids = [self.vocabulary[token] for token in tokenized_doc]
 
         example["features"] = ids
         return example
@@ -128,7 +129,7 @@ class LSTMDataModule(pl.LightningDataModule):
         dataset = self.dataset.map(lambda x: self.clean_str(x), batched=False)
 
         corpus = self.dataset["train"][self.text_col]
-        tokenized_corpus = self.tokenizer.pipe(corpus, batch_size=30)
+        tokenized_corpus = map(self.tokenizer, corpus)
         self.vocabulary.build_vocabulary(tokenized_corpus)
 
         featurized_dataset = dataset.map(
