@@ -1,5 +1,5 @@
 import logging
-from typing import Iterable
+from typing import Iterable, List
 
 
 class Vocabulary(object):
@@ -26,17 +26,17 @@ class Vocabulary(object):
         if path_to_voc is not None:
             self.load_vocabulary(path_to_voc)
 
-    def build_vocabulary(self, corpus: Iterable) -> None:
+    def build_vocabulary(self, corpus: List[List[str]]) -> None:
         """
         Method that builds a vocabulary from a corpus of texts.
 
         Args:
-            corpus (Iterable):
-                List of texts to use to build a vocabulary.
+            corpus (List[List[text]]):
+                List of tokenized documents from the corpus.
         """
         tokens = set()
         for doc in corpus:
-            doc_tokens = set([token.text for token in doc])
+            doc_tokens = set([token for token in doc])
             tokens |= doc_tokens
 
         for elt in tokens:
