@@ -52,7 +52,7 @@ data:
   _target_: bert-squeeze.data.modules.transformer_module.TransformerDataModule
   dataset_config:
     is_local: false
-    name: emotion
+    path: emotion
     split:
     text_col: text
     label_col: label

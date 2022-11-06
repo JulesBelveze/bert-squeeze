@@ -1,12 +1,12 @@
-import datasets
 import logging
+from typing import Optional
+
+import datasets
 import pytorch_lightning as pl
 from datasets import Dataset, DatasetDict
 from hydra.core.hydra_config import HydraConfig
-from pkg_resources import resource_filename
 from sklearn.feature_extraction.text import CountVectorizer
 from torch.utils.data import DataLoader
-from typing import Optional
 
 
 class LrDataModule(pl.LightningDataModule):
@@ -48,12 +48,12 @@ class LrDataModule(pl.LightningDataModule):
         """
         if self.dataset_config.is_local:
             self.dataset = datasets.load_dataset(
-                resource_filename("bert-squeeze", f"data/datasets/{self.dataset_config.name}_dataset.py"),
+                self.dataset_config.path,
                 self.dataset_config.split
             )
         else:
-            self.dataset = datasets.load_dataset(self.dataset_config.name, self.dataset_config.split)
-        logging.info(f"Dataset '{self.dataset_config.name}' successfully loaded.")
+            self.dataset = datasets.load_dataset(self.dataset_config.path, self.dataset_config.split)
+        logging.info(f"Dataset '{self.dataset_config.path}' successfully loaded.")
 
     def featurize(self) -> DatasetDict:
         """

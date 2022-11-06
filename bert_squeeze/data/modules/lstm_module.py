@@ -1,15 +1,15 @@
-import datasets
 import logging
+import re
+from typing import Any, Dict, List, Optional
+
+import datasets
 import numpy as np
 import pytorch_lightning as pl
-import re
 import spacy
 import torch
 from datasets import DatasetDict
 from hydra.core.hydra_config import HydraConfig
-from pkg_resources import resource_filename
 from torch.utils.data import DataLoader
-from typing import Any, Dict, List, Optional
 
 from ...utils.vocabulary import Vocabulary
 
@@ -69,12 +69,12 @@ class LSTMDataModule(pl.LightningDataModule):
         """"""
         if self.dataset_config.is_local:
             self.dataset = datasets.load_dataset(
-                resource_filename("bert-squeeze", f"data/datasets/{self.dataset_config.name}_dataset.py"),
+                self.dataset_config.path,
                 self.dataset_config.split
             )
         else:
-            self.dataset = datasets.load_dataset(self.dataset_config.name, self.dataset_config.split)
-        logging.info(f"Dataset '{self.dataset_config.name}' successfully loaded.")
+            self.dataset = datasets.load_dataset(self.dataset_config.path, self.dataset_config.split)
+        logging.info(f"Dataset '{self.dataset_config.path}' successfully loaded.")
 
     def clean_str(self, example: Dict[str, Any]) -> Dict[str, Any]:
         """

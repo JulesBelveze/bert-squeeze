@@ -1,9 +1,9 @@
+from typing import Optional, Union
+
 import datasets
 import pytorch_lightning as pl
 from hydra.core.hydra_config import HydraConfig
-from pkg_resources import resource_filename
 from torch.utils.data import DataLoader
-from typing import Optional, Union
 
 from .lr_module import LrDataModule
 from .lstm_module import LSTMDataModule
@@ -66,7 +66,7 @@ class DistillationDataModule(pl.LightningDataModule):
         hard_dataset = self.labeler.label_dataset()
         return datasets.Dataset.from_dict(hard_dataset)
 
-    def get_soft_dataset(self) -> datasets.DatasetDict:
+    def get_soft_dataset(self) -> datasets.Dataset:
         """
         Loads and adds a "fake label" to the dataset that will later be used
         for soft distillation.
@@ -81,11 +81,11 @@ class DistillationDataModule(pl.LightningDataModule):
 
         if self.soft_dataset_config.is_local:
             soft_dataset = datasets.load_dataset(
-                resource_filename("bert-squeeze", f"data/datasets/{self.soft_dataset_config.name}_dataset.py"),
+                self.soft_dataset_config.path,
                 self.soft_dataset_config.split
             )
         else:
-            soft_dataset = datasets.load_dataset(self.soft_dataset_config.name, self.soft_dataset_config.split)
+            soft_dataset = datasets.load_dataset(self.soft_dataset_config.path, self.soft_dataset_config.split)
 
         if self.soft_dataset_config.text_col != "text":
             soft_dataset.rename_column_(self.soft_dataset_config.text_col, "text")
