@@ -1,19 +1,21 @@
 import logging
+from copy import deepcopy
+from typing import Dict, List, Tuple
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
 import seaborn as sns
 import torch
 import torch.nn.functional as F
-from copy import deepcopy
 from omegaconf import DictConfig, ListConfig
 from torch.nn import CrossEntropyLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import AdamW, AutoConfig
-from typing import Dict, List, Tuple
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.optimizers import BertAdam
+from ..utils.types import Loss
 from ..utils.scorers import FastBertScorer, LooseScorer, Scorer
 
 
@@ -148,7 +150,7 @@ class BaseTransformerModule(pl.LightningModule):
         assert training_config.logging_steps > training_config.accumulation_steps, \
             "'logging_steps' should be greater than 'accumulation_steps'"
 
-        if training_config.scorer_type == "loose":
+        if training_config.get("scorer_type") == "loose":
             assert "loose_classes" in training_config.keys(), \
                 "To use a 'LooseScorer' you need to set a 'loose_classes' parameter in your training config."
 
@@ -240,7 +242,7 @@ class BaseTransformerModule(pl.LightningModule):
         for param in self.encoder.parameters():
             param.requires_grad = True
 
-    def loss(self, logits: torch.Tensor, labels: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+    def loss(self, labels: torch.Tensor, logits: torch.Tensor, *args, **kwargs) -> Loss:
         """
         Method called for loss computation
 

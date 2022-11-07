@@ -23,7 +23,7 @@ class LabelSmoothingLoss(torch.nn.Module):
             dim: int = -1
     ):
         super(LabelSmoothingLoss, self).__init__()
-        assert 0 <= self.smoothing < 1, \
+        assert 0 <= smoothing < 1, \
             f"Smoothing parameter should be between 0 and 1, got {smoothing}"
 
         self.confidence = 1.0 - smoothing

@@ -1,4 +1,6 @@
 import logging
+from typing import List
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
@@ -9,7 +11,6 @@ from omegaconf import DictConfig
 from torch.autograd import Variable
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
-from typing import List
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.scorers import Scorer
@@ -66,7 +67,9 @@ class LtLSTM(pl.LightningModule):
                     Variable(torch.zeros(2, bs, self.hidden_dim)))
 
         lstm_out, _ = self.lstm(embeds, (h0, c0))
-        return self.classifier(lstm_out[-1])
+        features = lstm_out[-1]
+        features = self.drop(features)
+        return self.classifier(features)
 
     def training_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
         """"""
@@ -143,6 +146,7 @@ class LtLSTM(pl.LightningModule):
             num_layers=1,
             bidirectional=True
         )
+        self.drop = torch.nn.Dropout(p=self.config.dropout)
         self.classifier = torch.nn.Linear(2 * self.hidden_dim, self.num_labels)
 
     def _set_objective(self) -> None:

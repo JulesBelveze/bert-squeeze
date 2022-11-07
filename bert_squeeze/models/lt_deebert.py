@@ -1,11 +1,12 @@
 import logging
+from typing import Dict, List, Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from omegaconf import DictConfig, ListConfig
 from overrides import overrides
 from torch.nn import CrossEntropyLoss
-from typing import Dict, List, Tuple
 
 from .base_lt_module import BaseTransformerModule
 from .custom_transformers.deebert import DeeBertModel
@@ -157,7 +158,7 @@ class LtDeeBert(BaseTransformerModule):
         return optimizer_grouped_parameters
 
     @overrides
-    def loss(self, labels: torch.Tensor, ramps_exits: Tuple[torch.Tensor] = None, logits: torch.Tensor = None,
+    def loss(self, labels: torch.Tensor, logits: torch.Tensor = None, ramps_exits: Tuple[torch.Tensor] = None,
              train_ramps: bool = False, *args, **kwargs) -> torch.Tensor:
         """
         Handles the loss computation part.

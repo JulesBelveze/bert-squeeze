@@ -1,4 +1,3 @@
-from ...models.custom_transformers.deebert import RampOutput
 from typing import Tuple
 
 
@@ -13,6 +12,6 @@ class RampException(Exception):
             index of the exit layer
     """
 
-    def __init__(self, message: Tuple[RampOutput], exit_layer: int):
+    def __init__(self, message, exit_layer):
         self.message = message
         self.exit_layer = exit_layer

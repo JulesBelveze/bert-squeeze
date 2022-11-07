@@ -8,7 +8,7 @@ from numpy import ndarray
 from overrides import overrides
 from tabulate import tabulate
 
-from ..types import DistillationLoss, KDLossOutput, LossType
+from ..types import DistillationLoss, LossType
 
 
 class Scorer:
@@ -203,7 +203,7 @@ class Scorer:
             return
         elif isinstance(loss, float) or isinstance(loss, torch.Tensor):
             self.losses["global"].append(loss)
-        elif isinstance(loss, KDLossOutput) or isinstance(loss, DistillationLoss):
+        elif isinstance(loss, DistillationLoss):
             for attr in loss.__dataclass_fields__:
                 self.losses[attr].append(getattr(loss, attr).detach())
         else:

@@ -35,12 +35,12 @@ class LtTheseusBert(BaseTransformerModule):
         super().__init__(training_config, num_labels, pretrained_model, **kwargs)
 
         self._build_model()
-        replacement_scheduler = {
+        scheduler = {
             "linear": LinearReplacementScheduler,
             "constant": ConstantReplacementScheduler
         }[replacement_scheduler.type]
 
-        self.replacement_scheduler = replacement_scheduler(
+        self.replacement_scheduler = scheduler(
             self.encoder.encoder,
             **{k: v for k, v in replacement_scheduler.items() if k != "type"}
         )
