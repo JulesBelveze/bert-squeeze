@@ -1,0 +1,51 @@
+general:
+  debug: false
+  do_train: true
+  do_eval: false
+  get_mismatched: true
+  evaluate_during_training: true
+  labels: [ 0, 1 ]
+  output_dir: outputs
+  save_steps: 500
+  validation_every_n_epoch: 1
+
+train:
+  adam_eps: 1e-8
+  accumulation_steps: 1
+  auto_lr: false
+  discriminative_learning: true
+  dropout: 0.2
+  layer_lr_decay: 0.95
+  learning_rates: [ 2e-5 ]
+  logging_steps: 50
+  lr_scheduler: true
+  max_grad_norm: 1.0
+  num_epochs: 10
+  optimizer: bertadam
+  objective: lsl
+  smoothing: 0.1
+  warmup_ratio: 0.06
+  warmup_steps: true
+  weight_decay: 0.01
+
+model:
+  _target_: bert_squeeze.models.lt_theseus_bert.LtTheseusBert
+  training_config: ${train}
+  pretrained_model: "bert-base-cased"
+  num_labels: 2
+  replacement_scheduler:
+    type: "linear"
+    base_replacing_rate: 0.3
+    coefficient: 0.0006
+
+data:
+  _target_: bert_squeeze.data.modules.transformer_module.TransformerDataModule
+  dataset_config:
+    is_local: false
+    path: emotion
+    split:
+    text_col: text
+    label_col: label
+    truncate_mode: head
+  tokenizer_name: ${model.pretrained_model}
+  max_length: 256

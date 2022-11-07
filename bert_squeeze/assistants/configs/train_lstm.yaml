@@ -1,0 +1,40 @@
+general:
+  debug: false
+  do_train: true
+  do_eval: false
+  get_mismatched: true
+  evaluate_during_training: true
+  labels: [ 0,1 ]
+  num_labels: 2
+  output_dir: outputs
+  save_steps: 500
+  validation_every_n_epoch: 1
+
+train:
+  accumulation_steps: 1
+  auto_lr: false
+  dropout: 0.2
+  learning_rates: [ 2e-3 ]
+  logging_steps: 100
+  max_grad_norm: 1.0
+  num_epochs: 10
+  objective: ce
+  smoothing: 0.1
+
+model:
+  _target_: bert_squeeze.models.lstm.LtLSTM
+  hidden_dim: 128
+  name: lstm
+  num_labels: ${general.num_labels}
+  training_config: ${train}
+  vocab_size: 20000
+
+data:
+  _target_: bert_squeeze.data.modules.lstm_module.LSTMDataModule
+  dataset_config:
+    is_local: false
+    path: emotion
+    split:
+    text_col: text
+    label_col: label
+  max_features: ${model.vocab_size}

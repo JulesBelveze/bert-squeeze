@@ -1,0 +1,42 @@
+general:
+  debug: false
+  do_train: true
+  do_eval: false
+  get_mismatched: true
+  evaluate_during_training: true
+  labels: [ 0,1 ]
+  num_labels: 2
+  output_dir: outputs
+  save_steps: 500
+  validation_every_n_epoch: 1
+
+train:
+  accumulation_steps: 1
+  auto_lr: false
+  discriminative_learning: false
+  eval_batch_size: 16
+  learning_rates: [ 2e-1 ]
+  logging_steps: 100
+  max_grad_norm: 1.0
+  num_epochs: 10
+  objective: ce
+  smoothing: 0.1
+  training_batch_size: 16
+
+model:
+  _target_: bert_squeeze.models.lr.BowLogisticRegression
+  training_config: ${train}
+  vocab_size: 5000
+  embed_dim: 256
+  num_labels: ${general.num_labels}
+  name: "bow_lr"
+
+data:
+  _target_: bert_squeeze.data.modules.lr_module.LrDataModule
+  dataset_config:
+    is_local: false
+    label_col: label
+    path:
+    split:
+    text_col: text
+  max_features: ${model.vocab_size}
