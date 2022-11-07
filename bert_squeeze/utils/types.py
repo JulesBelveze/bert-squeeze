@@ -42,5 +42,5 @@ FastBertLoss = dataclasses.make_dataclass(
                                             range(11)]
 )
 
-Loss = TypeVar("Loss", DistillationLoss, FastBertLoss)
+Loss = TypeVar("Loss", DistillationLoss, FastBertLoss, torch.Tensor)
 LossType = Optional[Loss]
