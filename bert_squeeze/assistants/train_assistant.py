@@ -22,7 +22,33 @@ CONFIG_MAPPER = {
 
 class TrainAssistant(object):
     """
+    Helper object that holds and instantiate the needed for training.
 
+    For every available model for fine-tuning it will load a default configuration that
+    can be overwritten by passing some keyword arguments.
+    It contains four main sub-configurations:
+    - general: various high level parameters unrelated to the training procedure
+    - train: training related parameters
+    - model: parameters necessary to build and define the model
+    - data: parameters necessary to define the dataset and featurize it
+
+    Args:
+        name (str):
+            name of the base model to fine-tune
+        dataset_path (str):
+            path of the dataset to use
+        general_kwargs (Dict[str, Any]):
+            keyword arguments that can be added or overwrite the default 'general' configuration
+        train_kwargs (Dict[str, Any]):
+            keyword arguments that can be added or overwrite the default 'train' configuration
+        model_kwargs (Dict[str, Any]):
+            keyword arguments that can be added or overwrite the default 'model' configuration
+        data_kwargs (Dict[str, Any]):
+            keyword arguments that can be added or overwrite the default 'data' configuration
+        logger_kwargs (Dict[str, Any]):
+            keyword arguments that can be added or overwrite the default 'logger' configuration
+        callbacks (List[Callback]):
+            list of callbacks to use during training
     """
 
     def __init__(
@@ -105,7 +131,7 @@ class TrainAssistant(object):
         self._logger = value
 
     @property
-    def callbacks(self) -> Optional[List[Callback]]:
+    def callbacks(self) -> List[Callback]:
         """"""
         if self._callbacks is None:
             if self._callbacks_conf is not None:
@@ -115,7 +141,7 @@ class TrainAssistant(object):
         return self._callbacks
 
     @callbacks.setter
-    def callbacks(self, value) -> None:
+    def callbacks(self, value: List[Callback]) -> None:
         """"""
         self._callbacks = value
 
