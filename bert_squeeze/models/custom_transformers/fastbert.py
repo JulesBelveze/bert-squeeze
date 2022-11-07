@@ -71,6 +71,7 @@ class FastBertGraph(nn.Module):
             config: PretrainedConfig
     ):
         super(FastBertGraph, self).__init__()
+        self.config = config
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
         self.layer_classifier = FastBertClassifier(config)
 
