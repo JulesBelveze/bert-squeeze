@@ -1,2 +1,2 @@
-from .datasets import DatasetUnlabeled, ConferenceDataset
-from .modules import LrDataModule, TransformerDataModule, DistillationDataModule
+from .local_datasets import ConferenceDataset, DatasetUnlabeled
+from .modules import DistillationDataModule, LrDataModule, TransformerDataModule
