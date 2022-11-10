@@ -27,6 +27,7 @@ train:
   lr_scheduler: true
   max_grad_norm: 1.0
   num_epochs: 10
+  num_labels: ${general.num_labels}
   optimizer: bertadam
   objective: lsl
   smoothing: 0.1
@@ -37,20 +38,14 @@ train:
 
 model:
   _target_: bert_squeeze.distillation.distiller.ParallelDistiller
-  teacher_config:
-    _target_: bert_squeeze.models.lt_bert.LtCustomBert
-    training_config: ${train} # for the sake of compatibility but useless as model won't be finetuned
-    pretrained_model: "nbroad/ESG-BERT"
+  teacher:
+    _target_: transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
+    pretrained_model_name_or_path: "bert-base-uncased"
     num_labels: ${general.num_labels}
-    checkpoint_path:
-    name: industry-bert
-  student_config:
-    _target_: bert_squeeze.models.lt_bert.LtCustomBert
-    architecture: "transformer"
-    training_config: ${train}
-    pretrained_model: "bert-base-cased"
+  student:
+    _target_: transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
+    pretrained_model_name_or_path: "bert-base-cased"
     num_labels: ${general.num_labels}
-    name: bert
   training_config: ${train}
 
 
