@@ -2,7 +2,7 @@ from typing import Optional, Union
 
 import datasets
 import pytorch_lightning as pl
-from hydra.core.hydra_config import HydraConfig
+from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
 from .lr_module import LrDataModule
@@ -31,7 +31,7 @@ class DistillationDataModule(pl.LightningDataModule):
             LightningDataModule to use for the teacher model.
         student_module (StudentDataModule):
             LightningDataModule to use for the student model.
-        soft_data_config (HydraConfig):
+        soft_data_config (DictConfig):
             Configuration to use for the "soft" dataset.
         hard_labeler (HardLabeler):
             Instance of HardLabeler to use to generate hardly labeled samples.
@@ -41,12 +41,12 @@ class DistillationDataModule(pl.LightningDataModule):
             self,
             teacher_module: TeacherDataModule,
             student_module: StudentDataModule,
-            soft_data_config: HydraConfig = None,
+            soft_data_config: DictConfig = None,
             hard_labeler: HardLabeler = None,
             **kwargs
     ):
         super().__init__()
-        assert student_module.dataset_config.name == teacher_module.dataset_config.name
+        assert student_module.dataset_config.path == teacher_module.dataset_config.path
         self.teacher_module = teacher_module
         self.student_module = student_module
 

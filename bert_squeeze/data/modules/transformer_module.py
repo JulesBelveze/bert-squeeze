@@ -142,7 +142,8 @@ class TransformerParallelDataModule(TransformerDataModule):
             max_length: int,
             **kwargs
     ):
-        dataset_config.label_column = None
+        dataset_config.text_col = "text"
+        dataset_config.label_col = None
         super().__init__(dataset_config, tokenizer_name, max_length, **kwargs)
 
     @overrides

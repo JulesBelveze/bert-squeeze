@@ -1,7 +1,3 @@
-task:
-  name: distil
-  strategy: t2t
-
 general:
   debug: false
   do_train: true
@@ -52,23 +48,21 @@ model:
 data:
   _target_: bert_squeeze.data.modules.distillation_module.DistillationDataModule
   teacher_module:
-    _target_: bert_squeeze.data.modules.transformer_module.TransformerDataModule
+    _target_: bert_squeeze.data.modules.transformer_module.TransformerParallelDataModule
     dataset_config:
       is_local: true
       path:
       split:
-      text_col: text
       truncate_mode: head
-    tokenizer_name: ${model.teacher_config.pretrained_model}
+    tokenizer_name: ${model.teacher.pretrained_model_name_or_path}
     max_length: 256
 
   student_module:
-    _target_: bert-squeeze.data.modules.transformer_module.TransformerParallelDataModule
+    _target_: bert_squeeze.data.modules.transformer_module.TransformerParallelDataModule
     dataset_config:
       is_local: true
       path:
       split:
-      text_col: text
       truncate_mode: head
-    tokenizer_name: ${model.student_config.pretrained_model}
+    tokenizer_name: ${model.student.pretrained_model_name_or_path}
     max_length: 256

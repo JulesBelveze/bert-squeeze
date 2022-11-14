@@ -27,7 +27,7 @@ class ParallelDataset(datasets.GeneratorBasedBuilder):
         ParallelConfig(
             name="debug",
             description="small chunk of the 'default' configuration.",
-            data_dir="/Users/jules/Desktop/Hypefactors/data-analysis/distil-industry/datasets/"
+            data_dir="debug"
         )
     ]
     DEFAULT_CONFIG_NAME = "default"
@@ -49,7 +49,8 @@ class ParallelDataset(datasets.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         urls_to_download = {
             "train": self.config.data_dir + "train.json",
-            "test": self.config.data_dir + "test.json"
+            "test": self.config.data_dir + "test.json",
+            "validation": self.config.data_dir + "validation.json"
         }
         downloaded_files = dl_manager.download_and_extract(urls_to_download)
         return [
@@ -63,6 +64,12 @@ class ParallelDataset(datasets.GeneratorBasedBuilder):
                 name=datasets.Split.TEST,
                 gen_kwargs={
                     "filepath": downloaded_files["test"]
+                }
+            ),
+            datasets.SplitGenerator(
+                name=datasets.Split.VALIDATION,
+                gen_kwargs={
+                    "filepath": downloaded_files["validation"]
                 }
             )
         ]
