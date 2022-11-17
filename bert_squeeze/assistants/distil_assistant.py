@@ -15,7 +15,8 @@ from pytorch_lightning.loggers.logger import Logger
 from bert_squeeze.utils.utils_fct import load_model_from_exp
 
 CONFIG_MAPPER = {
-    "distil-parallel": "distil_parallel.yaml"
+    "distil-parallel": "distil_parallel.yaml",
+    "distil": "distil.yaml"
 }
 
 
