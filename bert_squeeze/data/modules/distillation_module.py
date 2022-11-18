@@ -1,9 +1,8 @@
-from typing import Optional, Union
-
 import datasets
 import pytorch_lightning as pl
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
+from typing import Optional, Union
 
 from .lr_module import LrDataModule
 from .lstm_module import LSTMDataModule
@@ -79,16 +78,13 @@ class DistillationDataModule(pl.LightningDataModule):
             example["label"] = -100
             return example
 
-        if self.soft_dataset_config.is_local:
-            soft_dataset = datasets.load_dataset(
-                self.soft_dataset_config.path,
-                self.soft_dataset_config.split
-            )
-        else:
-            soft_dataset = datasets.load_dataset(self.soft_dataset_config.path, self.soft_dataset_config.split)
+        soft_dataset = datasets.load_dataset(
+            self.soft_dataset_config.path,
+            self.soft_dataset_config.split
+        )
 
         if self.soft_dataset_config.text_col != "text":
-            soft_dataset.rename_column_(self.soft_dataset_config.text_col, "text")
+            soft_dataset = soft_dataset.rename_column(self.soft_dataset_config.text_col, "text")
             self.soft_dataset_config.text_col = "text"
 
         # adding a "fake label" to the soft dataset for consistency with the labeled one
@@ -97,7 +93,10 @@ class DistillationDataModule(pl.LightningDataModule):
         soft_dataset = soft_dataset.map(lambda example: _create_fake_label(example), batched=False)
 
         columns_to_remove = list(set(soft_dataset.column_names) - {"text", "label"})
-        return soft_dataset.remove_columns(columns_to_remove)
+
+        soft_dataset = soft_dataset.remove_columns(columns_to_remove)
+        soft_dataset.features["label"] = datasets.Value("null")  # hack for concatenation purposes
+        return soft_dataset
 
     def featurize(self) -> datasets.DatasetDict:
         """
