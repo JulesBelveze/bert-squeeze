@@ -1,10 +1,10 @@
+import collections.abc
 import logging
 import os
-import sys
-from typing import List
-
 import pytorch_lightning as pl
+import sys
 from omegaconf import DictConfig, OmegaConf
+from typing import List
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
@@ -76,3 +76,12 @@ def get_neptune_tags(args: DictConfig) -> List[str]:
         tags.append(args.train.objective)
     tags.append(args.train.optimizer)
     return tags
+
+
+def deep_update(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = deep_update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d

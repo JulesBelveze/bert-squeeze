@@ -123,8 +123,15 @@ class DistillationDataModule(pl.LightningDataModule):
 
         # In case of a hard distillation
         if self.labeler is not None:
+            features_teacher = teacher_data["train"].features.copy()
+            features_student = student_data["train"].features.copy()
+
             hardly_labeled_dataset = self.create_hard_dataset()
+
+            hardly_labeled_dataset = hardly_labeled_dataset.cast(features_teacher)
             teacher_data["train"] = datasets.concatenate_datasets([teacher_data["train"], hardly_labeled_dataset])
+
+            hardly_labeled_dataset = hardly_labeled_dataset.cast(features_student)
             student_data["train"] = datasets.concatenate_datasets([student_data["train"], hardly_labeled_dataset])
 
         for dataset_split, columns in teacher_data.column_names.items():

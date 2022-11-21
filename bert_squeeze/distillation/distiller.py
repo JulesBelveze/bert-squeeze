@@ -1,6 +1,4 @@
 import logging
-from typing import Any, Dict, List, Tuple, Union
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
@@ -12,6 +10,7 @@ from overrides import overrides
 from torch.nn import CrossEntropyLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import AdamW
+from typing import Any, Dict, List, Tuple, Union
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.losses.distillation_losses import KLDivLoss
@@ -31,6 +30,8 @@ class BaseDistiller(pl.LightningModule):
             model to use as a student
         training_config (DictConfig):
             configuration to use for training and to distil the teacher model
+        teacher_checkpoint (str):
+            path to checkpoints to load to the teacher model
     """
 
     def __init__(
@@ -38,12 +39,14 @@ class BaseDistiller(pl.LightningModule):
             teacher: Union["pl.LightningModule", "torch.nn.Module"],
             student: Union[pl.LightningModule, torch.nn.Module],
             training_config: DictConfig,
+            teacher_checkpoint: str = None,
             **kwargs
     ):
         super().__init__()
         self.params = training_config
         self.teacher = teacher
         self.student = student
+        self.teacher_checkpoint = teacher_checkpoint
 
         self._set_objectives()
         self._set_scorers()
@@ -240,11 +243,13 @@ class Distiller(BaseDistiller):
 
     Args:
         teacher (Union["pl.LightningModule", "torch.nn.Module"]):
-
+            model to distil knowledge from
         student (Union["pl.LightningModule", "torch.nn.Module"]):
-
+            model to use as a student
         training_config (DictConfig):
             configuration to use for training and to distil the teacher model
+        teacher_checkpoint (str):
+            path to checkpoints to load to the teacher model
     """
 
     def __init__(
@@ -252,9 +257,10 @@ class Distiller(BaseDistiller):
             teacher: Union["pl.LightningModule", "torch.nn.Module"],
             student: Union["pl.LightningModule", "torch.nn.Module"],
             training_config: DictConfig,
+            teacher_checkpoint: str = None,
             **kwargs
     ):
-        super().__init__(teacher, student, training_config, **kwargs)
+        super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
 
     @overrides
     def get_teacher_logits(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
@@ -387,11 +393,13 @@ class ParallelDistiller(BaseDistiller):
 
     Args:
         teacher (Union["pl.LightningModule", "torch.nn.Module"]):
-
+            model to distil knowledge from
         student (Union["pl.LightningModule", "torch.nn.Module"]):
-
+            model to use as a student
         training_config (DictConfig):
             configuration to use for training and to distil the teacher model
+        teacher_checkpoint (str):
+            path to checkpoints to load to the teacher model
     """
 
     def __init__(
@@ -399,9 +407,10 @@ class ParallelDistiller(BaseDistiller):
             teacher: Union["pl.LightningModule", "torch.nn.Module"],
             student: Union["pl.LightningModule", "torch.nn.Module"],
             training_config: DictConfig,
+            teacher_checkpoint: str = None,
             **kwargs
     ):
-        super().__init__(teacher, student, training_config, **kwargs)
+        super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
 
     @overrides
     def get_teacher_logits(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:

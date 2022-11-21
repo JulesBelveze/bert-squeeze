@@ -246,7 +246,147 @@ class TestDistilSoftAssistant:
             }
         )
         assert isinstance(distil_assistant.data.train_dataloader(), DataLoader)
-        assert len(distil_assistant.data.train_dataloader()) == 2000
+        assert len(distil_assistant.data.train_dataloader()) == 1625
+        assert len(distil_assistant.data.val_dataloader()) == 500
+
+
+class TestDistilHardAssistant:
+    """"""
+
+    def test_two_hf_models(self, caplog):
+        """"""
+        distil_assistant = DistilAssistant(
+            "distil-hard",
+            dataset_path="emotion",
+            general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
+            data_kwargs={
+                "soft_data_config": {
+                    "is_local": False,
+                    "split": "train",
+                    "text_col": "text",
+                    "path": "SetFit/emotion",
+                    "max_samples": 10
+                },
+                "train_batch_size": 2,
+                "eval_batch_size": 2
+            }
+        )
+        assert distil_assistant.teacher is None
+        assert distil_assistant.student is None
+        assert "The Distiller has not been instantiated" in caplog.text
+
+        _ = distil_assistant.model
+
+        assert isinstance(distil_assistant.teacher, BertForSequenceClassification)
+        assert isinstance(distil_assistant.student, BertForSequenceClassification)
+
+    def test_student_torch_model(self, caplog):
+        """"""
+        distil_assistant = DistilAssistant(
+            "distil-hard",
+            dataset_path="emotion",
+            general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
+            data_kwargs={
+                "soft_data_config": {
+                    "is_local": False,
+                    "path": "SetFit/emotion"
+                }
+            },
+            student_kwargs={
+                "_target_": "tests.fixtures.dummy_models.Lr",
+            }
+        )
+
+        assert distil_assistant.teacher is None
+        assert distil_assistant.student is None
+        assert "The Distiller has not been instantiated" in caplog.text
+
+        _ = distil_assistant.model
+        assert isinstance(distil_assistant.teacher, BertForSequenceClassification)
+        assert isinstance(distil_assistant.student, torch.nn.Module)
+
+    def test_teacher_torch_model(self, caplog):
+        """"""
+        distil_assistant = DistilAssistant(
+            "distil-hard",
+            dataset_path="emotion",
+            general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
+            data_kwargs={
+                "soft_data_config": {
+                    "is_local": False,
+                    "path": "SetFit/emotion"
+                }
+            },
+            teacher_kwargs={
+                "_target_": "tests.fixtures.dummy_models.Lr",
+            }
+        )
+
+        assert distil_assistant.teacher is None
+        assert distil_assistant.student is None
+        assert "The Distiller has not been instantiated" in caplog.text
+
+        _ = distil_assistant.model
+        assert isinstance(distil_assistant.teacher, torch.nn.Module)
+        assert isinstance(distil_assistant.student, BertForSequenceClassification)
+
+    def test_torch_models(self, caplog):
+        """"""
+        distil_assistant = DistilAssistant(
+            "distil-hard",
+            dataset_path="emotion",
+            general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
+            data_kwargs={
+                "soft_data_config": {
+                    "is_local": False,
+                    "path": "SetFit/emotion"
+                }
+            },
+            teacher_kwargs={
+                "_target_": "tests.fixtures.dummy_models.Lr",
+                "checkpoints": "../tests/fixtures/resources/lr_dummy.bin"
+            },
+            student_kwargs={
+                "_target_": "tests.fixtures.dummy_models.Lr",
+            }
+        )
+
+        assert distil_assistant.teacher is None
+        assert distil_assistant.student is None
+        assert "The Distiller has not been instantiated" in caplog.text
+
+        _ = distil_assistant.model
+        assert isinstance(distil_assistant.teacher, torch.nn.Module)
+        assert isinstance(distil_assistant.student, torch.nn.Module)
+
+    def test_data(self):
+        """"""
+        distil_assistant = DistilAssistant(
+            "distil-hard",
+            dataset_path="emotion",
+            general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
+            data_kwargs={
+                "teacher_module": {
+                    "is_local": False,
+                    "path": "emotion",
+                    "split": "raw"
+                },
+                "hard_labeler": {
+                    "dataset_config": {
+                        "is_local": False,
+                        "split": "train",
+                        "text_col": "text",
+                        "path": "SetFit/emotion",
+                        "max_samples": 100
+                    }
+                },
+                "train_batch_size": 2,
+                "eval_batch_size": 4
+            }
+        )
+
+        assert isinstance(distil_assistant.data.train_dataloader(), DataLoader)
+        assert len(distil_assistant.data.train_dataloader()) == 8048
         assert len(distil_assistant.data.val_dataloader()) == 500
 
 

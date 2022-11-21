@@ -1,23 +1,22 @@
 import logging
 import os
-from typing import Any, Dict, List, Optional
-
 import pytorch_lightning as pl
 import torch.nn
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from pkg_resources import resource_filename
-from pydantic.utils import deep_update
 from pytorch_lightning.callbacks.callback import Callback
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.loggers.logger import Logger
+from typing import Any, Dict, List, Optional
 
-from bert_squeeze.utils.utils_fct import load_model_from_exp
+from bert_squeeze.utils.utils_fct import deep_update, load_model_from_exp
 
 CONFIG_MAPPER = {
     "distil": "distil.yaml",
     "distil-parallel": "distil_parallel.yaml",
-    "distil-soft": "distil_soft.yaml"
+    "distil-soft": "distil_soft.yaml",
+    "distil-hard": "distil_hard.yaml"
 }
 
 
@@ -77,7 +76,7 @@ class DistilAssistant(object):
             general_kwargs: Dict[str, Any] = None,
             train_kwargs: Dict[str, Any] = None,
             student_kwargs: Dict[str, Any] = None,
-            teacher_kwargs: Dict[str, Any] = None,
+            teacher_kwargs: Dict[str, Any] = {},
             data_kwargs: Dict[str, Any] = None,
             logger_kwargs: Dict[str, Any] = None,
             callbacks: List[Callback] = None
@@ -85,6 +84,7 @@ class DistilAssistant(object):
         conf = OmegaConf.load(
             resource_filename("bert_squeeze", os.path.join("assistants/configs", CONFIG_MAPPER[name]))
         )
+        self._teacher_checkpoint = teacher_kwargs.pop("checkpoint_path", None)
 
         for name in ["teacher_module", "student_module"]:
             conf["data"][name]["dataset_config"]["path"] = dataset_path
@@ -97,7 +97,6 @@ class DistilAssistant(object):
         for name, kws in zip(["teacher", "student"], [teacher_kwargs, student_kwargs]):
             if kws is not None:
                 conf["model"][name] = deep_update(conf["model"][name], kws)
-
         self.name = name
         self.general = conf["general"]
         self.train = conf["train"]
@@ -128,14 +127,11 @@ class DistilAssistant(object):
         if self._model is None:
             self.model = instantiate(self._model_conf)
 
-            teacher_checkpoints = self.teacher_config.get("checkpoints")
-            if teacher_checkpoints is not None:
-                teacher_checkpoints = resource_filename("bert_squeeze", teacher_checkpoints)
-
+            if self._teacher_checkpoint is not None:
                 if isinstance(self.teacher, pl.LightningModule):
-                    self.model.teacher = load_model_from_exp(teacher_checkpoints, module=self.model.teacher)
+                    self.model.teacher = load_model_from_exp(self._teacher_checkpoint, module=self.model.teacher)
                 elif isinstance(self.teacher, torch.nn.Module):
-                    self.model.teacher.load_state_dict(torch.load(teacher_checkpoints))
+                    self.model.teacher.load_state_dict(torch.load(self._teacher_checkpoint))
                 else:
                     raise TypeError(f"Unexpected type '{type(self.teacher)}' for 'teacher'.")
 
@@ -165,7 +161,9 @@ class DistilAssistant(object):
     def data(self) -> Any:
         """"""
         if self._data is None:
-            data = instantiate(self._data_conf, recurse=True)
+            # import ipdb
+            # ipdb.set_trace()
+            data = instantiate(self._data_conf, _recursive_=True)
             data.prepare_data()
             data.setup()
             self.data = data
