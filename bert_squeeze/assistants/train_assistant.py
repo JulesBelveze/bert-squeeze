@@ -146,7 +146,7 @@ class TrainAssistant(object):
         self._callbacks = value
 
     def __repr__(self):
-        return f"<Assistant(name={self.name})>"
+        return f"<TrainAssistant(name={self.name})>"
 
     def __str__(self):
-        return f"Assistant_{self.name}"
+        return f"TrainAssistant_{self.name}"

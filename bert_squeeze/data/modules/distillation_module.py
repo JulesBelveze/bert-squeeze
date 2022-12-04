@@ -1,9 +1,8 @@
-from typing import Optional, Union
-
 import datasets
 import pytorch_lightning as pl
-from hydra.core.hydra_config import HydraConfig
+from omegaconf import DictConfig
 from torch.utils.data import DataLoader
+from typing import Optional, Union
 
 from .lr_module import LrDataModule
 from .lstm_module import LSTMDataModule
@@ -31,7 +30,7 @@ class DistillationDataModule(pl.LightningDataModule):
             LightningDataModule to use for the teacher model.
         student_module (StudentDataModule):
             LightningDataModule to use for the student model.
-        soft_data_config (HydraConfig):
+        soft_data_config (DictConfig):
             Configuration to use for the "soft" dataset.
         hard_labeler (HardLabeler):
             Instance of HardLabeler to use to generate hardly labeled samples.
@@ -41,12 +40,12 @@ class DistillationDataModule(pl.LightningDataModule):
             self,
             teacher_module: TeacherDataModule,
             student_module: StudentDataModule,
-            soft_data_config: HydraConfig = None,
+            soft_data_config: DictConfig = None,
             hard_labeler: HardLabeler = None,
             **kwargs
     ):
         super().__init__()
-        assert student_module.dataset_config.name == teacher_module.dataset_config.name
+        assert student_module.dataset_config.path == teacher_module.dataset_config.path
         self.teacher_module = teacher_module
         self.student_module = student_module
 
@@ -79,16 +78,13 @@ class DistillationDataModule(pl.LightningDataModule):
             example["label"] = -100
             return example
 
-        if self.soft_dataset_config.is_local:
-            soft_dataset = datasets.load_dataset(
-                self.soft_dataset_config.path,
-                self.soft_dataset_config.split
-            )
-        else:
-            soft_dataset = datasets.load_dataset(self.soft_dataset_config.path, self.soft_dataset_config.split)
+        soft_dataset = datasets.load_dataset(
+            self.soft_dataset_config.path,
+            self.soft_dataset_config.split
+        )
 
         if self.soft_dataset_config.text_col != "text":
-            soft_dataset.rename_column_(self.soft_dataset_config.text_col, "text")
+            soft_dataset = soft_dataset.rename_column(self.soft_dataset_config.text_col, "text")
             self.soft_dataset_config.text_col = "text"
 
         # adding a "fake label" to the soft dataset for consistency with the labeled one
@@ -97,7 +93,10 @@ class DistillationDataModule(pl.LightningDataModule):
         soft_dataset = soft_dataset.map(lambda example: _create_fake_label(example), batched=False)
 
         columns_to_remove = list(set(soft_dataset.column_names) - {"text", "label"})
-        return soft_dataset.remove_columns(columns_to_remove)
+
+        soft_dataset = soft_dataset.remove_columns(columns_to_remove)
+        soft_dataset.features["label"] = datasets.Value("null")  # hack for concatenation purposes
+        return soft_dataset
 
     def featurize(self) -> datasets.DatasetDict:
         """
@@ -124,8 +123,15 @@ class DistillationDataModule(pl.LightningDataModule):
 
         # In case of a hard distillation
         if self.labeler is not None:
+            features_teacher = teacher_data["train"].features.copy()
+            features_student = student_data["train"].features.copy()
+
             hardly_labeled_dataset = self.create_hard_dataset()
+
+            hardly_labeled_dataset = hardly_labeled_dataset.cast(features_teacher)
             teacher_data["train"] = datasets.concatenate_datasets([teacher_data["train"], hardly_labeled_dataset])
+
+            hardly_labeled_dataset = hardly_labeled_dataset.cast(features_student)
             student_data["train"] = datasets.concatenate_datasets([student_data["train"], hardly_labeled_dataset])
 
         for dataset_split, columns in teacher_data.column_names.items():

@@ -1,0 +1,68 @@
+general:
+  debug: false
+  do_train: true
+  do_eval: false
+  get_mismatched: true
+  evaluate_during_training: true
+  labels: [ 0, 1 ]
+  num_labels: 2
+  output_dir: outputs
+  save_steps: 500
+  validation_every_n_epoch: 1
+
+
+train:
+  adam_eps: 1e-8
+  accumulation_steps: 1
+  auto_lr: false
+  discriminative_learning: true
+  dropout: 0.2
+  layer_lr_decay: 0.95
+  learning_rates: [ 2e-5 ]
+  logging_steps: 50
+  lr_scheduler: true
+  max_grad_norm: 1.0
+  num_epochs: 10
+  num_labels: ${general.num_labels}
+  optimizer: bertadam
+  objective: lsl
+  smoothing: 0.1
+  warmup_ratio: 0.06
+  warmup_steps: true
+  weight_decay: 0.01
+
+
+model:
+  _target_: bert_squeeze.distillation.distiller.ParallelDistiller
+  teacher:
+    _target_: transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
+    pretrained_model_name_or_path: "bert-base-uncased"
+    num_labels: ${general.num_labels}
+  student:
+    _target_: transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
+    pretrained_model_name_or_path: "bert-base-cased"
+    num_labels: ${general.num_labels}
+  training_config: ${train}
+
+
+data:
+  _target_: bert_squeeze.data.modules.distillation_module.DistillationDataModule
+  teacher_module:
+    _target_: bert_squeeze.data.modules.transformer_module.TransformerParallelDataModule
+    dataset_config:
+      is_local: true
+      path:
+      split:
+      truncate_mode: head
+    tokenizer_name: ${model.teacher.pretrained_model_name_or_path}
+    max_length: 256
+
+  student_module:
+    _target_: bert_squeeze.data.modules.transformer_module.TransformerParallelDataModule
+    dataset_config:
+      is_local: true
+      path:
+      split:
+      truncate_mode: head
+    tokenizer_name: ${model.student.pretrained_model_name_or_path}
+    max_length: 256

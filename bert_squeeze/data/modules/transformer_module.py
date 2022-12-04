@@ -4,6 +4,7 @@ from typing import Optional
 import datasets
 import pytorch_lightning as pl
 from omegaconf import DictConfig
+from overrides import overrides
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
@@ -119,3 +120,54 @@ class TransformerDataModule(pl.LightningDataModule):
         """
         return DataLoader(self.val, collate_fn=self._collate_fn(), batch_size=self.eval_batch_size, drop_last=True,
                           num_workers=0)
+
+
+class TransformerParallelDataModule(TransformerDataModule):
+    """
+    DataModule for parallel dataset for Transformer-based models.
+
+    Args:
+        dataset_config (HydraConfig):
+            dataset configuration
+        tokenizer_name (str):
+            name of the pre-trained tokenizer to use
+        max_length (int):
+            maximum sequence length of the inputs to the tokenizer
+    """
+
+    def __init__(
+            self,
+            dataset_config: DictConfig,
+            tokenizer_name: str,
+            max_length: int,
+            **kwargs
+    ):
+        dataset_config.text_col = "text"
+        dataset_config.label_col = None
+        super().__init__(dataset_config, tokenizer_name, max_length, **kwargs)
+
+    @overrides
+    def featurize(self) -> datasets.DatasetDict:
+        """
+        Returns:
+            DatasetDict: featurized dataset
+        """
+        tokenized_dataset = self.dataset.map(
+            lambda x: self.tokenizer(x[self.text_col], padding="max_length", max_length=self.max_length,
+                                     truncation=True)
+        )
+        tokenized_dataset = tokenized_dataset.map(
+            lambda x: {
+                "translation_" + name: value for name, value in
+                self.tokenizer(x["translation"], padding="max_length", max_length=self.max_length,
+                               truncation=True).items()
+            }
+        )
+        tokenized_dataset = tokenized_dataset.remove_columns([self.text_col, "translation"])
+
+        columns = ["input_ids", "attention_mask", "translation_input_ids", "translation_input_ids"]
+        if "distilbert" not in self.tokenizer.name_or_path:
+            columns += ["token_type_ids", "translation_token_type_ids"]
+
+        tokenized_dataset.set_format(type='torch', columns=columns)
+        return tokenized_dataset

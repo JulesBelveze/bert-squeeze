@@ -27,7 +27,7 @@ class TestTrainAssistant:
     def test_data(self, lr_assistant):
         """"""
         assert isinstance(lr_assistant.data.train_dataloader(), DataLoader)
-        assert len(lr_assistant.data.train_dataloader()) == 1000
+        assert len(lr_assistant.data.train_dataloader()) == 500
 
     def test_bert_assistant(self):
         """"""

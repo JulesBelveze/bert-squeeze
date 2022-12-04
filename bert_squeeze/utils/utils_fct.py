@@ -1,8 +1,8 @@
+import collections.abc
 import logging
 import os
 import pytorch_lightning as pl
 import sys
-from hydra.utils import get_class
 from omegaconf import DictConfig, OmegaConf
 from typing import List
 
@@ -41,22 +41,8 @@ def load_model_from_exp(path_to_folder: str, module: pl.LightningModule) -> pl.L
 
     logging.info(f"Loading model '{module}'")
 
-    if config.model.name == "lstm":
-        model = get_class(module).load_from_checkpoint(
-            checkpoint_path,
-            training_config=config.train,
-            vocab_len=config.model.vocab_len,
-            hidden_dim=config.model.hidden_dim,
-            num_labels=config.model.num_labels
-        )
-    else:
-        model = get_class(module).load_from_checkpoint(
-            checkpoint_path,
-            training_config=config,
-            pretrained_model=config.model.pretrained_model,
-            num_labels=config.model.num_labels
-        )
-    logging.info(f"Model '{module}' successfully loaded.")
+    model = module.load_from_checkpoint(checkpoint_path, **config)
+    logging.info(f"Model '{model}' successfully loaded.")
     return model
 
 
@@ -90,3 +76,12 @@ def get_neptune_tags(args: DictConfig) -> List[str]:
         tags.append(args.train.objective)
     tags.append(args.train.optimizer)
     return tags
+
+
+def deep_update(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = deep_update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
