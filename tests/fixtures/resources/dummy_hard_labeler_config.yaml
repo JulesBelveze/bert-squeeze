@@ -1,0 +1,17 @@
+hard_labeler:
+  _target_: bert_squeeze.distillation.utils.labeler.HardLabeler
+  labeler_config:
+    teacher:
+      _target_: transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
+      pretrained_model_name_or_path: "bert-base-uncased"
+      num_labels: 6
+    pretrained_model: ${hard_labeler.labeler_config.teacher.pretrained_model_name_or_path}
+    num_labels: ${hard_labeler.labeler_config.teacher.num_labels}
+    max_length: 350
+  dataset_config:
+    is_local: false
+    path: "emotion"
+    split: "split"
+    text_col: "text"
+    max_samples: 200
+  max_length: ${hard_labeler.labeler_config.max_length}
