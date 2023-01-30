@@ -11,7 +11,7 @@ from bert_squeeze.models import BowLogisticRegression, LtCustomBert, LtDeeBert, 
 def lr_assistant():
     return TrainAssistant(
         "lr",
-        dataset_path="emotion",
+        data_kwargs={"dataset_config": {"path": "emotion"}},
         general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6}
     )
 
@@ -33,7 +33,7 @@ class TestTrainAssistant:
         """"""
         bert_assistant = TrainAssistant(
             "bert",
-            dataset_path="emotion",
+            data_kwargs={"dataset_config": {"path": "emotion"}},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             model_kwargs={"pretrained_model": "bert-base-uncased"}
         )
@@ -46,7 +46,7 @@ class TestTrainAssistant:
         """"""
         lstm_assistant = TrainAssistant(
             "lstm",
-            dataset_path="emotion",
+            data_kwargs={"dataset_config": {"path": "emotion"}},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6}
         )
         assert lstm_assistant.general.num_labels == 6
@@ -57,7 +57,7 @@ class TestTrainAssistant:
         """"""
         deebert_assistant = TrainAssistant(
             "deebert",
-            dataset_path="emotion",
+            data_kwargs={"dataset_config": {"path": "emotion"}},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             model_kwargs={"pretrained_model": "bert-base-uncased"}
         )
@@ -70,7 +70,7 @@ class TestTrainAssistant:
         """"""
         fastbert_assistant = TrainAssistant(
             "fastbert",
-            dataset_path="emotion",
+            data_kwargs={"dataset_config": {"path": "emotion"}},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             model_kwargs={"pretrained_model": "bert-base-uncased"}
         )
@@ -84,7 +84,7 @@ class TestTrainAssistant:
         """"""
         fastbert_assistant = TrainAssistant(
             "theseus-bert",
-            dataset_path="emotion",
+            data_kwargs={"dataset_config": {"path": "emotion"}},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             model_kwargs={"pretrained_model": "bert-base-uncased"}
         )

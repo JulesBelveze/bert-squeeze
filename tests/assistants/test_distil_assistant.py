@@ -13,7 +13,7 @@ class TestDistilAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil",
-            dataset_path="emotion",
+            data_kwargs={"path": "emotion"},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6}
         )
         assert distil_assistant.teacher is None
@@ -29,7 +29,7 @@ class TestDistilAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil",
-            dataset_path="emotion",
+            data_kwargs={"path": "emotion"},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             student_kwargs={
                 "_target_": "tests.fixtures.dummy_models.Lr",
@@ -48,7 +48,7 @@ class TestDistilAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil",
-            dataset_path="emotion",
+            data_kwargs={"path": "emotion"},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             teacher_kwargs={
                 "_target_": "tests.fixtures.dummy_models.Lr",
@@ -67,7 +67,7 @@ class TestDistilAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil",
-            dataset_path="emotion",
+            data_kwargs={"path": "emotion"},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             teacher_kwargs={
                 "_target_": "tests.fixtures.dummy_models.Lr",
@@ -90,7 +90,6 @@ class TestDistilAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil",
-            dataset_path="emotion",
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             teacher_kwargs={
                 "_target_": "tests.fixtures.dummy_models.Lr",
@@ -100,6 +99,7 @@ class TestDistilAssistant:
                 "_target_": "tests.fixtures.dummy_models.Lr",
             },
             data_kwargs={
+                "path": "emotion",
                 "train_batch_size": 16,
                 "eval_batch_size": 4
             }
@@ -116,9 +116,10 @@ class TestDistilSoftAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil-soft",
-            dataset_path="emotion",
+
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             data_kwargs={
+                "path": "emotion",
                 "soft_data_config": {
                     "is_local": False,
                     "text_col": "text",
@@ -140,9 +141,9 @@ class TestDistilSoftAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil-soft",
-            dataset_path="emotion",
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             data_kwargs={
+                "path": "emotion",
                 "soft_data_config": {
                     "is_local": False,
                     "text_col": "text",
@@ -167,9 +168,9 @@ class TestDistilSoftAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil-soft",
-            dataset_path="emotion",
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             data_kwargs={
+                "path": "emotion",
                 "soft_data_config": {
                     "is_local": False,
                     "text_col": "text",
@@ -194,9 +195,9 @@ class TestDistilSoftAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil-soft",
-            dataset_path="emotion",
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             data_kwargs={
+                "path": "emotion",
                 "soft_data_config": {
                     "is_local": False,
                     "text_col": "text",
@@ -225,7 +226,6 @@ class TestDistilSoftAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil-soft",
-            dataset_path="emotion",
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             teacher_kwargs={
                 "_target_": "tests.fixtures.dummy_models.Lr",
@@ -235,6 +235,7 @@ class TestDistilSoftAssistant:
                 "_target_": "tests.fixtures.dummy_models.Lr",
             },
             data_kwargs={
+                "path": "emotion",
                 "soft_data_config": {
                     "is_local": False,
                     "text_col": "text",
@@ -257,12 +258,12 @@ class TestDistilHardAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil-hard",
-            dataset_path="emotion",
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             data_kwargs={
+                "path": "emotion",
                 "soft_data_config": {
                     "is_local": False,
-                    "split": "train",
+                    "split": "split",
                     "text_col": "text",
                     "path": "SetFit/emotion",
                     "max_samples": 10
@@ -284,9 +285,9 @@ class TestDistilHardAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil-hard",
-            dataset_path="emotion",
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             data_kwargs={
+                "path": "emotion",
                 "soft_data_config": {
                     "is_local": False,
                     "path": "SetFit/emotion"
@@ -309,9 +310,9 @@ class TestDistilHardAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil-hard",
-            dataset_path="emotion",
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             data_kwargs={
+                "path": "emotion",
                 "soft_data_config": {
                     "is_local": False,
                     "path": "SetFit/emotion"
@@ -334,9 +335,9 @@ class TestDistilHardAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil-hard",
-            dataset_path="emotion",
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             data_kwargs={
+                "path": "emotion",
                 "soft_data_config": {
                     "is_local": False,
                     "path": "SetFit/emotion"
@@ -363,14 +364,10 @@ class TestDistilHardAssistant:
         """"""
         distil_assistant = DistilAssistant(
             "distil-hard",
-            dataset_path="emotion",
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             data_kwargs={
-                "teacher_module": {
-                    "is_local": False,
-                    "path": "emotion",
-                    "split": "raw"
-                },
+                "path": "emotion",
+                "split": "split",
                 "hard_labeler": {
                     "dataset_config": {
                         "is_local": False,
@@ -397,7 +394,10 @@ class TestDistilAssistantParallel:
         """"""
         distil_assistant = DistilAssistant(
             "distil-parallel",
-            dataset_path=resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py")
+            data_kwargs={
+                "path": resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py"),
+                "is_local": True
+            }
         )
         assert distil_assistant.teacher is None
         assert distil_assistant.student is None
@@ -412,7 +412,10 @@ class TestDistilAssistantParallel:
         """"""
         distil_assistant = DistilAssistant(
             "distil-parallel",
-            dataset_path=resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py"),
+            data_kwargs={
+                "path": resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py"),
+                "is_local": True
+            },
             student_kwargs={
                 "_target_": "tests.fixtures.dummy_models.Lr",
             }
@@ -430,7 +433,10 @@ class TestDistilAssistantParallel:
         """"""
         distil_assistant = DistilAssistant(
             "distil-parallel",
-            dataset_path=resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py"),
+            data_kwargs={
+                "path": resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py"),
+                "is_local": True
+            },
             teacher_kwargs={
                 "_target_": "tests.fixtures.dummy_models.Lr",
             }
@@ -448,7 +454,10 @@ class TestDistilAssistantParallel:
         """"""
         distil_assistant = DistilAssistant(
             "distil-parallel",
-            dataset_path=resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py"),
+            data_kwargs={
+                "path": resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py"),
+                "is_local": True
+            },
             teacher_kwargs={
                 "_target_": "tests.fixtures.dummy_models.Lr",
                 "checkpoints": "../tests/fixtures/resources/lr_dummy.bin"
@@ -470,7 +479,6 @@ class TestDistilAssistantParallel:
         """"""
         distil_assistant = DistilAssistant(
             "distil-parallel",
-            dataset_path=resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py"),
             teacher_kwargs={
                 "_target_": "tests.fixtures.dummy_models.Lr",
                 "checkpoints": "../tests/fixtures/resources/lr_dummy.bin"
@@ -479,6 +487,8 @@ class TestDistilAssistantParallel:
                 "_target_": "tests.fixtures.dummy_models.Lr",
             },
             data_kwargs={
+                "path": resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py"),
+                "is_local": True,
                 "train_batch_size": 16,
                 "eval_batch_size": 4
             }

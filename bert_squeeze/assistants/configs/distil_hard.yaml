@@ -49,8 +49,8 @@ data:
     _target_: bert_squeeze.data.modules.transformer_module.TransformerDataModule
     dataset_config:
       is_local: False
-      path: "emotion"
-      split: "raw"
+      path:
+      split:
       text_col: "text"
       label_col: "label"
     tokenizer_name: ${model.teacher.pretrained_model_name_or_path}

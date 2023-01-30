@@ -37,8 +37,6 @@ class DistilAssistant(object):
     Args:
         name (str):
             name of the base model to fine-tune
-        dataset_path (str):
-            path of the dataset to use
         general_kwargs (Dict[str, Any]):
             keyword arguments that can be added or overwrite the default 'general' configuration
         train_kwargs (Dict[str, Any]):
@@ -60,7 +58,7 @@ class DistilAssistant(object):
     >>> from bert_squeeze.assistants import DistilAssistant
     >>> distil_assistant = DistilAssistant(
             "distil-parallel",
-            dataset_path=resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py"),
+            data_kwargs={"path": resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py")},
             teacher_kwargs={
                 "_target_": transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
                 "pretrained_model_name_or_path": "bert-base-cased"
@@ -72,7 +70,6 @@ class DistilAssistant(object):
     def __init__(
             self,
             name: str,
-            dataset_path: str,
             general_kwargs: Dict[str, Any] = None,
             train_kwargs: Dict[str, Any] = None,
             student_kwargs: Dict[str, Any] = None,
@@ -87,7 +84,7 @@ class DistilAssistant(object):
         self._teacher_checkpoint = teacher_kwargs.pop("checkpoint_path", None)
 
         for name in ["teacher_module", "student_module"]:
-            conf["data"][name]["dataset_config"]["path"] = dataset_path
+            conf["data"][name]["dataset_config"] = deep_update(conf["data"][name]["dataset_config"], data_kwargs)
 
         for name, kws in zip(["general", "train", "data", "logger", "callbacks"],
                              [general_kwargs, train_kwargs, data_kwargs, logger_kwargs, callbacks]):
@@ -97,6 +94,7 @@ class DistilAssistant(object):
         for name, kws in zip(["teacher", "student"], [teacher_kwargs, student_kwargs]):
             if kws is not None:
                 conf["model"][name] = deep_update(conf["model"][name], kws)
+
         self.name = name
         self.general = conf["general"]
         self.train = conf["train"]
