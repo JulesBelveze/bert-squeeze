@@ -106,13 +106,6 @@ class HardLabeler(object):
 
     def get_dataloader(self) -> torch.utils.data.DataLoader:
         """"""
-
-        def _collate_fn():
-            def _collate(examples):
-                return self.tokenizer.pad(examples, return_tensors="pt")
-
-            return _collate
-
         if self.dataset_config.is_local:
             dataset = datasets.load_dataset(
                 resource_filename("bert-squeeze", f"data/{self.dataset_config.path}_dataset.py"),

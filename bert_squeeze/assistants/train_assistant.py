@@ -1,7 +1,5 @@
 import logging
 import os
-from typing import Any, Dict, List, Optional
-
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from pkg_resources import resource_filename
@@ -9,6 +7,7 @@ from pydantic.utils import deep_update
 from pytorch_lightning.callbacks.callback import Callback
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.loggers.logger import Logger
+from typing import Any, Dict, List
 
 CONFIG_MAPPER = {
     "lr": "train_lr.yaml",
@@ -35,8 +34,6 @@ class TrainAssistant(object):
     Args:
         name (str):
             name of the base model to fine-tune
-        dataset_path (str):
-            path of the dataset to use
         general_kwargs (Dict[str, Any]):
             keyword arguments that can be added or overwrite the default 'general' configuration
         train_kwargs (Dict[str, Any]):
@@ -54,7 +51,6 @@ class TrainAssistant(object):
     def __init__(
             self,
             name: str,
-            dataset_path: str,
             general_kwargs: Dict[str, Any] = None,
             train_kwargs: Dict[str, Any] = None,
             model_kwargs: Dict[str, Any] = None,
@@ -68,7 +64,9 @@ class TrainAssistant(object):
         if data_kwargs is not None and data_kwargs.get("dataset_config", {}).get("path") is not None:
             logging.warning("Found value for `dataset_config.path` which conflicts with parameter `dataset_path`, using"
                             "value from the later.")
-        conf["data"]["dataset_config"]["path"] = dataset_path
+
+        conf["data"]["dataset_config"] = deep_update(conf["data"]["dataset_config"], data_kwargs["dataset_config"])
+        del data_kwargs["dataset_config"]
 
         for name, kws in zip(["general", "train", "model", "data", "logger", "callbacks"],
                              [general_kwargs, train_kwargs, model_kwargs, data_kwargs, logger_kwargs, callbacks]):
