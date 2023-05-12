@@ -41,16 +41,16 @@ class TransformerQAT(QuantizationAwareTraining):
     """
 
     def __init__(
-            self,
-            observer_type: str = "average",
-            only_last_epoch: bool = False,
-            layers_to_fuse: List[str] = None
+        self,
+        observer_type: str = "average",
+        only_last_epoch: bool = False,
+        layers_to_fuse: List[str] = None,
     ):
         super(TransformerQAT, self).__init__(
             qconfig="fbgemm",
             observer_type=observer_type,
             collect_quantization=custom_trigger_last if only_last_epoch else None,
-            modules_to_fuse=layers_to_fuse
+            modules_to_fuse=layers_to_fuse,
         )
 
 
@@ -64,12 +64,7 @@ class DynamicQuantization(Callback):
             list of submodule names to apply dynamic quantization to
     """
 
-    def __init__(
-            self,
-            layers_to_quantize: Iterable[str],
-            *args: Any,
-            **kwargs: Any
-    ):
+    def __init__(self, layers_to_quantize: Iterable[str], *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self.layers = set(layers_to_quantize)
 
@@ -79,4 +74,7 @@ class DynamicQuantization(Callback):
         )
 
         torch.save(quantized_module.state_dict(), "quantized_model.ckpt")
-        logging.info('Model quantized and saved - size (MB):', os.path.getsize("quantized_model.ckpt") / 1e6)
+        logging.info(
+            'Model quantized and saved - size (MB):',
+            os.path.getsize("quantized_model.ckpt") / 1e6,
+        )

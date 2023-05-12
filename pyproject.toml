@@ -38,7 +38,7 @@ line_length = 90
 [tool.taskipy.tasks]
 check-formatting = "black --check bert_squeeze tests && isort --check bert_squeeze tests"
 format = "isort bert_squeeze tests && black bert_squeeze tests"
-lint = "flake8 --max-line-length 90 --ignore=E203,W503,E501,F401 bert_squeeze/"
+lint = "flake8 --max-line-length 90 --ignore=E203,W503,E501,F401,E266 bert_squeeze/"
 test = "pytest tests/*"
 
 [build-system]

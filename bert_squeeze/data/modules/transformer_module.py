@@ -23,11 +23,7 @@ class TransformerDataModule(pl.LightningDataModule):
     """
 
     def __init__(
-            self,
-            dataset_config: DictConfig,
-            tokenizer_name: str,
-            max_length: int,
-            **kwargs
+        self, dataset_config: DictConfig, tokenizer_name: str, max_length: int, **kwargs
     ):
         super().__init__()
         self.dataset_config = dataset_config
@@ -49,11 +45,12 @@ class TransformerDataModule(pl.LightningDataModule):
         """"""
         if self.dataset_config.is_local:
             self.dataset = datasets.load_dataset(
-                self.dataset_config.path,
-                self.dataset_config.split
+                self.dataset_config.path, self.dataset_config.split
             )
         else:
-            self.dataset = datasets.load_dataset(self.dataset_config.path, self.dataset_config.split)
+            self.dataset = datasets.load_dataset(
+                self.dataset_config.path, self.dataset_config.split
+            )
         logging.info(f"Dataset '{self.dataset_config.path}' successfully loaded.")
 
     def featurize(self) -> datasets.DatasetDict:
@@ -62,8 +59,12 @@ class TransformerDataModule(pl.LightningDataModule):
             DatasetDict: featurized dataset
         """
         tokenized_dataset = self.dataset.map(
-            lambda x: self.tokenizer(x[self.text_col], padding="max_length", max_length=self.max_length,
-                                     truncation=True)
+            lambda x: self.tokenizer(
+                x[self.text_col],
+                padding="max_length",
+                max_length=self.max_length,
+                truncation=True,
+            )
         )
         tokenized_dataset = tokenized_dataset.remove_columns([self.text_col])
 
@@ -102,24 +103,39 @@ class TransformerDataModule(pl.LightningDataModule):
         Returns:
             DataLoader: train dataloader
         """
-        return DataLoader(self.train, collate_fn=self._collate_fn(), batch_size=self.train_batch_size, drop_last=True,
-                          num_workers=0)
+        return DataLoader(
+            self.train,
+            collate_fn=self._collate_fn(),
+            batch_size=self.train_batch_size,
+            drop_last=True,
+            num_workers=0,
+        )
 
     def test_dataloader(self) -> DataLoader:
         """
         Returns:
             DataLoader: test dataloader
         """
-        return DataLoader(self.test, collate_fn=self._collate_fn(), batch_size=self.eval_batch_size, drop_last=True,
-                          num_workers=0)
+        return DataLoader(
+            self.test,
+            collate_fn=self._collate_fn(),
+            batch_size=self.eval_batch_size,
+            drop_last=True,
+            num_workers=0,
+        )
 
     def val_dataloader(self) -> DataLoader:
         """
         Returns:
             DataLoader: Validation dataloader
         """
-        return DataLoader(self.val, collate_fn=self._collate_fn(), batch_size=self.eval_batch_size, drop_last=True,
-                          num_workers=0)
+        return DataLoader(
+            self.val,
+            collate_fn=self._collate_fn(),
+            batch_size=self.eval_batch_size,
+            drop_last=True,
+            num_workers=0,
+        )
 
 
 class TransformerParallelDataModule(TransformerDataModule):
@@ -136,11 +152,7 @@ class TransformerParallelDataModule(TransformerDataModule):
     """
 
     def __init__(
-            self,
-            dataset_config: DictConfig,
-            tokenizer_name: str,
-            max_length: int,
-            **kwargs
+        self, dataset_config: DictConfig, tokenizer_name: str, max_length: int, **kwargs
     ):
         dataset_config.text_col = "text"
         dataset_config.label_col = None
@@ -153,19 +165,34 @@ class TransformerParallelDataModule(TransformerDataModule):
             DatasetDict: featurized dataset
         """
         tokenized_dataset = self.dataset.map(
-            lambda x: self.tokenizer(x[self.text_col], padding="max_length", max_length=self.max_length,
-                                     truncation=True)
+            lambda x: self.tokenizer(
+                x[self.text_col],
+                padding="max_length",
+                max_length=self.max_length,
+                truncation=True,
+            )
         )
         tokenized_dataset = tokenized_dataset.map(
             lambda x: {
-                "translation_" + name: value for name, value in
-                self.tokenizer(x["translation"], padding="max_length", max_length=self.max_length,
-                               truncation=True).items()
+                "translation_" + name: value
+                for name, value in self.tokenizer(
+                    x["translation"],
+                    padding="max_length",
+                    max_length=self.max_length,
+                    truncation=True,
+                ).items()
             }
         )
-        tokenized_dataset = tokenized_dataset.remove_columns([self.text_col, "translation"])
+        tokenized_dataset = tokenized_dataset.remove_columns(
+            [self.text_col, "translation"]
+        )
 
-        columns = ["input_ids", "attention_mask", "translation_input_ids", "translation_input_ids"]
+        columns = [
+            "input_ids",
+            "attention_mask",
+            "translation_input_ids",
+            "translation_input_ids",
+        ]
         if "distilbert" not in self.tokenizer.name_or_path:
             columns += ["token_type_ids", "translation_token_type_ids"]
 

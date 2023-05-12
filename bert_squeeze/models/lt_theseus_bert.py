@@ -3,9 +3,12 @@ from omegaconf import DictConfig
 from overrides import overrides
 from transformers import AutoConfig
 
+from ..utils.schedulers.theseus_schedulers import (
+    ConstantReplacementScheduler,
+    LinearReplacementScheduler,
+)
 from .base_lt_module import BaseTransformerModule
 from .custom_transformers import TheseusBertModel
-from ..utils.schedulers.theseus_schedulers import ConstantReplacementScheduler, LinearReplacementScheduler
 
 
 class LtTheseusBert(BaseTransformerModule):
@@ -25,30 +28,36 @@ class LtTheseusBert(BaseTransformerModule):
     """
 
     def __init__(
-            self,
-            training_config: DictConfig,
-            pretrained_model: str,
-            num_labels: int,
-            replacement_scheduler: DictConfig,
-            **kwargs
+        self,
+        training_config: DictConfig,
+        pretrained_model: str,
+        num_labels: int,
+        replacement_scheduler: DictConfig,
+        **kwargs,
     ):
         super().__init__(training_config, num_labels, pretrained_model, **kwargs)
 
         self._build_model()
         scheduler = {
             "linear": LinearReplacementScheduler,
-            "constant": ConstantReplacementScheduler
+            "constant": ConstantReplacementScheduler,
         }[replacement_scheduler.type]
 
         self.replacement_scheduler = scheduler(
             self.encoder.encoder,
-            **{k: v for k, v in replacement_scheduler.items() if k != "type"}
+            **{k: v for k, v in replacement_scheduler.items() if k != "type"},
         )
 
     @overrides
-    def forward(self, input_ids: torch.Tensor = None, attention_mask: torch.Tensor = None,
-                token_type_ids: torch.Tensor = None, position_ids: torch.Tensor = None, head_mask: torch.Tensor = None,
-                **kwargs) -> torch.Tensor:
+    def forward(
+        self,
+        input_ids: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
+        token_type_ids: torch.Tensor = None,
+        position_ids: torch.Tensor = None,
+        head_mask: torch.Tensor = None,
+        **kwargs,
+    ) -> torch.Tensor:
         """
         Args:
             input_ids (torch.Tensor):
@@ -72,7 +81,7 @@ class LtTheseusBert(BaseTransformerModule):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask
+            head_mask=head_mask,
         )
 
         pooled_output = outputs.pooler_output
@@ -87,18 +96,24 @@ class LtTheseusBert(BaseTransformerModule):
         inputs = {
             "input_ids": batch["input_ids"],
             "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"]
+            "token_type_ids": batch["token_type_ids"],
         }
         logits = self.forward(**inputs)
         loss = self.loss(logits, batch["labels"])
 
         self.scorer.add(logits.detach().cpu(), batch["labels"], loss.detach().cpu())
         if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
-            logging_loss = {key: torch.stack(val).mean() for key, val in self.scorer.losses.items()}
+            logging_loss = {
+                key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
+            }
             for key, value in logging_loss.items():
-                self.logger.experiment[f"train/loss_{key}"].log(value=value, step=self.global_step)
+                self.logger.experiment[f"train/loss_{key}"].log(
+                    value=value, step=self.global_step
+                )
 
-            self.logger.experiment["train/acc"].log(self.scorer.acc, step=self.global_step)
+            self.logger.experiment["train/acc"].log(
+                self.scorer.acc, step=self.global_step
+            )
             self.scorer.reset()
 
         return loss
@@ -109,7 +124,7 @@ class LtTheseusBert(BaseTransformerModule):
         inputs = {
             "input_ids": batch["input_ids"],
             "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"]
+            "token_type_ids": batch["token_type_ids"],
         }
         logits = self.forward(**inputs)
         loss = self.loss(logits, batch["labels"])
@@ -122,7 +137,7 @@ class LtTheseusBert(BaseTransformerModule):
         inputs = {
             "input_ids": batch["input_ids"],
             "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"]
+            "token_type_ids": batch["token_type_ids"],
         }
         logits = self.forward(**inputs)
         loss = self.loss(logits, batch["labels"])
@@ -142,5 +157,5 @@ class LtTheseusBert(BaseTransformerModule):
             torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),
             torch.nn.ReLU(),
             torch.nn.LayerNorm(self.model_config.hidden_size),
-            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels)
+            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels),
         )

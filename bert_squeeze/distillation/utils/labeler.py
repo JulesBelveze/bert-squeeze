@@ -1,7 +1,8 @@
+import logging
 from collections import defaultdict
+from typing import Any, Dict, List, Tuple, Union
 
 import datasets
-import logging
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
@@ -11,7 +12,6 @@ from pkg_resources import resource_filename
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoTokenizer
-from typing import Any, Dict, List, Tuple, Union
 
 
 class HardLabeler(object):
@@ -36,11 +36,11 @@ class HardLabeler(object):
     """
 
     def __init__(
-            self,
-            labeler_config: DictConfig,
-            dataset_config: DictConfig,
-            max_length: int,
-            **kwargs
+        self,
+        labeler_config: DictConfig,
+        dataset_config: DictConfig,
+        max_length: int,
+        **kwargs,
     ):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model, tokenizer = self._get_model(labeler_config)
@@ -72,15 +72,19 @@ class HardLabeler(object):
                 checkpoint_path,
                 training_config=config,
                 pretrained_model=config.pretrained_model,
-                num_labels=config.num_labels
+                num_labels=config.num_labels,
             )
         else:
             teacher = config.teacher
 
-        tokenizer = AutoTokenizer.from_pretrained(config.pretrained_model, model_max_len=config.max_length)
+        tokenizer = AutoTokenizer.from_pretrained(
+            config.pretrained_model, model_max_len=config.max_length
+        )
         return teacher, tokenizer
 
-    def featurize(self, dataset: Union[DatasetDict, Dataset]) -> Union[DatasetDict, Dataset]:
+    def featurize(
+        self, dataset: Union[DatasetDict, Dataset]
+    ) -> Union[DatasetDict, Dataset]:
         """
         Args:
             dataset (datasets.DatasetDict):
@@ -93,37 +97,37 @@ class HardLabeler(object):
                 x[self.dataset_config.text_col],
                 padding="max_length",
                 max_length=self.max_length,
-                truncation=True
+                truncation=True,
             )
         )
         # removing extra columns
         columns_to_remove = list(
-            set(tokenized_dataset.column_names) - {"input_ids", "token_type_ids", "attention_mask"}
+            set(tokenized_dataset.column_names)
+            - {"input_ids", "token_type_ids", "attention_mask"}
         )
         tokenized_dataset = tokenized_dataset.remove_columns(columns_to_remove)
-        # tokenized_dataset = tokenized_dataset.add_column("id", range(tokenized_dataset.num_rows))
         return tokenized_dataset
 
     def get_dataloader(self) -> torch.utils.data.DataLoader:
         """"""
         if self.dataset_config.is_local:
             dataset = datasets.load_dataset(
-                resource_filename("bert-squeeze", f"data/{self.dataset_config.path}_dataset.py"),
-                self.dataset_config.split
+                resource_filename(
+                    "bert-squeeze", f"data/{self.dataset_config.path}_dataset.py"
+                ),
+                self.dataset_config.split,
             )
         else:
-            dataset = datasets.load_dataset(self.dataset_config.path, self.dataset_config.split)
+            dataset = datasets.load_dataset(
+                self.dataset_config.path, self.dataset_config.split
+            )
         dataset = dataset["train"].select(range(self.dataset_config.max_samples))
 
         logging.info("Featurizing hard dataset for labeling.")
         featurized_dataset = self.featurize(dataset)
 
         featurized_dataset.set_format(type="pt")
-        return DataLoader(
-            featurized_dataset,
-            batch_size=self.batch_size,
-            drop_last=True
-        )
+        return DataLoader(featurized_dataset, batch_size=self.batch_size, drop_last=True)
 
     def label_dataset(self) -> Dict[str, List[Any]]:
         """
@@ -139,7 +143,9 @@ class HardLabeler(object):
         self.model.eval()
         for batch in tqdm(train_loader, total=len(train_loader), desc="Labeling samples"):
             with torch.no_grad():
-                logits = self.model(**{k: v.to(self.device) for k, v in batch.items()}).logits
+                logits = self.model(
+                    **{k: v.to(self.device) for k, v in batch.items()}
+                ).logits
                 probs = F.softmax(logits, dim=-1)
                 preds = probs.argmax(dim=-1)
 

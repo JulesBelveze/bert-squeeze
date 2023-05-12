@@ -23,18 +23,19 @@ class ThresholdBasedPruning(Callback):
     """
 
     def __init__(
-            self,
-            threshold: float,
-            start_pruning_epoch: int = 10,
-            *args: Any,
-            **kwargs: Any
+        self, threshold: float, start_pruning_epoch: int = 10, *args: Any, **kwargs: Any
     ):
         super().__init__(*args, **kwargs)
         self.threshold = threshold
         self.start_pruning_epoch = start_pruning_epoch
 
-    def on_before_optimizer_step(self, trainer: pl.Trainer, pl_module: pl.LightningModule, optimizer: Optimizer,
-                                 optimizer_idx: int) -> None:
+    def on_before_optimizer_step(
+        self,
+        trainer: pl.Trainer,
+        pl_module: pl.LightningModule,
+        optimizer: Optimizer,
+        optimizer_idx: int,
+    ) -> None:
         """
         Method called before `optimizer.step()` to zero prune gradients
 
@@ -52,7 +53,9 @@ class ThresholdBasedPruning(Callback):
         if pl_module.current_epoch >= self.start_pruning_epoch != -1:
             self._zero_pruned_gradients(pl_module)
 
-    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def on_train_epoch_end(
+        self, trainer: pl.Trainer, pl_module: pl.LightningModule
+    ) -> None:
         """
         Method called at the end of a training epoch to prune the model.
 
@@ -64,7 +67,8 @@ class ThresholdBasedPruning(Callback):
         """
         if pl_module.current_epoch >= self.start_pruning_epoch != -1:
             logging.info(
-                f"======== Pruning iteration {self.start_pruning_epoch - pl_module.current_epoch - 1} ========")
+                f"======== Pruning iteration {self.start_pruning_epoch - pl_module.current_epoch - 1} ========"
+            )
             self._prune_model(pl_module)
 
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
@@ -120,7 +124,13 @@ class SparsityBasedPruning(Callback):
     of the model weights are pruned.
     """
 
-    def __init__(self, sparsity_level: float = 0.0, layers_to_exclude: List[str] = None, *args: Any, **kwargs: Any):
+    def __init__(
+        self,
+        sparsity_level: float = 0.0,
+        layers_to_exclude: List[str] = None,
+        *args: Any,
+        **kwargs: Any,
+    ):
         super().__init__(*args, **kwargs)
         self.sparsity_level = sparsity_level
         self.layers_to_exclude = layers_to_exclude
@@ -139,11 +149,16 @@ class SparsityBasedPruning(Callback):
             return
 
         # flatten all tensors and create a huge 1D tensor to get the threshold
-        flatten_parameters = torch.cat([param.view(-1) for param in pl_module.parameters()], dim=0)
+        flatten_parameters = torch.cat(
+            [param.view(-1) for param in pl_module.parameters()], dim=0
+        )
 
-        bottom_k, _ = torch.topk(flatten_parameters.abs(),
-                                 int(self.sparsity_level * flatten_parameters.numel()), largest=False,
-                                 sorted=True)
+        bottom_k, _ = torch.topk(
+            flatten_parameters.abs(),
+            int(self.sparsity_level * flatten_parameters.numel()),
+            largest=False,
+            sorted=True,
+        )
         threshold = bottom_k.data[-1]
         self._prune_model(threshold, pl_module)
 

@@ -2,12 +2,13 @@
 # The main difference relies on the fact that I'm trying to use HuggingFace's
 # 'transformers' components as much as possible.
 
+from typing import List, Tuple, Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import PretrainedConfig
 from transformers.models.bert.modeling_bert import BertLayer, BertSelfAttention
-from typing import List, Tuple, Union
 
 
 class FastBertClassifier(nn.Module):
@@ -22,10 +23,7 @@ class FastBertClassifier(nn.Module):
             arguments, defining the model architecture.
     """
 
-    def __init__(
-            self,
-            config: PretrainedConfig
-    ):
+    def __init__(self, config: PretrainedConfig):
         super(FastBertClassifier, self).__init__()
 
         cls_hidden_size = config.hidden_size  # might need to be reduced
@@ -36,7 +34,9 @@ class FastBertClassifier(nn.Module):
         self.dense_prelogits = nn.Linear(cls_hidden_size, cls_hidden_size)
         self.dense_logits = nn.Linear(cls_hidden_size, num_class)
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor = None) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor = None
+    ) -> torch.Tensor:
         """"""
         states_output = self.dense_narrow(hidden_states)
         states_output = self.selfAttention(states_output, attention_mask)
@@ -66,19 +66,20 @@ class FastBertGraph(nn.Module):
             specified arguments, defining the model architecture.
     """
 
-    def __init__(
-            self,
-            config: PretrainedConfig
-    ):
+    def __init__(self, config: PretrainedConfig):
         super(FastBertGraph, self).__init__()
         self.config = config
-        self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [BertLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.layer_classifier = FastBertClassifier(config)
 
         # creating branches
         self.layer_classifiers = nn.ModuleDict()
         for i in range(config.num_hidden_layers - 1):
-            self.layer_classifiers['branch_classifier_' + str(i)] = FastBertClassifier(config)
+            self.layer_classifiers['branch_classifier_' + str(i)] = FastBertClassifier(
+                config
+            )
 
         # creating backbone classifier
         self.layer_classifiers['final_classifier'] = self.layer_classifier
@@ -86,9 +87,15 @@ class FastBertGraph(nn.Module):
         self.ce_loss_fct = nn.CrossEntropyLoss()
         self.num_class = torch.tensor(config.num_labels, dtype=torch.float32)
 
-    def forward(self, embeddings: torch.Tensor, attention_mask: torch.Tensor, device: str, inference: bool = False,
-                inference_speed: float = 0.5, training_stage: int = 1) -> \
-            Union[Tuple[torch.Tensor, int], List[torch.Tensor]]:
+    def forward(
+        self,
+        embeddings: torch.Tensor,
+        attention_mask: torch.Tensor,
+        device: str,
+        inference: bool = False,
+        inference_speed: float = 0.5,
+        training_stage: int = 1,
+    ) -> Union[Tuple[torch.Tensor, int], List[torch.Tensor]]:
         """
         Args:
             embeddings (torch.Tensor):
@@ -123,11 +130,13 @@ class FastBertGraph(nn.Module):
             # positions will keep track of the original position of each element in the
             # batch when elements will be removed
             final_probs = torch.zeros((hidden_states[0].shape[0], 2), device=device)
-            positions = torch.arange(start=0, end=hidden_states[0].shape[0], device=device).long()
+            positions = torch.arange(
+                start=0, end=hidden_states[0].shape[0], device=device
+            ).long()
 
             for i, (layer_module, (k, layer_classifier_module)) in enumerate(
-                    zip(self.layer, self.layer_classifiers.items())):
-
+                zip(self.layer, self.layer_classifiers.items())
+            ):
                 hidden_states = layer_module(hidden_states[0], attention_mask)
                 logits = layer_classifier_module(hidden_states[0])
                 prob = F.softmax(logits, dim=-1)
@@ -147,7 +156,9 @@ class FastBertGraph(nn.Module):
                 if hidden_states[0].shape[0] == 0:
                     return final_probs, i
 
-                positions = positions[~enough_info]  # updating the positions to fit the new batch
+                positions = positions[
+                    ~enough_info
+                ]  # updating the positions to fit the new batch
 
             return final_probs, i
 
@@ -170,8 +181,9 @@ class FastBertGraph(nn.Module):
                     all_encoder_layers.append(hidden_states[0])
 
                 all_logits = []
-                for encoder_layer, (k, layer_classifier_module) in \
-                        zip(all_encoder_layers, self.layer_classifiers.items()):
+                for encoder_layer, (k, layer_classifier_module) in zip(
+                    all_encoder_layers, self.layer_classifiers.items()
+                ):
                     layer_logits = layer_classifier_module(encoder_layer)
                     all_logits.append(layer_logits)
 

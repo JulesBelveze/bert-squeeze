@@ -1,13 +1,13 @@
 import logging
 import os
+from typing import Any, Dict, List
+
 from hydra.utils import instantiate
+from lightning.pytorch.callbacks.callback import Callback
+from lightning.pytorch.loggers import Logger, TensorBoardLogger
 from omegaconf import OmegaConf
 from pkg_resources import resource_filename
 from pydantic.utils import deep_update
-from pytorch_lightning.callbacks.callback import Callback
-from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.loggers.logger import Logger
-from typing import Any, Dict, List
 
 CONFIG_MAPPER = {
     "lr": "train_lr.yaml",
@@ -15,7 +15,7 @@ CONFIG_MAPPER = {
     "lstm": "train_lstm.yaml",
     "deebert": "train_deebert.yaml",
     "fastbert": "train_fastbert.yaml",
-    "theseus-bert": "train_theseus_bert.yaml"
+    "theseus-bert": "train_theseus_bert.yaml",
 }
 
 
@@ -49,27 +49,45 @@ class TrainAssistant(object):
     """
 
     def __init__(
-            self,
-            name: str,
-            general_kwargs: Dict[str, Any] = None,
-            train_kwargs: Dict[str, Any] = None,
-            model_kwargs: Dict[str, Any] = None,
-            data_kwargs: Dict[str, Any] = None,
-            logger_kwargs: Dict[str, Any] = None,
-            callbacks: List[Callback] = None
+        self,
+        name: str,
+        general_kwargs: Dict[str, Any] = None,
+        train_kwargs: Dict[str, Any] = None,
+        model_kwargs: Dict[str, Any] = None,
+        data_kwargs: Dict[str, Any] = None,
+        logger_kwargs: Dict[str, Any] = None,
+        callbacks: List[Callback] = None,
     ):
         conf = OmegaConf.load(
-            resource_filename("bert_squeeze", os.path.join("assistants/configs", CONFIG_MAPPER[name]))
+            resource_filename(
+                "bert_squeeze", os.path.join("assistants/configs", CONFIG_MAPPER[name])
+            )
         )
-        if data_kwargs is not None and data_kwargs.get("dataset_config", {}).get("path") is not None:
-            logging.warning("Found value for `dataset_config.path` which conflicts with parameter `dataset_path`, using"
-                            "value from the later.")
+        if (
+            data_kwargs is not None
+            and data_kwargs.get("dataset_config", {}).get("path") is not None
+        ):
+            logging.warning(
+                "Found value for `dataset_config.path` which conflicts with parameter `dataset_path`, using"
+                "value from the later."
+            )
 
-        conf["data"]["dataset_config"] = deep_update(conf["data"]["dataset_config"], data_kwargs["dataset_config"])
+        conf["data"]["dataset_config"] = deep_update(
+            conf["data"]["dataset_config"], data_kwargs["dataset_config"]
+        )
         del data_kwargs["dataset_config"]
 
-        for name, kws in zip(["general", "train", "model", "data", "logger", "callbacks"],
-                             [general_kwargs, train_kwargs, model_kwargs, data_kwargs, logger_kwargs, callbacks]):
+        for name, kws in zip(
+            ["general", "train", "model", "data", "logger", "callbacks"],
+            [
+                general_kwargs,
+                train_kwargs,
+                model_kwargs,
+                data_kwargs,
+                logger_kwargs,
+                callbacks,
+            ],
+        ):
             if kws is not None:
                 conf[name] = deep_update(conf[name], kws)
 
@@ -133,7 +151,9 @@ class TrainAssistant(object):
         """"""
         if self._callbacks is None:
             if self._callbacks_conf is not None:
-                self.callbacks = [instantiate(callback) for callback in self._callbacks_conf]
+                self.callbacks = [
+                    instantiate(callback) for callback in self._callbacks_conf
+                ]
             else:
                 self.callbacks = []
         return self._callbacks

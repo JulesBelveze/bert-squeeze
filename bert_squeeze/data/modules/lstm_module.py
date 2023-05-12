@@ -43,18 +43,20 @@ class LSTMDataModule(pl.LightningDataModule):
     """
 
     def __init__(
-            self,
-            dataset_config: HydraConfig,
-            max_features: int,
-            token_pattern: str = r"(?u)\b\w\w+\b",
-            **kwargs
+        self,
+        dataset_config: HydraConfig,
+        max_features: int,
+        token_pattern: str = r"(?u)\b\w\w+\b",
+        **kwargs,
     ):
         super().__init__()
         self.dataset_config = dataset_config
         self.text_col = dataset_config.text_col
         self.label_col = dataset_config.label_col
 
-        self.vocabulary = Vocabulary(path_to_voc=kwargs.get("path_to_voc"), max_words=max_features)
+        self.vocabulary = Vocabulary(
+            path_to_voc=kwargs.get("path_to_voc"), max_words=max_features
+        )
         token_pattern = re.compile(token_pattern)
         self.tokenizer = token_pattern.findall
 
@@ -70,11 +72,12 @@ class LSTMDataModule(pl.LightningDataModule):
         """"""
         if self.dataset_config.is_local:
             self.dataset = datasets.load_dataset(
-                self.dataset_config.path,
-                self.dataset_config.split
+                self.dataset_config.path, self.dataset_config.split
             )
         else:
-            self.dataset = datasets.load_dataset(self.dataset_config.path, self.dataset_config.split)
+            self.dataset = datasets.load_dataset(
+                self.dataset_config.path, self.dataset_config.split
+            )
         logging.info(f"Dataset '{self.dataset_config.path}' successfully loaded.")
 
     def clean_str(self, example: Dict[str, Any]) -> Dict[str, Any]:
@@ -137,7 +140,9 @@ class LSTMDataModule(pl.LightningDataModule):
         )
 
         if self.label_col != "labels":
-            featurized_dataset = featurized_dataset.rename_column(self.label_col, "labels")
+            featurized_dataset = featurized_dataset.rename_column(
+                self.label_col, "labels"
+            )
 
         featurized_dataset.set_format(type='np', columns=["features", "labels"])
         logging.info("Data successfully featurized and Dataset created.")
@@ -160,21 +165,36 @@ class LSTMDataModule(pl.LightningDataModule):
         Returns:
             DataLoader: train dataloader
         """
-        return DataLoader(self.train, collate_fn=collate_fn, batch_size=self.train_batch_size, drop_last=True,
-                          num_workers=0)
+        return DataLoader(
+            self.train,
+            collate_fn=collate_fn,
+            batch_size=self.train_batch_size,
+            drop_last=True,
+            num_workers=0,
+        )
 
     def test_dataloader(self) -> DataLoader:
         """
         Returns:
             DataLoader: test dataloader
         """
-        return DataLoader(self.test, collate_fn=collate_fn, batch_size=self.eval_batch_size, drop_last=True,
-                          num_workers=0)
+        return DataLoader(
+            self.test,
+            collate_fn=collate_fn,
+            batch_size=self.eval_batch_size,
+            drop_last=True,
+            num_workers=0,
+        )
 
     def val_dataloader(self) -> DataLoader:
         """
         Returns:
             DataLoader: Validation dataloader
         """
-        return DataLoader(self.val, collate_fn=collate_fn, batch_size=self.eval_batch_size, drop_last=True,
-                          num_workers=0)
+        return DataLoader(
+            self.val,
+            collate_fn=collate_fn,
+            batch_size=self.eval_batch_size,
+            drop_last=True,
+            num_workers=0,
+        )

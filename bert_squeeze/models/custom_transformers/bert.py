@@ -1,12 +1,13 @@
 import logging
 import random
+from abc import ABC
+from typing import List, Optional, Tuple, Union
+
 import torch
 import torch.nn as nn
-from abc import ABC
 from transformers import PretrainedConfig
 from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from transformers.models.bert import BertLayer, BertModel
-from typing import List, Optional, Tuple, Union
 
 
 class BertCustomEncoder(nn.Module):
@@ -19,18 +20,18 @@ class BertCustomEncoder(nn.Module):
             arguments, defining the model architecture.
     """
 
-    def __init__(
-            self,
-            config: PretrainedConfig,
-            **kwargs
-    ):
+    def __init__(self, config: PretrainedConfig, **kwargs):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [BertLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.layerdrop = kwargs.get("layerdrop", 0.0)
 
         if kwargs.get("poor_man_technique", None) is not None:
-            self.layer_to_drop = self.get_layer_to_prune(kwargs["poor_man_technique"], kwargs["K"])
+            self.layer_to_drop = self.get_layer_to_prune(
+                kwargs["poor_man_technique"], kwargs["K"]
+            )
         else:
             self.layer_to_drop = None
 
@@ -54,8 +55,12 @@ class BertCustomEncoder(nn.Module):
         Returns:
             List[bool]: list of boolean indicating whether to drop layer i.
         """
-        assert dropping_technique in ["top", "bottom", "alternate", "symmetric"], \
-            f"Dropping technique '{dropping_technique} not supported."
+        assert dropping_technique in [
+            "top",
+            "bottom",
+            "alternate",
+            "symmetric",
+        ], f"Dropping technique '{dropping_technique} not supported."
 
         N = len(self.layer)
         if dropping_technique == "bottom":
@@ -71,26 +76,28 @@ class BertCustomEncoder(nn.Module):
         else:
             layer_to_drop = [False] * N
             middle = N // 2
-            layer_to_drop[middle - K // 2: middle + K // 2] = [True] * K
+            layer_to_drop[middle - K // 2 : middle + K // 2] = [True] * K
         return layer_to_drop
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            head_mask: Optional[torch.FloatTensor] = None,
-            encoder_hidden_states: Optional[torch.FloatTensor] = None,
-            encoder_attention_mask: Optional[torch.FloatTensor] = None,
-            past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = False,
-            output_hidden_states: Optional[bool] = False,
-            return_dict: Optional[bool] = True,
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = True,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         """"""
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+        all_cross_attentions = (
+            () if output_attentions and self.config.add_cross_attention else None
+        )
 
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
@@ -110,7 +117,6 @@ class BertCustomEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logging.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -186,11 +192,7 @@ class CustomBertModel(BertModel, ABC):
             whether to add a pooling layer on top of the model.
     """
 
-    def __init__(
-            self,
-            config: PretrainedConfig,
-            add_pooling_layer: bool = True
-    ):
+    def __init__(self, config: PretrainedConfig, add_pooling_layer: bool = True):
         super().__init__(config, add_pooling_layer)
         self.encoder = BertCustomEncoder(config)
 

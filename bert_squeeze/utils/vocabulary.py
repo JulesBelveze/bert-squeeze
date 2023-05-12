@@ -13,13 +13,7 @@ class Vocabulary(object):
             maximum number of words to use to build the vocabulary
     """
 
-    def __init__(
-            self,
-            path_to_voc: str = None,
-            max_words: int = None,
-            *args,
-            **kwargs
-    ):
+    def __init__(self, path_to_voc: str = None, max_words: int = None, *args, **kwargs):
         self.max_words = max_words if max_words is not None else 10e7
         self.vocabulary = {"UNK": 0}
 
@@ -41,7 +35,9 @@ class Vocabulary(object):
 
         for elt in tokens:
             self.add_word(elt)
-        logging.info(f"Vocabulary successfully built, number of words: {len(self.vocabulary)}")
+        logging.info(
+            f"Vocabulary successfully built, number of words: {len(self.vocabulary)}"
+        )
 
     def add_word(self, word: str) -> None:
         """
@@ -54,7 +50,9 @@ class Vocabulary(object):
         vocab_len = len(self.vocabulary)
         assert word not in self.vocabulary, f"'{word}' is already in vocabulary."
         if len(self.vocabulary) >= self.max_words:
-            logging.warning(f"Maximum vocabulary size reached. Not adding '{word}' to vocabulary.")
+            logging.warning(
+                f"Maximum vocabulary size reached. Not adding '{word}' to vocabulary."
+            )
             return
 
         self.vocabulary[word] = vocab_len
@@ -70,7 +68,7 @@ class Vocabulary(object):
         with open(path_to_voc, "r") as reader:
             for word in reader:
                 if len(self.vocabulary) >= self.max_words:
-                    logging.warning(f"Maximum vocabulary size reached.")
+                    logging.warning("Maximum vocabulary size reached.")
                     return
                 self.add_word(word)
         logging.info(f"Vocabulary successfully loaded from '{path_to_voc}'")

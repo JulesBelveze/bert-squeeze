@@ -104,7 +104,7 @@ class TestDistilAssistant:
                 "is_local": False,
                 "path": "SetFit/emotion",
                 "train_batch_size": 16,
-                "eval_batch_size": 4
+                "eval_batch_size": 4,
             },
         )
         assert isinstance(distil_assistant.data.train_dataloader(), DataLoader)

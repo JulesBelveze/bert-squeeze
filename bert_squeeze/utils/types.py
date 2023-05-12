@@ -1,7 +1,8 @@
 import dataclasses
-import torch
 from dataclasses import dataclass, field
 from typing import Optional, Tuple, TypeVar
+
+import torch
 
 
 @dataclass
@@ -38,8 +39,8 @@ class DistillationLoss:
 # TODO: find a way not to hardcode the number of layers
 FastBertLoss = dataclasses.make_dataclass(
     cls_name="FastBertLoss",
-    fields=[("full_loss", torch.Tensor)] + [(f"kl_layer_{i}", Optional[torch.Tensor], field(default=None)) for i in
-                                            range(11)]
+    fields=[("full_loss", torch.Tensor)]
+    + [(f"kl_layer_{i}", Optional[torch.Tensor], field(default=None)) for i in range(11)],
 )
 
 Loss = TypeVar("Loss", DistillationLoss, FastBertLoss, torch.Tensor)

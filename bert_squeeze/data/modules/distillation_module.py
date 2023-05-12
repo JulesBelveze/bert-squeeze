@@ -1,13 +1,15 @@
-import datasets
-import pytorch_lightning as pl
-from omegaconf import DictConfig
-from torch.utils.data import DataLoader
 from typing import Optional, Union
 
+import datasets
+import pytorch_lightning as pl
+from datasets import Features
+from omegaconf import DictConfig
+from torch.utils.data import DataLoader
+
+from ...distillation.utils.labeler import HardLabeler
 from .lr_module import LrDataModule
 from .lstm_module import LSTMDataModule
 from .transformer_module import TransformerDataModule
-from ...distillation.utils.labeler import HardLabeler
 
 TeacherDataModule = Union[LrDataModule, TransformerDataModule, LSTMDataModule]
 StudentDataModule = Union[LrDataModule, TransformerDataModule, LSTMDataModule]
@@ -37,12 +39,12 @@ class DistillationDataModule(pl.LightningDataModule):
     """
 
     def __init__(
-            self,
-            teacher_module: TeacherDataModule,
-            student_module: StudentDataModule,
-            soft_data_config: DictConfig = None,
-            hard_labeler: HardLabeler = None,
-            **kwargs
+        self,
+        teacher_module: TeacherDataModule,
+        student_module: StudentDataModule,
+        soft_data_config: DictConfig = None,
+        hard_labeler: HardLabeler = None,
+        **kwargs,
     ):
         super().__init__()
         assert student_module.dataset_config.path == teacher_module.dataset_config.path
@@ -79,23 +81,30 @@ class DistillationDataModule(pl.LightningDataModule):
             return example
 
         soft_dataset = datasets.load_dataset(
-            self.soft_dataset_config.path,
-            self.soft_dataset_config.split
+            self.soft_dataset_config.path, self.soft_dataset_config.split
         )
 
         if self.soft_dataset_config.text_col != "text":
-            soft_dataset = soft_dataset.rename_column(self.soft_dataset_config.text_col, "text")
+            soft_dataset = soft_dataset.rename_column(
+                self.soft_dataset_config.text_col, "text"
+            )
             self.soft_dataset_config.text_col = "text"
 
         # adding a "fake label" to the soft dataset for consistency with the labeled one
-        max_samples = self.soft_dataset_config.get("max_samples", len(soft_dataset["train"]))
+        max_samples = self.soft_dataset_config.get(
+            "max_samples", len(soft_dataset["train"])
+        )
         soft_dataset = soft_dataset["train"].select(range(max_samples))
-        soft_dataset = soft_dataset.map(lambda example: _create_fake_label(example), batched=False)
+        soft_dataset = soft_dataset.map(
+            lambda example: _create_fake_label(example), batched=False
+        )
 
         columns_to_remove = list(set(soft_dataset.column_names) - {"text", "label"})
 
         soft_dataset = soft_dataset.remove_columns(columns_to_remove)
-        soft_dataset.features["label"] = datasets.Value("null")  # hack for concatenation purposes
+        soft_dataset.features["label"] = datasets.Value(
+            "null"
+        )  # hack for concatenation purposes
         return soft_dataset
 
     def featurize(self) -> datasets.DatasetDict:
@@ -123,33 +132,58 @@ class DistillationDataModule(pl.LightningDataModule):
 
         # In case of a hard distillation
         if self.labeler is not None:
+            columns_to_keep = {"labels", "input_ids", "token_type_ids", "attention_mask"}
+
             features_teacher = teacher_data["train"].features.copy()
+            features_teacher = Features(
+                {
+                    key: value
+                    for key, value in features_teacher.items()
+                    if key in columns_to_keep
+                }
+            )
             features_student = student_data["train"].features.copy()
+            features_student = Features(
+                {
+                    key: value
+                    for key, value in features_student.items()
+                    if key in columns_to_keep
+                }
+            )
 
             hardly_labeled_dataset = self.create_hard_dataset()
 
             hardly_labeled_dataset = hardly_labeled_dataset.cast(features_teacher)
-            teacher_data["train"] = datasets.concatenate_datasets([teacher_data["train"], hardly_labeled_dataset])
+            teacher_data["train"] = datasets.concatenate_datasets(
+                [teacher_data["train"], hardly_labeled_dataset]
+            )
 
             hardly_labeled_dataset = hardly_labeled_dataset.cast(features_student)
-            student_data["train"] = datasets.concatenate_datasets([student_data["train"], hardly_labeled_dataset])
+            student_data["train"] = datasets.concatenate_datasets(
+                [student_data["train"], hardly_labeled_dataset]
+            )
 
         for dataset_split, columns in teacher_data.column_names.items():
             for col in columns:
-                teacher_data[dataset_split] = teacher_data[dataset_split].rename_column(col, "t_" + col)
+                teacher_data[dataset_split] = teacher_data[dataset_split].rename_column(
+                    col, "t_" + col
+                )
 
         for dataset_split, columns in student_data.column_names.items():
             for col in columns:
-                student_data[dataset_split] = student_data[dataset_split].rename_column(col, "s_" + col)
+                student_data[dataset_split] = student_data[dataset_split].rename_column(
+                    col, "s_" + col
+                )
 
         # Merging the student and teacher datasets into a single one
-        concat_dataset = datasets.DatasetDict({
-            key: datasets.concatenate_datasets(
-                [teacher_data[key], student_data[key]],
-                axis=1
-            )
-            for key in ["train", "test", "validation"]
-        })
+        concat_dataset = datasets.DatasetDict(
+            {
+                key: datasets.concatenate_datasets(
+                    [teacher_data[key], student_data[key]], axis=1
+                )
+                for key in ["train", "test", "validation"]
+            }
+        )
         concat_dataset = concat_dataset.shuffle()
         concat_dataset.set_format(type="torch")
         return concat_dataset
@@ -174,18 +208,24 @@ class DistillationDataModule(pl.LightningDataModule):
         Returns:
             DataLoader: Train dataloader
         """
-        return DataLoader(self.train, batch_size=self.train_batch_size, drop_last=True, num_workers=0)
+        return DataLoader(
+            self.train, batch_size=self.train_batch_size, drop_last=True, num_workers=0
+        )
 
     def test_dataloader(self) -> DataLoader:
         """
         Returns:
             DataLoader: Test dataloader
         """
-        return DataLoader(self.test, batch_size=self.eval_batch_size, drop_last=True, num_workers=0)
+        return DataLoader(
+            self.test, batch_size=self.eval_batch_size, drop_last=True, num_workers=0
+        )
 
     def val_dataloader(self) -> DataLoader:
         """
         Returns:
             DataLoader: Validation dataloader
         """
-        return DataLoader(self.val, batch_size=self.eval_batch_size, drop_last=True, num_workers=0)
+        return DataLoader(
+            self.val, batch_size=self.eval_batch_size, drop_last=True, num_workers=0
+        )

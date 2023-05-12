@@ -15,8 +15,8 @@ from transformers import AdamW, AutoConfig
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.optimizers import BertAdam
-from ..utils.types import Loss
 from ..utils.scorers import FastBertScorer, LooseScorer, Scorer
+from ..utils.types import Loss
 
 
 class BaseTransformerModule(pl.LightningModule):
@@ -33,11 +33,11 @@ class BaseTransformerModule(pl.LightningModule):
     """
 
     def __init__(
-            self,
-            training_config: DictConfig,
-            num_labels: int,
-            pretrained_model: str = None,
-            **kwargs
+        self,
+        training_config: DictConfig,
+        num_labels: int,
+        pretrained_model: str = None,
+        **kwargs,
     ):
         super(BaseTransformerModule, self).__init__()
         self._sanity_checks(training_config)
@@ -46,7 +46,9 @@ class BaseTransformerModule(pl.LightningModule):
         self.num_labels = num_labels
 
         self.pretrained_model = pretrained_model
-        self.model_config = AutoConfig.from_pretrained(pretrained_model, num_labels=num_labels)
+        self.model_config = AutoConfig.from_pretrained(
+            pretrained_model, num_labels=num_labels
+        )
 
         self._set_scorers(training_config.get("scorer_type", "regular"))
         self._set_objective()
@@ -95,8 +97,11 @@ class BaseTransformerModule(pl.LightningModule):
         """
         optimizer_parameters = self._get_optimizer_parameters()
         if self.config.optimizer == "adamw":
-            optimizer = AdamW(optimizer_parameters, lr=self.config.learning_rates[0],
-                              eps=self.config.adam_eps)
+            optimizer = AdamW(
+                optimizer_parameters,
+                lr=self.config.learning_rates[0],
+                eps=self.config.adam_eps,
+            )
 
             if self.config.lr_scheduler:
                 scheduler = ReduceLROnPlateau(optimizer)
@@ -104,13 +109,20 @@ class BaseTransformerModule(pl.LightningModule):
                 return [optimizer], [lr_scheduler]
 
         elif self.config.optimizer == "bertadam":
-            optimizer = BertAdam(optimizer_parameters, lr=self.config.learning_rates[0],
-                                 warmup=self.config.warmup_ratio)
+            optimizer = BertAdam(
+                optimizer_parameters,
+                lr=self.config.learning_rates[0],
+                warmup=self.config.warmup_ratio,
+            )
 
         elif self.config.optimizer == "adam":
-            optimizer = torch.optim.Adam(optimizer_parameters, lr=self.config.learning_rates[0])
+            optimizer = torch.optim.Adam(
+                optimizer_parameters, lr=self.config.learning_rates[0]
+            )
         elif self.config.optimizer == "sgd":
-            optimizer = torch.optim.SGD(optimizer_parameters, lr=self.config.learning_rates[0])
+            optimizer = torch.optim.SGD(
+                optimizer_parameters, lr=self.config.learning_rates[0]
+            )
         else:
             raise ValueError(f"Optimizer '{self.config.optimizer}' not supported.")
 
@@ -127,14 +139,20 @@ class BaseTransformerModule(pl.LightningModule):
         self.class_weights = self.config.get("class_weights", [1.0] * self.num_labels)
 
         if objective == "lsl" and self.smoothing == 0.0:
-            logging.warning("You are using label smoothing and the smoothing parameter"
-                            "is set to 0.0.")
+            logging.warning(
+                "You are using label smoothing and the smoothing parameter"
+                "is set to 0.0."
+            )
         elif objective == "weighted" and all([w == 1.0 for w in self.class_weights]):
-            logging.warning("You are using a weighted CrossEntropy but the class"
-                            "weights are all equal to 1.0.")
+            logging.warning(
+                "You are using a weighted CrossEntropy but the class"
+                "weights are all equal to 1.0."
+            )
         self.objective = {
             "ce": CrossEntropyLoss(),
-            "lsl": LabelSmoothingLoss(nb_classes=self.num_labels, smoothing=self.smoothing),
+            "lsl": LabelSmoothingLoss(
+                nb_classes=self.num_labels, smoothing=self.smoothing
+            ),
             "weighted": CrossEntropyLoss(weight=torch.Tensor(self.class_weights)),
         }[objective]
 
@@ -145,14 +163,17 @@ class BaseTransformerModule(pl.LightningModule):
             training_config (DictConfig):
                 training configuration
         """
-        assert training_config.logging_steps > 0, \
-            "'logging_steps' should be strictly greater than 0"
-        assert training_config.logging_steps > training_config.accumulation_steps, \
-            "'logging_steps' should be greater than 'accumulation_steps'"
+        assert (
+            training_config.logging_steps > 0
+        ), "'logging_steps' should be strictly greater than 0"
+        assert (
+            training_config.logging_steps > training_config.accumulation_steps
+        ), "'logging_steps' should be greater than 'accumulation_steps'"
 
         if training_config.get("scorer_type") == "loose":
-            assert "loose_classes" in training_config.keys(), \
-                "To use a 'LooseScorer' you need to set a 'loose_classes' parameter in your training config."
+            assert (
+                "loose_classes" in training_config.keys()
+            ), "To use a 'LooseScorer' you need to set a 'loose_classes' parameter in your training config."
 
     def _get_optimizer_parameters(self) -> List[Dict]:
         """
@@ -164,43 +185,95 @@ class BaseTransformerModule(pl.LightningModule):
         no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight']
 
         if self.config.discriminative_learning:
-            if isinstance(self.config.learning_rates, ListConfig) and len(self.config.learning_rates) > 1:
-                groups = [(f'layer.{i}.', self.config.learning_rates[i]) for i in range(12)]
+            if (
+                isinstance(self.config.learning_rates, ListConfig)
+                and len(self.config.learning_rates) > 1
+            ):
+                groups = [
+                    (f'layer.{i}.', self.config.learning_rates[i]) for i in range(12)
+                ]
             else:
-                lr = self.config.learning_rates[0] if isinstance(self.config.learning_rates,
-                                                                 ListConfig) else self.config.learning_rates
-                groups = [(f'layer.{i}.', lr * pow(self.config.layer_lr_decay, 11 - i)) for i in range(12)]
+                lr = (
+                    self.config.learning_rates[0]
+                    if isinstance(self.config.learning_rates, ListConfig)
+                    else self.config.learning_rates
+                )
+                groups = [
+                    (f'layer.{i}.', lr * pow(self.config.layer_lr_decay, 11 - i))
+                    for i in range(12)
+                ]
 
             group_all = [f'layer.{i}.' for i in range(12)]
             no_decay_optimizer_parameters, decay_optimizer_parameters = [], []
             for g, l in groups:
                 no_decay_optimizer_parameters.append(
-                    {'params': [p for n, p in self.named_parameters() if
-                                not any(nd in n for nd in no_decay) and any(nd in n for nd in [g])],
-                     'weight_decay_rate': self.config.weight_decay, 'lr': l}
+                    {
+                        'params': [
+                            p
+                            for n, p in self.named_parameters()
+                            if not any(nd in n for nd in no_decay)
+                            and any(nd in n for nd in [g])
+                        ],
+                        'weight_decay_rate': self.config.weight_decay,
+                        'lr': l,
+                    }
                 )
                 decay_optimizer_parameters.append(
-                    {'params': [p for n, p in self.named_parameters() if
-                                any(nd in n for nd in no_decay) and any(nd in n for nd in [g])],
-                     'weight_decay_rate': 0.0, 'lr': l}
+                    {
+                        'params': [
+                            p
+                            for n, p in self.named_parameters()
+                            if any(nd in n for nd in no_decay)
+                            and any(nd in n for nd in [g])
+                        ],
+                        'weight_decay_rate': 0.0,
+                        'lr': l,
+                    }
                 )
 
             group_all_parameters = [
-                {'params': [p for n, p in self.named_parameters() if
-                            not any(nd in n for nd in no_decay) and not any(nd in n for nd in group_all)],
-                 'weight_decay_rate': self.config.weight_decay},
-                {'params': [p for n, p in self.named_parameters() if
-                            any(nd in n for nd in no_decay) and not any(nd in n for nd in group_all)],
-                 'weight_decay_rate': 0.0},
+                {
+                    'params': [
+                        p
+                        for n, p in self.named_parameters()
+                        if not any(nd in n for nd in no_decay)
+                        and not any(nd in n for nd in group_all)
+                    ],
+                    'weight_decay_rate': self.config.weight_decay,
+                },
+                {
+                    'params': [
+                        p
+                        for n, p in self.named_parameters()
+                        if any(nd in n for nd in no_decay)
+                        and not any(nd in n for nd in group_all)
+                    ],
+                    'weight_decay_rate': 0.0,
+                },
             ]
-            optimizer_grouped_parameters = no_decay_optimizer_parameters + decay_optimizer_parameters \
-                                           + group_all_parameters
+            optimizer_grouped_parameters = (
+                no_decay_optimizer_parameters
+                + decay_optimizer_parameters
+                + group_all_parameters
+            )
         else:
             optimizer_grouped_parameters = [
-                {'params': [p for n, p in self.named_parameters() if not any(nd in n for nd in no_decay)],
-                 'weight_decay_rate': self.config.weight_decay},
-                {'params': [p for n, p in self.named_parameters() if any(nd in n for nd in no_decay)],
-                 'weight_decay_rate': 0.0}
+                {
+                    'params': [
+                        p
+                        for n, p in self.named_parameters()
+                        if not any(nd in n for nd in no_decay)
+                    ],
+                    'weight_decay_rate': self.config.weight_decay,
+                },
+                {
+                    'params': [
+                        p
+                        for n, p in self.named_parameters()
+                        if any(nd in n for nd in no_decay)
+                    ],
+                    'weight_decay_rate': 0.0,
+                },
             ]
         return optimizer_grouped_parameters
 
@@ -215,7 +288,7 @@ class BaseTransformerModule(pl.LightningModule):
         scorer = {
             "loose": LooseScorer(self.config.get("loose_classes", [])),
             "regular": Scorer(self.num_labels),
-            "fast": FastBertScorer(self.num_labels)
+            "fast": FastBertScorer(self.num_labels),
         }[scorer_type]
         self.scorer = deepcopy(scorer)
         self.valid_scorer = deepcopy(scorer)
@@ -268,14 +341,18 @@ class BaseTransformerModule(pl.LightningModule):
         table = self.valid_scorer.get_table()
         self.logger.experiment["eval/report"].log(table)
 
-        logging_loss = {key: torch.stack(val).mean() for key, val in self.valid_scorer.losses.items()}
+        logging_loss = {
+            key: torch.stack(val).mean() for key, val in self.valid_scorer.losses.items()
+        }
         for key, value in logging_loss.items():
             self.logger.experiment[f"eval/loss_{key}"].log(value)
 
         eval_report = self.valid_scorer.to_dict()
         for key, value in eval_report.items():
             if not isinstance(value, list) and not isinstance(value, np.ndarray):
-                self.logger.experiment["eval/{}".format(key)].log(value=value, step=self.global_step)
+                self.logger.experiment["eval/{}".format(key)].log(
+                    value=value, step=self.global_step
+                )
 
         for i in range(probs.shape[1]):
             fig = plt.figure(figsize=(15, 15))

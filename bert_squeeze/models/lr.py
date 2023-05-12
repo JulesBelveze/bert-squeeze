@@ -1,4 +1,6 @@
 import logging
+from typing import List
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
@@ -8,7 +10,6 @@ import torch.nn.functional as F
 from omegaconf import DictConfig
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
-from typing import List
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.scorers import Scorer
@@ -28,11 +29,7 @@ class BowLogisticRegression(pl.LightningModule):
     """
 
     def __init__(
-            self,
-            vocab_size: int,
-            num_labels: int,
-            training_config: DictConfig,
-            **kwargs
+        self, vocab_size: int, num_labels: int, training_config: DictConfig, **kwargs
     ):
         super().__init__()
         self._sanity_checks(training_config)
@@ -62,11 +59,17 @@ class BowLogisticRegression(pl.LightningModule):
         self.scorer.add(logits, batch["labels"], loss.detach().cpu())
 
         if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
-            logging_loss = {key: torch.stack(val).mean() for key, val in self.scorer.losses.items()}
+            logging_loss = {
+                key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
+            }
             for key, value in logging_loss.items():
-                self.logger.experiment[f"train/loss_{key}"].log(value=value, step=self.global_step)
+                self.logger.experiment[f"train/loss_{key}"].log(
+                    value=value, step=self.global_step
+                )
 
-            self.logger.experiment["train/acc"].log(self.scorer.acc, step=self.global_step)
+            self.logger.experiment["train/acc"].log(
+                self.scorer.acc, step=self.global_step
+            )
             self.scorer.reset()
         return loss
 
@@ -102,7 +105,9 @@ class BowLogisticRegression(pl.LightningModule):
         """
         return Adam(self.parameters(), lr=self.config.learning_rates[0])
 
-    def loss(self, logits: torch.Tensor, labels: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+    def loss(
+        self, logits: torch.Tensor, labels: torch.Tensor, *args, **kwargs
+    ) -> torch.Tensor:
         """
         Computes the loss for the current batch.
 
@@ -127,10 +132,12 @@ class BowLogisticRegression(pl.LightningModule):
             training_config (DictConfig):
                 training configuration
         """
-        assert training_config.logging_steps > 0, \
-            "'logging_steps' should be strictly greater than 0"
-        assert training_config.logging_steps > training_config.accumulation_steps, \
-            "'logging_steps' should be greater than 'accumulation_steps'"
+        assert (
+            training_config.logging_steps > 0
+        ), "'logging_steps' should be strictly greater than 0"
+        assert (
+            training_config.logging_steps > training_config.accumulation_steps
+        ), "'logging_steps' should be greater than 'accumulation_steps'"
 
     def _set_scorers(self) -> None:
         """
@@ -149,14 +156,20 @@ class BowLogisticRegression(pl.LightningModule):
         self.class_weights = self.config.get("class_weights", [1.0] * self.num_labels)
 
         if objective == "lsl" and self.smoothing == 0.0:
-            logging.warning("You are using label smoothing and the smoothing parameter"
-                            "is set to 0.0.")
+            logging.warning(
+                "You are using label smoothing and the smoothing parameter"
+                "is set to 0.0."
+            )
         elif objective == "weighted" and all([w == 1.0 for w in self.class_weights]):
-            logging.warning("You are using a weighted CrossEntropy but the class"
-                            "weights are all equal to 1.0.")
+            logging.warning(
+                "You are using a weighted CrossEntropy but the class"
+                "weights are all equal to 1.0."
+            )
         self.objective = {
             "ce": CrossEntropyLoss(),
-            "lsl": LabelSmoothingLoss(nb_classes=self.num_labels, smoothing=self.smoothing),
+            "lsl": LabelSmoothingLoss(
+                nb_classes=self.num_labels, smoothing=self.smoothing
+            ),
             "weighted": CrossEntropyLoss(weight=torch.Tensor(self.class_weights)),
         }[objective]
 
@@ -174,14 +187,18 @@ class BowLogisticRegression(pl.LightningModule):
         table = self.valid_scorer.get_table()
         self.logger.experiment["eval/report"].log(table)
 
-        logging_loss = {key: torch.stack(val).mean() for key, val in self.valid_scorer.losses.items()}
+        logging_loss = {
+            key: torch.stack(val).mean() for key, val in self.valid_scorer.losses.items()
+        }
         for key, value in logging_loss.items():
             self.logger.experiment[f"eval/loss_{key}"].log(value)
 
         eval_report = self.valid_scorer.to_dict()
         for key, value in eval_report.items():
             if not isinstance(value, list) and not isinstance(value, np.ndarray):
-                self.logger.experiment["eval/{}".format(key)].log(value=value, step=self.global_step)
+                self.logger.experiment["eval/{}".format(key)].log(
+                    value=value, step=self.global_step
+                )
 
         for i in range(probs.shape[1]):
             fig = plt.figure(figsize=(15, 15))

@@ -19,10 +19,7 @@ def lr_assistant():
     return TrainAssistant(
         "lr",
         data_kwargs={
-            "dataset_config": {
-                "path": "Setfit/emotion",
-                "split": "train[:10%]"
-            }
+            "dataset_config": {"path": "Setfit/emotion", "split": "train[:10%]"}
         },
         general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
     )
@@ -46,10 +43,7 @@ class TestTrainAssistant:
         bert_assistant = TrainAssistant(
             "bert",
             data_kwargs={
-                "dataset_config": {
-                    "path": "Setfit/emotion",
-                    "split": "train[:10%]"
-                }
+                "dataset_config": {"path": "Setfit/emotion", "split": "train[:10%]"}
             },
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             model_kwargs={"pretrained_model": "bert-base-uncased"},
@@ -64,10 +58,7 @@ class TestTrainAssistant:
         lstm_assistant = TrainAssistant(
             "lstm",
             data_kwargs={
-                "dataset_config": {
-                    "path": "Setfit/emotion",
-                    "split": "train[:10%]"
-                }
+                "dataset_config": {"path": "Setfit/emotion", "split": "train[:10%]"}
             },
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
         )
@@ -80,10 +71,7 @@ class TestTrainAssistant:
         deebert_assistant = TrainAssistant(
             "deebert",
             data_kwargs={
-                "dataset_config": {
-                    "path": "Setfit/emotion",
-                    "split": "train[:10%]"
-                }
+                "dataset_config": {"path": "Setfit/emotion", "split": "train[:10%]"}
             },
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             model_kwargs={"pretrained_model": "bert-base-uncased"},
@@ -98,10 +86,7 @@ class TestTrainAssistant:
         fastbert_assistant = TrainAssistant(
             "fastbert",
             data_kwargs={
-                "dataset_config": {
-                    "path": "Setfit/emotion",
-                    "split": "train[:10%]"
-                }
+                "dataset_config": {"path": "Setfit/emotion", "split": "train[:10%]"}
             },
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             model_kwargs={"pretrained_model": "bert-base-uncased"},
@@ -109,7 +94,7 @@ class TestTrainAssistant:
         assert fastbert_assistant.general.num_labels == 6
         assert isinstance(fastbert_assistant.model, LtFastBert)
         assert (
-                fastbert_assistant.model.encoder.config._name_or_path == "bert-base-uncased"
+            fastbert_assistant.model.encoder.config._name_or_path == "bert-base-uncased"
         )
         assert isinstance(fastbert_assistant.data, TransformerDataModule)
         assert len(fastbert_assistant.callbacks) > 0
@@ -119,10 +104,7 @@ class TestTrainAssistant:
         fastbert_assistant = TrainAssistant(
             "theseus-bert",
             data_kwargs={
-                "dataset_config": {
-                    "path": "Setfit/emotion",
-                    "split": "train[:10%]"
-                }
+                "dataset_config": {"path": "Setfit/emotion", "split": "train[:10%]"}
             },
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             model_kwargs={"pretrained_model": "bert-base-uncased"},
@@ -130,6 +112,6 @@ class TestTrainAssistant:
         assert fastbert_assistant.general.num_labels == 6
         assert isinstance(fastbert_assistant.model, LtTheseusBert)
         assert (
-                fastbert_assistant.model.encoder.config._name_or_path == "bert-base-uncased"
+            fastbert_assistant.model.encoder.config._name_or_path == "bert-base-uncased"
         )
         assert isinstance(fastbert_assistant.data, TransformerDataModule)

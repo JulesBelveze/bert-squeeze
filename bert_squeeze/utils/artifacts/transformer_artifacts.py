@@ -5,11 +5,7 @@ from ...models import DeeBert, LtCustomBert, LtCustomLabse
 
 
 class TransformerArtifactsLoader:
-    MODEL_CLASSES = {
-        "labse": LtCustomLabse,
-        "bert": LtCustomBert,
-        "deebert": DeeBert
-    }
+    MODEL_CLASSES = {"labse": LtCustomLabse, "bert": LtCustomBert, "deebert": DeeBert}
 
     def __init__(self, config):
         self.config = config
@@ -18,7 +14,7 @@ class TransformerArtifactsLoader:
     def model_config(self):
         return AutoConfig.from_pretrained(
             self.config.model["pretrained_model"],
-            num_labels=int(self.config.model["num_labels"])
+            num_labels=int(self.config.model["num_labels"]),
         )
 
     @property

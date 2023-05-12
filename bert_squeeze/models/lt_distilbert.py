@@ -1,8 +1,9 @@
+from typing import Tuple, Union
+
 import torch
 from omegaconf import DictConfig
 from overrides import overrides
 from transformers import AutoModel
-from typing import Tuple, Union
 
 from .base_lt_module import BaseTransformerModule
 
@@ -21,19 +22,23 @@ class LtCustomDistilBert(BaseTransformerModule):
     """
 
     def __init__(
-            self,
-            training_config: DictConfig,
-            pretrained_model: str,
-            num_labels: int,
-            **kwargs
+        self,
+        training_config: DictConfig,
+        pretrained_model: str,
+        num_labels: int,
+        **kwargs,
     ):
         super().__init__(training_config, num_labels, pretrained_model, **kwargs)
         self._build_model()
 
     @overrides
-    def forward(self, input_ids: torch.Tensor = None, attention_mask: torch.Tensor = None,
-                output_attentions: bool = False, **kwargs) \
-            -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    def forward(
+        self,
+        input_ids: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
+        output_attentions: bool = False,
+        **kwargs,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Args:
             input_ids (torch.Tensor):
@@ -48,9 +53,7 @@ class LtCustomDistilBert(BaseTransformerModule):
                 along with the attention scores if `output_attentions=True`.
         """
         outputs = self.encoder(
-            input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions
+            input_ids, attention_mask=attention_mask, output_attentions=output_attentions
         )
         hidden_state = outputs[0]
         logits = self.classifier(hidden_state)
@@ -62,19 +65,27 @@ class LtCustomDistilBert(BaseTransformerModule):
     @overrides
     def training_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
         """"""
-        inputs = {"input_ids": batch["input_ids"],
-                  "attention_mask": batch["attention_mask"]}
+        inputs = {
+            "input_ids": batch["input_ids"],
+            "attention_mask": batch["attention_mask"],
+        }
 
         logits = self.forward(**inputs)
         loss = self.loss(logits, batch["labels"])
 
         self.scorer.add(logits.detach().cpu(), batch["labels"], loss.detach().cpu())
         if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
-            logging_loss = {key: torch.stack(val).mean() for key, val in self.scorer.losses.items()}
+            logging_loss = {
+                key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
+            }
             for key, value in logging_loss.items():
-                self.logger.experiment[f"train/loss_{key}"].log(value=value, step=self.global_step)
+                self.logger.experiment[f"train/loss_{key}"].log(
+                    value=value, step=self.global_step
+                )
 
-            self.logger.experiment["train/acc"].log(self.scorer.acc, step=self.global_step)
+            self.logger.experiment["train/acc"].log(
+                self.scorer.acc, step=self.global_step
+            )
             self.scorer.reset()
 
         return loss
@@ -82,8 +93,10 @@ class LtCustomDistilBert(BaseTransformerModule):
     @overrides
     def validation_step(self, batch, batch_idx, *args, **kwargs) -> dict:
         """"""
-        inputs = {"input_ids": batch["input_ids"],
-                  "attention_mask": batch["attention_mask"]}
+        inputs = {
+            "input_ids": batch["input_ids"],
+            "attention_mask": batch["attention_mask"],
+        }
 
         logits = self.forward(**inputs)
         loss = self.loss(logits, batch["labels"])
@@ -94,8 +107,10 @@ class LtCustomDistilBert(BaseTransformerModule):
     @overrides
     def test_step(self, batch, batch_idx, *args, **kwargs) -> dict:
         """"""
-        inputs = {"input_ids": batch["input_ids"],
-                  "attention_mask": batch["attention_mask"]}
+        inputs = {
+            "input_ids": batch["input_ids"],
+            "attention_mask": batch["attention_mask"],
+        }
 
         logits = self.forward(**inputs)
         loss = self.loss(logits, batch["labels"])
@@ -112,5 +127,5 @@ class LtCustomDistilBert(BaseTransformerModule):
             torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),
             torch.nn.ReLU(),
             torch.nn.LayerNorm(self.model_config.hidden_size),
-            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels)
+            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels),
         )
