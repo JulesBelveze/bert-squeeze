@@ -1,8 +1,19 @@
 [tool.poetry]
 name = "bert-squeeze"
 version = "0.1.0"
-description = ""
+description = "Tools for Transformers compression using PyTorch Lightning"
 authors = ["JulesBelveze <jules.belveze@hotmail.fr>"]
+keywords = ["nlp", "transformers", "bert"]
+classifiers = [
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing"
+]
+packages = [
+    { include = "bert_squeeze" }
+]
+include = [
+    "images/"
+]
 
 [tool.poetry.dependencies]
 python = "^3.8"
@@ -25,6 +36,7 @@ scikit-learn = "^1.2.2"
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
 ipdb = "^0.13.13"
+taskipy = "^1.10.4"
 
 [tool.black]
 line-length = 90
