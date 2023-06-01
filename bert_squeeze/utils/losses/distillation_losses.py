@@ -15,14 +15,14 @@ class KLDivLoss(nn.Module):
             the model's confidence.
     """
 
-    def __init__(
-            self, T: float = 1.0
-    ):
+    def __init__(self, T: float = 1.0):
         super(KLDivLoss, self).__init__()
         self.T = T
         self.kl = nn.KLDivLoss()
 
-    def forward(self, student_logits: torch.Tensor, teacher_logits: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, student_logits: torch.Tensor, teacher_logits: torch.Tensor
+    ) -> torch.Tensor:
         """
         Args:
             student_logits (torch.Tensor):
@@ -35,4 +35,4 @@ class KLDivLoss(nn.Module):
         """
         p_t = F.softmax(teacher_logits / self.T, dim=1)
         p_s = F.log_softmax(student_logits / self.T)
-        return self.kl(p_s, p_t) * (self.T ** 2)
+        return self.kl(p_s, p_t) * (self.T**2)

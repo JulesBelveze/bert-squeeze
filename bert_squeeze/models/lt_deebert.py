@@ -8,9 +8,9 @@ from omegaconf import DictConfig, ListConfig
 from overrides import overrides
 from torch.nn import CrossEntropyLoss
 
+from ..utils.errors import RampException
 from .base_lt_module import BaseTransformerModule
 from .custom_transformers.deebert import DeeBertModel
-from ..utils.errors import RampException
 
 
 class LtDeeBert(BaseTransformerModule):
@@ -28,20 +28,26 @@ class LtDeeBert(BaseTransformerModule):
     """
 
     def __init__(
-            self,
-            training_config: DictConfig,
-            pretrained_model: str,
-            num_labels: int,
-            **kwargs
+        self,
+        training_config: DictConfig,
+        pretrained_model: str,
+        num_labels: int,
+        **kwargs,
     ):
         super().__init__(training_config, num_labels, pretrained_model, **kwargs)
         self.train_highway = training_config.train_highway
         self._build_model()
 
     @overrides
-    def forward(self, input_ids: torch.Tensor = None, attention_mask: torch.Tensor = None,
-                token_type_ids: torch.Tensor = None, position_ids: torch.Tensor = None, head_mask: torch.Tensor = None,
-                **kwargs) -> Tuple[torch.Tensor, Tuple[torch.Tensor], int]:
+    def forward(
+        self,
+        input_ids: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
+        token_type_ids: torch.Tensor = None,
+        position_ids: torch.Tensor = None,
+        head_mask: torch.Tensor = None,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor], int]:
         """
         During training, we pass the hidden states through all layers and store all the off-ramps
         outputs as well as the final classification layer.
@@ -78,7 +84,7 @@ class LtDeeBert(BaseTransformerModule):
                 attention_mask=attention_mask,
                 token_type_ids=token_type_ids,
                 position_ids=position_ids,
-                head_mask=head_mask
+                head_mask=head_mask,
             )
             pooled_output = outputs.pooled_output
 
@@ -105,61 +111,133 @@ class LtDeeBert(BaseTransformerModule):
         no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight']
 
         if self.config.discriminative_learning:
-            if isinstance(self.config.learning_rates, ListConfig) and len(self.config.learning_rates) > 1:
-                groups = [(f'layer.{i}.', self.config.learning_rates[i]) for i in range(12)]
+            if (
+                isinstance(self.config.learning_rates, ListConfig)
+                and len(self.config.learning_rates) > 1
+            ):
+                groups = [
+                    (f'layer.{i}.', self.config.learning_rates[i]) for i in range(12)
+                ]
             else:
-                lr = self.config.learning_rates[0] if isinstance(self.config.learning_rates,
-                                                                 ListConfig) else self.config.learning_rates
-                groups = [(f'layer.{i}.', lr * pow(self.config.layer_lr_decay, 11 - i)) for i in range(12)]
+                lr = (
+                    self.config.learning_rates[0]
+                    if isinstance(self.config.learning_rates, ListConfig)
+                    else self.config.learning_rates
+                )
+                groups = [
+                    (f'layer.{i}.', lr * pow(self.config.layer_lr_decay, 11 - i))
+                    for i in range(12)
+                ]
 
             group_all = [f'layer.{i}.' for i in range(12)]
             no_decay_optimizer_parameters, decay_optimizer_parameters = [], []
             for g, l in groups:
                 no_decay_optimizer_parameters.append(
-                    {'params': [p for n, p in self.named_parameters() if ("highway" not in n) and
-                                not any(nd in n for nd in no_decay) and any(nd in n for nd in [g])],
-                     'weight_decay_rate': self.config.weight_decay, 'lr': l}
+                    {
+                        'params': [
+                            p
+                            for n, p in self.named_parameters()
+                            if ("highway" not in n)
+                            and not any(nd in n for nd in no_decay)
+                            and any(nd in n for nd in [g])
+                        ],
+                        'weight_decay_rate': self.config.weight_decay,
+                        'lr': l,
+                    }
                 )
                 decay_optimizer_parameters.append(
-                    {'params': [p for n, p in self.named_parameters() if ("highway" not in n) and
-                                any(nd in n for nd in no_decay) and any(nd in n for nd in [g])],
-                     'weight_decay_rate': 0.0, 'lr': l}
+                    {
+                        'params': [
+                            p
+                            for n, p in self.named_parameters()
+                            if ("highway" not in n)
+                            and any(nd in n for nd in no_decay)
+                            and any(nd in n for nd in [g])
+                        ],
+                        'weight_decay_rate': 0.0,
+                        'lr': l,
+                    }
                 )
 
             group_all_parameters = [
-                {'params': [p for n, p in self.named_parameters() if ("highway" not in n) and
-                            not any(nd in n for nd in no_decay) and not any(nd in n for nd in group_all)],
-                 'weight_decay_rate': self.config.weight_decay},
-                {'params': [p for n, p in self.named_parameters() if ("highway" not in n) and
-                            any(nd in n for nd in no_decay) and not any(nd in n for nd in group_all)],
-                 'weight_decay_rate': 0.0},
+                {
+                    'params': [
+                        p
+                        for n, p in self.named_parameters()
+                        if ("highway" not in n)
+                        and not any(nd in n for nd in no_decay)
+                        and not any(nd in n for nd in group_all)
+                    ],
+                    'weight_decay_rate': self.config.weight_decay,
+                },
+                {
+                    'params': [
+                        p
+                        for n, p in self.named_parameters()
+                        if ("highway" not in n)
+                        and any(nd in n for nd in no_decay)
+                        and not any(nd in n for nd in group_all)
+                    ],
+                    'weight_decay_rate': 0.0,
+                },
             ]
-            optimizer_grouped_parameters = no_decay_optimizer_parameters + decay_optimizer_parameters \
-                                           + group_all_parameters
+            optimizer_grouped_parameters = (
+                no_decay_optimizer_parameters
+                + decay_optimizer_parameters
+                + group_all_parameters
+            )
         else:
             if self.config.train_highway:
                 optimizer_grouped_parameters = [
-                    {'params': [p for n, p in self.named_parameters() if
-                                ("highway" in n) and (not any(nd in n for nd in no_decay))],
-                     'weight_decay': self.config.weight_decay},
-                    {'params': [p for n, p in self.named_parameters() if
-                                ("highway" in n) and (any(nd in n for nd in no_decay))],
-                     'weight_decay': 0.0}
+                    {
+                        'params': [
+                            p
+                            for n, p in self.named_parameters()
+                            if ("highway" in n) and (not any(nd in n for nd in no_decay))
+                        ],
+                        'weight_decay': self.config.weight_decay,
+                    },
+                    {
+                        'params': [
+                            p
+                            for n, p in self.named_parameters()
+                            if ("highway" in n) and (any(nd in n for nd in no_decay))
+                        ],
+                        'weight_decay': 0.0,
+                    },
                 ]
             else:
                 optimizer_grouped_parameters = [
-                    {'params': [p for n, p in self.named_parameters() if
-                                ("highway" not in n) and (not any(nd in n for nd in no_decay))],
-                     'weight_decay': self.config.weight_decay},
-                    {'params': [p for n, p in self.named_parameters() if
-                                ("highway" not in n) and (any(nd in n for nd in no_decay))],
-                     'weight_decay': 0.0}
+                    {
+                        'params': [
+                            p
+                            for n, p in self.named_parameters()
+                            if ("highway" not in n)
+                            and (not any(nd in n for nd in no_decay))
+                        ],
+                        'weight_decay': self.config.weight_decay,
+                    },
+                    {
+                        'params': [
+                            p
+                            for n, p in self.named_parameters()
+                            if ("highway" not in n) and (any(nd in n for nd in no_decay))
+                        ],
+                        'weight_decay': 0.0,
+                    },
                 ]
         return optimizer_grouped_parameters
 
     @overrides
-    def loss(self, labels: torch.Tensor, logits: torch.Tensor = None, ramps_exits: Tuple[torch.Tensor] = None,
-             train_ramps: bool = False, *args, **kwargs) -> torch.Tensor:
+    def loss(
+        self,
+        labels: torch.Tensor,
+        logits: torch.Tensor = None,
+        ramps_exits: Tuple[torch.Tensor] = None,
+        train_ramps: bool = False,
+        *args,
+        **kwargs,
+    ) -> torch.Tensor:
         """
         Handles the loss computation part.
 
@@ -186,14 +264,18 @@ class LtDeeBert(BaseTransformerModule):
                 ramps_logits = ramps_exit[0]
 
                 loss_fct = CrossEntropyLoss()
-                ramps_loss = loss_fct(ramps_logits.view(-1, self.model_config.num_labels), labels.view(-1))
+                ramps_loss = loss_fct(
+                    ramps_logits.view(-1, self.model_config.num_labels), labels.view(-1)
+                )
                 ramps_losses.append(ramps_loss)
 
             loss = sum(ramps_losses)
         else:
             # We only train the last off ramp
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.model_config.num_labels), labels.view(-1))
+            loss = loss_fct(
+                logits.view(-1, self.model_config.num_labels), labels.view(-1)
+            )
         return loss
 
     @overrides
@@ -206,18 +288,23 @@ class LtDeeBert(BaseTransformerModule):
         }
         logits, ramps_exits, exit_layer = self.forward(**inputs)
         loss = self.loss(
-            logits=logits,
-            labels=batch["labels"],
-            train_ramps=self.train_highway
+            logits=logits, labels=batch["labels"], train_ramps=self.train_highway
         )
 
         self.scorer.add(logits.detach().cpu(), batch["labels"], loss.detach().cpu())
-        if self.config.logging_steps > 0 and self.global_step % self.config.logging_steps == 0:
-            logging_loss = {key: torch.stack(val).mean() for key, val in self.scorer.losses.items()}
+        if (
+            self.config.logging_steps > 0
+            and self.global_step % self.config.logging_steps == 0
+        ):
+            logging_loss = {
+                key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
+            }
             for key, value in logging_loss.items():
                 self.logger.experiment[f"train/loss_{key}"].log(value)
 
-            self.logger.experiment["train/acc"].log(self.scorer.acc, step=self.global_step)
+            self.logger.experiment["train/acc"].log(
+                self.scorer.acc, step=self.global_step
+            )
             self.scorer.reset()
 
         return loss
@@ -228,13 +315,11 @@ class LtDeeBert(BaseTransformerModule):
         inputs = {
             "input_ids": batch["input_ids"],
             "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"]
+            "token_type_ids": batch["token_type_ids"],
         }
         logits, ramps_exits, exit_layer = self.forward(**inputs)
         loss = self.loss(
-            logits=logits,
-            labels=batch["labels"],
-            train_ramps=self.train_highway
+            logits=logits, labels=batch["labels"], train_ramps=self.train_highway
         )
         self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
         return {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
@@ -245,13 +330,11 @@ class LtDeeBert(BaseTransformerModule):
         inputs = {
             "input_ids": batch["input_ids"],
             "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"]
+            "token_type_ids": batch["token_type_ids"],
         }
         logits, ramps_exits, exit_layer = self.forward(**inputs)
         loss = self.loss(
-            logits=logits,
-            labels=batch["labels"],
-            train_ramps=self.train_highway
+            logits=logits, labels=batch["labels"], train_ramps=self.train_highway
         )
         self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
         return {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
@@ -282,7 +365,7 @@ class LtDeeBert(BaseTransformerModule):
             torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),
             torch.nn.ReLU(),
             torch.nn.LayerNorm(self.model_config.hidden_size),
-            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels)
+            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels),
         )
 
         self.bert.init_weights()

@@ -16,10 +16,7 @@ class FastBertLogic(BaseFinetuning):
             number of epochs after which to freeze the model's backbone
     """
 
-    def __init__(
-            self,
-            freeze_at_epoch: int = 10
-    ) -> None:
+    def __init__(self, freeze_at_epoch: int = 10) -> None:
         super().__init__()
         self.freeze_at_epoch = freeze_at_epoch
 
@@ -29,10 +26,17 @@ class FastBertLogic(BaseFinetuning):
         Args:
             pl_module:
         """
-        assert pl_module.training_stage == 0, "The 'training_stage' should be 0 when starting to finetune FastBert."
+        assert (
+            pl_module.training_stage == 0
+        ), "The 'training_stage' should be 0 when starting to finetune FastBert."
 
-    def finetune_function(self, pl_module: pl.LightningModule, current_epoch: int, optimizer: Optimizer,
-                          optimizer_idx: int) -> None:
+    def finetune_function(
+        self,
+        pl_module: pl.LightningModule,
+        current_epoch: int,
+        optimizer: Optimizer,
+        optimizer_idx: int,
+    ) -> None:
         """
         Called when the epoch begins
 

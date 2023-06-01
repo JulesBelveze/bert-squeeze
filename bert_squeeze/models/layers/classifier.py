@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
+
 from .mha import MultiHeadedAttention
 
 
 class Classifier(nn.Module):
-
     def __init__(self, config):
         super(Classifier, self).__init__()
         self.input_size = config.input_size
@@ -14,9 +14,12 @@ class Classifier(nn.Module):
         self.pooling = config.pooling
 
         self.fc = nn.Linear(config.input_size, self.classifier_hidden_size)
-        self.self_att = MultiHeadedAttention(self.classifier_hidden_size, self.classifier_heads_num,
-                                             config.dropout_prob)
-        self.pre_classifier = nn.Linear(self.classifier_hidden_size, self.classifier_hidden_size)
+        self.self_att = MultiHeadedAttention(
+            self.classifier_hidden_size, self.classifier_heads_num, config.dropout_prob
+        )
+        self.pre_classifier = nn.Linear(
+            self.classifier_hidden_size, self.classifier_hidden_size
+        )
         self.classifier = nn.Linear(self.cla_hidden_size, config.num_labels)
 
     def forward(self, hidden, mask):

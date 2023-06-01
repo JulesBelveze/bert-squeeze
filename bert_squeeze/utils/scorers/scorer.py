@@ -51,7 +51,9 @@ class Scorer:
             np.array: precision score for every class. precision[i] is the precision score
                       of class i
         """
-        return self.confusion_matrix.diagonal() / (self.confusion_matrix.sum(axis=-1) + self.eps)
+        return self.confusion_matrix.diagonal() / (
+            self.confusion_matrix.sum(axis=-1) + self.eps
+        )
 
     @property
     def macro_precision(self) -> ndarray:
@@ -81,7 +83,9 @@ class Scorer:
         Returns:
             float: average weighted precision
         """
-        return (self.confusion_matrix.sum(axis=0) * self.precision) / (self.confusion_matrix.sum() + self.eps)
+        return (self.confusion_matrix.sum(axis=0) * self.precision) / (
+            self.confusion_matrix.sum() + self.eps
+        )
 
     @property
     def recall(self) -> np.array:
@@ -93,7 +97,9 @@ class Scorer:
             np.array: recall score for every class. recall[i] is the recall score
                       of class i
         """
-        return self.confusion_matrix.diagonal() / (self.confusion_matrix.sum(axis=0) + self.eps)
+        return self.confusion_matrix.diagonal() / (
+            self.confusion_matrix.sum(axis=0) + self.eps
+        )
 
     @property
     def macro_recall(self) -> ndarray:
@@ -123,7 +129,9 @@ class Scorer:
         Returns:
             float: average weighted recall
         """
-        return (self.confusion_matrix.sum(axis=0) * self.recall) / (self.confusion_matrix.sum() + self.eps)
+        return (self.confusion_matrix.sum(axis=0) * self.recall) / (
+            self.confusion_matrix.sum() + self.eps
+        )
 
     @property
     def f1(self) -> np.array:
@@ -134,7 +142,9 @@ class Scorer:
         Returns:
             np.array: f1 score for every class. f1[i] is the f1 score of class i
         """
-        return 2 * (self.precision * self.recall) / (self.precision + self.recall + self.eps)
+        return (
+            2 * (self.precision * self.recall) / (self.precision + self.recall + self.eps)
+        )
 
     @property
     def macro_f1(self) -> ndarray:
@@ -164,7 +174,9 @@ class Scorer:
         Returns:
             float: average weighted f1
         """
-        return (self.confusion_matrix.sum(axis=0) * self.f1) / (self.confusion_matrix.sum() + self.eps)
+        return (self.confusion_matrix.sum(axis=0) * self.f1) / (
+            self.confusion_matrix.sum() + self.eps
+        )
 
     def _inc_counter(self) -> None:
         """
@@ -172,8 +184,13 @@ class Scorer:
         """
         self.batch_counter += 1
 
-    def add(self, logits: torch.Tensor, labels: torch.Tensor, loss: Union[LossType, float] = None,
-            ignored_label: int = -100) -> None:
+    def add(
+        self,
+        logits: torch.Tensor,
+        labels: torch.Tensor,
+        loss: Union[LossType, float] = None,
+        ignored_label: int = -100,
+    ) -> None:
         """
         Updates the confusion matrix by using the predictions and the ground truth labels.
 
@@ -239,7 +256,7 @@ class Scorer:
             "f1": self.f1,
             "micro-f1": self.micro_f1,
             "macro-f1": self.macro_f1,
-            "weighted-f1": self.weighted_f1
+            "weighted-f1": self.weighted_f1,
         }
 
     def get_table(self) -> str:
@@ -256,8 +273,11 @@ class Scorer:
             elif isinstance(v, np.float64):
                 v = [v.item()]
             table.append([k] + v)
-        return tabulate(table, headers=["metrics"] + [f"class {i}" for i in range(self.n_labels)],
-                        tablefmt="fancy_grid")
+        return tabulate(
+            table,
+            headers=["metrics"] + [f"class {i}" for i in range(self.n_labels)],
+            tablefmt="fancy_grid",
+        )
 
 
 class LooseScorer(Scorer):
@@ -283,8 +303,13 @@ class LooseScorer(Scorer):
         self.loose_classes = loose_classes
 
     @overrides
-    def add(self, logits: torch.Tensor, labels: torch.Tensor, loss: Union[LossType, float] = None,
-            ignored_label: int = -100) -> None:
+    def add(
+        self,
+        logits: torch.Tensor,
+        labels: torch.Tensor,
+        loss: Union[LossType, float] = None,
+        ignored_label: int = -100,
+    ) -> None:
         """
         Updates the confusion matrix by using the predictions and the ground truth labels and keeps
         track of the loss.

@@ -21,10 +21,10 @@ class CheckpointEveryNSteps(pl.Callback):
     """
 
     def __init__(
-            self,
-            save_step_frequency: int,
-            prefix: str = "N-Step-Checkpoint",
-            use_model_checkpoint_filename: bool = False,
+        self,
+        save_step_frequency: int,
+        prefix: str = "N-Step-Checkpoint",
+        use_model_checkpoint_filename: bool = False,
     ) -> None:
         self.save_step_frequency = save_step_frequency
         self.prefix = prefix

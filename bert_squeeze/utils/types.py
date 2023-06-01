@@ -1,7 +1,8 @@
 import dataclasses
-import torch
 from dataclasses import dataclass, field
 from typing import Optional, Tuple, TypeVar
+
+import torch
 
 
 @dataclass
@@ -13,19 +14,19 @@ class RampOutput:
 
 @dataclass
 class DeeBertEncoderOutput:
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    ramps_exit: Tuple[RampOutput] = None
+    ramps_exit: Optional[Tuple[RampOutput]] = None
 
 
 @dataclass
 class DeeBertModelOutput:
-    sequence_output: torch.FloatTensor = None
-    pooled_output: torch.FloatTensor = None
-    hidden_states: torch.FloatTensor = None
-    attentions: torch.FloatTensor = None
-    ramps_exits: torch.FloatTensor = None
+    sequence_output: Optional[torch.FloatTensor] = None
+    pooled_output: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[torch.FloatTensor] = None
+    attentions: Optional[torch.FloatTensor] = None
+    ramps_exits: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -38,8 +39,8 @@ class DistillationLoss:
 # TODO: find a way not to hardcode the number of layers
 FastBertLoss = dataclasses.make_dataclass(
     cls_name="FastBertLoss",
-    fields=[("full_loss", torch.Tensor)] + [(f"kl_layer_{i}", Optional[torch.Tensor], field(default=None)) for i in
-                                            range(11)]
+    fields=[("full_loss", torch.Tensor)]
+    + [(f"kl_layer_{i}", Optional[torch.Tensor], field(default=None)) for i in range(11)],
 )
 
 Loss = TypeVar("Loss", DistillationLoss, FastBertLoss, torch.Tensor)

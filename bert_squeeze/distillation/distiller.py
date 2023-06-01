@@ -1,4 +1,6 @@
 import logging
+from typing import Any, Dict, List, Tuple, Union
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
@@ -10,7 +12,6 @@ from overrides import overrides
 from torch.nn import CrossEntropyLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import AdamW
-from typing import Any, Dict, List, Tuple, Union
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.losses.distillation_losses import KLDivLoss
@@ -35,12 +36,12 @@ class BaseDistiller(pl.LightningModule):
     """
 
     def __init__(
-            self,
-            teacher: Union["pl.LightningModule", "torch.nn.Module"],
-            student: Union[pl.LightningModule, torch.nn.Module],
-            training_config: DictConfig,
-            teacher_checkpoint: str = None,
-            **kwargs
+        self,
+        teacher: Union["pl.LightningModule", "torch.nn.Module"],
+        student: Union[pl.LightningModule, torch.nn.Module],
+        training_config: DictConfig,
+        teacher_checkpoint: str = None,
+        **kwargs,
     ):
         super().__init__()
         self.params = training_config
@@ -62,28 +63,37 @@ class BaseDistiller(pl.LightningModule):
         distillation_loss = self.params.get("distillation_loss", "mse")
 
         self.smoothing = self.params.get("smoothing", 0.0)
-        self.class_weights = self.params.get("class_weights", [1.0] * self.params.num_labels)
+        self.class_weights = self.params.get(
+            "class_weights", [1.0] * self.params.num_labels
+        )
 
         if objective == "lsl" and self.params.smoothing == 0.0:
-            logging.warning("You are using label smoothing and the smoothing parameter"
-                            "is set to 0.0.")
-        elif objective == "weighted" and \
-                all([w == 1.0 for w in self.params.get("class_weights", None)]):
-            logging.warning("You are using a weighted CrossEntropy but the class"
-                            "weights are all equal to 1.0.")
+            logging.warning(
+                "You are using label smoothing and the smoothing parameter"
+                "is set to 0.0."
+            )
+        elif objective == "weighted" and all(
+            [w == 1.0 for w in self.params.get("class_weights", None)]
+        ):
+            logging.warning(
+                "You are using a weighted CrossEntropy but the class"
+                "weights are all equal to 1.0."
+            )
         self.loss_ce = {
             "ce": CrossEntropyLoss(),
-            "lsl": LabelSmoothingLoss(nb_classes=self.params.num_labels, smoothing=self.params.smoothing),
+            "lsl": LabelSmoothingLoss(
+                nb_classes=self.params.num_labels, smoothing=self.params.smoothing
+            ),
             "weighted": CrossEntropyLoss(
-                weight=torch.Tensor(self.params.class_weights) if self.params.get("class_weights") is not None
+                weight=torch.Tensor(self.params.class_weights)
+                if self.params.get("class_weights") is not None
                 else None
             ),
         }[objective]
 
-        self.loss_distill = {
-            "mse": torch.nn.MSELoss(),
-            "kl": KLDivLoss()
-        }[distillation_loss]
+        self.loss_distill = {"mse": torch.nn.MSELoss(), "kl": KLDivLoss()}[
+            distillation_loss
+        ]
 
     def _set_scorers(self) -> None:
         """
@@ -103,44 +113,95 @@ class BaseDistiller(pl.LightningModule):
         no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight']
 
         if self.params.discriminative_learning:
-            if isinstance(self.params.learning_rates, ListConfig) and len(self.params.learning_rates) > 1:
-                groups = [(f'layer.{i}.', self.params.learning_rates[i]) for i in range(12)]
+            if (
+                isinstance(self.params.learning_rates, ListConfig)
+                and len(self.params.learning_rates) > 1
+            ):
+                groups = [
+                    (f'layer.{i}.', self.params.learning_rates[i]) for i in range(12)
+                ]
             else:
-                lr = self.params.learning_rates[0] if isinstance(self.params.learning_rates,
-                                                                 ListConfig) else self.params.learning_rates
-                groups = [(f'layer.{i}.', lr * pow(self.params.layer_lr_decay, 11 - i)) for i in range(12)]
+                lr = (
+                    self.params.learning_rates[0]
+                    if isinstance(self.params.learning_rates, ListConfig)
+                    else self.params.learning_rates
+                )
+                groups = [
+                    (f'layer.{i}.', lr * pow(self.params.layer_lr_decay, 11 - i))
+                    for i in range(12)
+                ]
 
             group_all = [f'layer.{i}.' for i in range(12)]
             no_decay_optimizer_parameters, decay_optimizer_parameters = [], []
             for g, l in groups:
                 no_decay_optimizer_parameters.append(
-                    {'params': [p for n, p in self.student.named_parameters() if
-                                not any(nd in n for nd in no_decay) and any(nd in n for nd in [g])],
-                     'weight_decay_rate': self.params.weight_decay, 'lr': l}
+                    {
+                        'params': [
+                            p
+                            for n, p in self.student.named_parameters()
+                            if not any(nd in n for nd in no_decay)
+                            and any(nd in n for nd in [g])
+                        ],
+                        'weight_decay_rate': self.params.weight_decay,
+                        'lr': l,
+                    }
                 )
                 decay_optimizer_parameters.append(
-                    {'params': [p for n, p in self.student.named_parameters() if
-                                any(nd in n for nd in no_decay) and any(nd in n for nd in [g])],
-                     'weight_decay_rate': 0.0, 'lr': l}
+                    {
+                        'params': [
+                            p
+                            for n, p in self.student.named_parameters()
+                            if any(nd in n for nd in no_decay)
+                            and any(nd in n for nd in [g])
+                        ],
+                        'weight_decay_rate': 0.0,
+                        'lr': l,
+                    }
                 )
 
             group_all_parameters = [
-                {'params': [p for n, p in self.student.named_parameters() if
-                            not any(nd in n for nd in no_decay) and not any(nd in n for nd in group_all)],
-                 'weight_decay_rate': self.params.weight_decay},
-                {'params': [p for n, p in self.student.named_parameters() if
-                            any(nd in n for nd in no_decay) and not any(nd in n for nd in group_all)],
-                 'weight_decay_rate': 0.0},
+                {
+                    'params': [
+                        p
+                        for n, p in self.student.named_parameters()
+                        if not any(nd in n for nd in no_decay)
+                        and not any(nd in n for nd in group_all)
+                    ],
+                    'weight_decay_rate': self.params.weight_decay,
+                },
+                {
+                    'params': [
+                        p
+                        for n, p in self.student.named_parameters()
+                        if any(nd in n for nd in no_decay)
+                        and not any(nd in n for nd in group_all)
+                    ],
+                    'weight_decay_rate': 0.0,
+                },
             ]
-            optimizer_grouped_parameters = no_decay_optimizer_parameters + decay_optimizer_parameters \
-                                           + group_all_parameters
+            optimizer_grouped_parameters = (
+                no_decay_optimizer_parameters
+                + decay_optimizer_parameters
+                + group_all_parameters
+            )
         else:
             optimizer_grouped_parameters = [
-                {'params': [p for n, p in self.student.named_parameters() if
-                            not any(nd in n for nd in no_decay)],
-                 'weight_decay_rate': self.params.weight_decay},
-                {'params': [p for n, p in self.student.named_parameters() if any(nd in n for nd in no_decay)],
-                 'weight_decay_rate': 0.0}
+                {
+                    'params': [
+                        p
+                        for n, p in self.student.named_parameters()
+                        if not any(nd in n for nd in no_decay)
+                    ],
+                    'weight_decay_rate': self.params.weight_decay,
+                },
+                {
+                    'params': [
+                        p
+                        for n, p in self.student.named_parameters()
+                        if any(nd in n for nd in no_decay)
+                    ],
+                    'weight_decay_rate': 0.0,
+                },
             ]
         return optimizer_grouped_parameters
 
@@ -154,17 +215,31 @@ class BaseDistiller(pl.LightningModule):
         """
         optimizer_parameters = self._get_student_parameters()
         if self.params.optimizer == "sgd":
-            optimizer = torch.optim.SGD(optimizer_parameters, lr=self.params.learning_rates[0])
+            optimizer = torch.optim.SGD(
+                optimizer_parameters, lr=self.params.learning_rates[0]
+            )
         elif self.params.optimizer == "adamw":
-            optimizer = AdamW(optimizer_parameters, lr=self.params.learning_rates[0],
-                              eps=self.params.adam_eps)
+            optimizer = AdamW(
+                optimizer_parameters,
+                lr=self.params.learning_rates[0],
+                eps=self.params.adam_eps,
+            )
         elif self.params.optimizer == "bertadam":
-            num_training_steps = len(self.train_dataloader()) * self.params.num_epochs // \
-                                 self.params.accumulation_steps
-            optimizer = BertAdam(optimizer_parameters, lr=self.params.learning_rates[0],
-                                 warmup=self.params.warmup_ratio, t_total=num_training_steps)
+            num_training_steps = (
+                len(self.train_dataloader())
+                * self.params.num_epochs
+                // self.params.accumulation_steps
+            )
+            optimizer = BertAdam(
+                optimizer_parameters,
+                lr=self.params.learning_rates[0],
+                warmup=self.params.warmup_ratio,
+                t_total=num_training_steps,
+            )
         elif self.params.optimizer == "adam":
-            optimizer = torch.optim.Adam(optimizer_parameters, lr=self.params.learning_rates[0])
+            optimizer = torch.optim.Adam(
+                optimizer_parameters, lr=self.params.learning_rates[0]
+            )
         else:
             raise ValueError(f"Optimizer '{self.params.optimizer}' not supported.")
 
@@ -200,7 +275,9 @@ class BaseDistiller(pl.LightningModule):
     def test_epoch_end(self, test_step_outputs: List[Dict]) -> None:
         raise NotImplementedError()
 
-    def loss(self, teacher_logits: torch.Tensor, student_logits: torch.Tensor, *args, **kwargs) -> DistillationLoss:
+    def loss(
+        self, teacher_logits: torch.Tensor, student_logits: torch.Tensor, *args, **kwargs
+    ) -> DistillationLoss:
         raise NotImplementedError()
 
     def log_eval_report(self, probs: List[np.array]) -> None:
@@ -218,7 +295,10 @@ class BaseDistiller(pl.LightningModule):
         self.logger.experiment["eval/report"].log(table)
 
         # logging losses to neptune
-        logging_loss = {key: torch.stack(val).mean() for key, val in self.s_valid_scorer.losses.items()}
+        logging_loss = {
+            key: torch.stack(val).mean()
+            for key, val in self.s_valid_scorer.losses.items()
+        }
         for key, value in logging_loss.items():
             self.logger.experiment[f"eval/loss_{key}"].log(value)
 
@@ -226,7 +306,9 @@ class BaseDistiller(pl.LightningModule):
         eval_report = self.s_valid_scorer.to_dict()
         for key, value in eval_report.items():
             if not isinstance(value, list) and not isinstance(value, np.ndarray):
-                self.logger.experiment["eval/{}".format(key)].log(value=value, step=self.global_step)
+                self.logger.experiment["eval/{}".format(key)].log(
+                    value=value, step=self.global_step
+                )
 
         # logging probability distributions
         for i in range(len(probs)):
@@ -253,12 +335,12 @@ class Distiller(BaseDistiller):
     """
 
     def __init__(
-            self,
-            teacher: Union["pl.LightningModule", "torch.nn.Module"],
-            student: Union["pl.LightningModule", "torch.nn.Module"],
-            training_config: DictConfig,
-            teacher_checkpoint: str = None,
-            **kwargs
+        self,
+        teacher: Union["pl.LightningModule", "torch.nn.Module"],
+        student: Union["pl.LightningModule", "torch.nn.Module"],
+        training_config: DictConfig,
+        teacher_checkpoint: str = None,
+        **kwargs,
     ):
         super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
 
@@ -275,7 +357,9 @@ class Distiller(BaseDistiller):
                 teacher logits
         """
         self.teacher.eval()
-        teacher_inputs = {key[2:]: val for key, val in batch.items() if key.startswith("t_")}
+        teacher_inputs = {
+            key[2:]: val for key, val in batch.items() if key.startswith("t_")
+        }
         with torch.no_grad():
             logits = self.teacher.forward(**teacher_inputs)
         return logits
@@ -292,13 +376,22 @@ class Distiller(BaseDistiller):
             torch.Tensor:
                 student logits
         """
-        student_inputs = {key[2:]: val for key, val in batch.items() if key.startswith("s_")}
+        student_inputs = {
+            key[2:]: val for key, val in batch.items() if key.startswith("s_")
+        }
         logits = self.student.forward(**student_inputs)
         return logits
 
     @overrides
-    def loss(self, teacher_logits: torch.Tensor, student_logits: torch.Tensor, labels: torch.Tensor = None,
-             ignore_index: int = -100, *args, **kwargs) -> DistillationLoss:
+    def loss(
+        self,
+        teacher_logits: torch.Tensor,
+        student_logits: torch.Tensor,
+        labels: torch.Tensor = None,
+        ignore_index: int = -100,
+        *args,
+        **kwargs,
+    ) -> DistillationLoss:
         """
         Method called for loss computation
 
@@ -315,7 +408,7 @@ class Distiller(BaseDistiller):
 
         """
         # Ignore soft labeled indices (where label is `ignore_index`)
-        active_idx = (labels != ignore_index)
+        active_idx = labels != ignore_index
         if active_idx.sum().item() > 0:
             objective = self.loss_lce(student_logits[active_idx], labels[active_idx])
         else:
@@ -323,11 +416,7 @@ class Distiller(BaseDistiller):
 
         kd_loss = self.loss_distill(teacher_logits, student_logits)
         full_loss = (1 - self.params.alpha) * kd_loss + self.params.alpha * objective
-        return DistillationLoss(
-            kd_loss=kd_loss,
-            objective=objective,
-            full_loss=full_loss
-        )
+        return DistillationLoss(kd_loss=kd_loss, objective=objective, full_loss=full_loss)
 
     @overrides
     def training_step(self, batch, _) -> torch.Tensor:
@@ -339,11 +428,15 @@ class Distiller(BaseDistiller):
 
         self.s_scorer.add(s_logits.detach().cpu(), batch["s_labels"].cpu(), loss)
         if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
-            logging_loss = {key: torch.stack(val).mean() for key, val in self.s_scorer.losses.items()}
+            logging_loss = {
+                key: torch.stack(val).mean() for key, val in self.s_scorer.losses.items()
+            }
             for key, value in logging_loss.items():
                 self.logger.experiment[f"loss_{key}"].log(value)
 
-            self.logger.experiment["train/acc"].log(self.s_scorer.acc, step=self.global_step)
+            self.logger.experiment["train/acc"].log(
+                self.s_scorer.acc, step=self.global_step
+            )
         return loss.full_loss
 
     @overrides
@@ -353,7 +446,9 @@ class Distiller(BaseDistiller):
         s_logits = self.get_student_logits(batch)
 
         loss = self.loss(t_logits, s_logits, batch["s_labels"])
-        self.s_test_scorer.add(s_logits.detach().cpu(), batch["labels"].detach().cpu(), loss)
+        self.s_test_scorer.add(
+            s_logits.detach().cpu(), batch["labels"].detach().cpu(), loss
+        )
         return {"loss": loss.full_loss, "logits": s_logits.detach().cpu()}
 
     @overrides
@@ -363,7 +458,9 @@ class Distiller(BaseDistiller):
         s_logits = self.get_student_logits(batch)
 
         loss = self.loss(t_logits, s_logits, batch["s_labels"])
-        self.s_valid_scorer.add(s_logits.detach().cpu(), batch["s_labels"].detach().cpu(), loss)
+        self.s_valid_scorer.add(
+            s_logits.detach().cpu(), batch["s_labels"].detach().cpu(), loss
+        )
         return {"loss": loss.full_loss, "logits": s_logits.detach().cpu()}
 
     @overrides
@@ -403,12 +500,12 @@ class ParallelDistiller(BaseDistiller):
     """
 
     def __init__(
-            self,
-            teacher: Union["pl.LightningModule", "torch.nn.Module"],
-            student: Union["pl.LightningModule", "torch.nn.Module"],
-            training_config: DictConfig,
-            teacher_checkpoint: str = None,
-            **kwargs
+        self,
+        teacher: Union["pl.LightningModule", "torch.nn.Module"],
+        student: Union["pl.LightningModule", "torch.nn.Module"],
+        training_config: DictConfig,
+        teacher_checkpoint: str = None,
+        **kwargs,
     ):
         super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
 
@@ -425,13 +522,17 @@ class ParallelDistiller(BaseDistiller):
                 teacher logits
         """
         self.teacher.eval()
-        teacher_inputs = {key[2:]: val for key, val in batch.items() if key.startswith("t_")}
+        teacher_inputs = {
+            key[2:]: val for key, val in batch.items() if key.startswith("t_")
+        }
         with torch.no_grad():
             logits = self.teacher.forward(**teacher_inputs)
         return logits
 
     @overrides
-    def get_student_logits(self, batch: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def get_student_logits(
+        self, batch: Dict[str, torch.Tensor]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Get student's predictions.
 
@@ -443,18 +544,34 @@ class ParallelDistiller(BaseDistiller):
                 student logits predicted for the parallel data, resulting in one prediction for
                 the original text and one prediction for the translation.
         """
-        student_inputs = {key[2:]: val for key, val in batch.items() if key.startswith("s_")}
+        student_inputs = {
+            key[2:]: val for key, val in batch.items() if key.startswith("s_")
+        }
         original_logits = self.student.forward(
-            **{key: val for key, val in student_inputs.items() if not key.startswith("translation")}
+            **{
+                key: val
+                for key, val in student_inputs.items()
+                if not key.startswith("translation")
+            }
         )
         translation_logits = self.student.forward(
-            **{key: val for key, val in student_inputs.items() if key.startswith("translation")}
+            **{
+                key: val
+                for key, val in student_inputs.items()
+                if key.startswith("translation")
+            }
         )
         return original_logits, translation_logits
 
     @overrides
-    def loss(self, teacher_logits: torch.Tensor, student_logits: torch.Tensor,
-             student_logits_translation: torch.Tensor, *args, **kwargs) -> DistillationLoss:
+    def loss(
+        self,
+        teacher_logits: torch.Tensor,
+        student_logits: torch.Tensor,
+        student_logits_translation: torch.Tensor,
+        *args,
+        **kwargs,
+    ) -> DistillationLoss:
         """
         Method called for loss computation, it computes the error between the teacher's and
         student's predictions for the original text and for the translated one.
@@ -471,12 +588,12 @@ class ParallelDistiller(BaseDistiller):
             DistillationLoss
         """
         kd_loss_original = self.loss_distill(teacher_logits, student_logits)
-        kd_loss_translation = self.loss_distill(teacher_logits, student_logits_translation)
+        kd_loss_translation = self.loss_distill(
+            teacher_logits, student_logits_translation
+        )
         full_loss = kd_loss_translation + kd_loss_original
         return DistillationLoss(
-            kd_loss=kd_loss_original,
-            objective=kd_loss_original,
-            full_loss=full_loss
+            kd_loss=kd_loss_original, objective=kd_loss_original, full_loss=full_loss
         )
 
     @overrides
@@ -496,7 +613,9 @@ class ParallelDistiller(BaseDistiller):
         s_logits_original, s_logits_translated = self.get_student_logits(batch)
 
         loss = self.loss(t_logits, s_logits_original, s_logits_translated)
-        self.s_test_scorer.add(s_logits_original.detach().cpu(), batch["labels"].detach().cpu(), loss)
+        self.s_test_scorer.add(
+            s_logits_original.detach().cpu(), batch["labels"].detach().cpu(), loss
+        )
         return {"loss": loss.full_loss, "logits": s_logits_original.detach().cpu()}
 
     @overrides
@@ -506,7 +625,9 @@ class ParallelDistiller(BaseDistiller):
         s_logits_original, s_logits_translated = self.get_student_logits(batch)
 
         loss = self.loss(t_logits, s_logits_original, s_logits_translated)
-        self.s_valid_scorer.add(s_logits_original.detach().cpu(), batch["s_labels"].detach().cpu(), loss)
+        self.s_valid_scorer.add(
+            s_logits_original.detach().cpu(), batch["s_labels"].detach().cpu(), loss
+        )
         return {"loss": loss.full_loss, "logits": s_logits_original.detach().cpu()}
 
     @overrides

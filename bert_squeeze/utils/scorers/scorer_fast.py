@@ -84,8 +84,11 @@ class FastBertScorer:
         """
         accuracies = {}
         for layer, cfm in self.confusion_matrix.items():
-            accuracies[layer] = 2 * (self.precision[layer] * self.recall[layer]) / \
-                                (self.precision[layer] + self.recall[layer] + self.eps)
+            accuracies[layer] = (
+                2
+                * (self.precision[layer] * self.recall[layer])
+                / (self.precision[layer] + self.recall[layer] + self.eps)
+            )
         return accuracies
 
     def _inc_counter(self) -> None:
@@ -94,8 +97,13 @@ class FastBertScorer:
         """
         self.batch_counter += 1
 
-    def add(self, logits: Union[torch.Tensor, List[torch.Tensor]], labels: torch.Tensor, loss: FastBertLoss = None,
-            ignored_label: int = -100) -> None:
+    def add(
+        self,
+        logits: Union[torch.Tensor, List[torch.Tensor]],
+        labels: torch.Tensor,
+        loss: FastBertLoss = None,
+        ignored_label: int = -100,
+    ) -> None:
         """
         Updates the confusion matrix by using the predictions and the ground truth labels and keeps
         track of the loss.
@@ -126,7 +134,9 @@ class FastBertScorer:
             for layer_id, pred in enumerate(preds_np):
                 for y, y_hat in zip(labels_np, pred):
                     if y != ignored_label:
-                        self.confusion_matrix[f"branch_classifier_{layer_id}"][y][y_hat] += 1
+                        self.confusion_matrix[f"branch_classifier_{layer_id}"][y][
+                            y_hat
+                        ] += 1
         else:
             probs = F.softmax(logits, dim=-1)
             preds = probs.argmax(dim=-1)
@@ -152,7 +162,7 @@ class FastBertScorer:
             "acc": self.acc,
             "prec": self.precision,
             "rec": self.recall,
-            "f1": self.f1
+            "f1": self.f1,
         }
 
     def reset(self) -> None:
@@ -161,7 +171,9 @@ class FastBertScorer:
         This method should be called after logging metrics.
         """
         self.batch_counter = 0
-        self.confusion_matrix = defaultdict(partial(np.zeros, (self.n_labels, self.n_labels)))
+        self.confusion_matrix = defaultdict(
+            partial(np.zeros, (self.n_labels, self.n_labels))
+        )
         self.losses = defaultdict(list)
 
     def get_table(self) -> str:
@@ -175,5 +187,8 @@ class FastBertScorer:
         for metric, values in self.to_dict().items():
             for layer, val in values.items():
                 table.append([f"{metric}_{layer}", val])
-        return tabulate(table, headers=["metrics"] + [f"class {i}" for i in range(self.n_labels)],
-                        tablefmt="fancy_grid")
+        return tabulate(
+            table,
+            headers=["metrics"] + [f"class {i}" for i in range(self.n_labels)],
+            tablefmt="fancy_grid",
+        )

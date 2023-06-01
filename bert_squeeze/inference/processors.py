@@ -1,10 +1,14 @@
-from typing import Union, List
+from typing import List, Union
 
 import torch
 from transformers import AutoTokenizer
 
 
 class BasicPreprocessor(object):
+    """
+    BasicPreProcessor
+    """
+
     def __init__(self, tokenizer_name: str):
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
@@ -13,6 +17,8 @@ class BasicPreprocessor(object):
 
 
 class BasicPostProcessor(object):
+    """BasicPostProcessor"""
+
     def __init__(self):
         pass
 

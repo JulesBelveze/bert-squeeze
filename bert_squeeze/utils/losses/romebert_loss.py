@@ -1,9 +1,16 @@
+from dataclasses import dataclass
+
+import torch
+import torch.nn as nn
+
+
 @dataclass
 class RomeBertLossOutput:
     full_loss: torch.Tensor
     distill_loss: torch.Tensor
     multi_loss: torch.Tensor
     last_loss: torch.Tensor
+
 
 class RomeBertLoss(nn.Module):
     """
@@ -13,13 +20,7 @@ class RomeBertLoss(nn.Module):
     Disclaimer: this is heavily inspired by the repo's implementation
     """
 
-    def __init__(
-            self,
-            n_blocks,
-            gamma,
-            T,
-            num_labels
-    ):
+    def __init__(self, n_blocks, gamma, T, num_labels):
         super(RomeBertLoss, self).__init__()
 
         self.kld_loss = nn.KLDivLoss()
@@ -33,8 +34,13 @@ class RomeBertLoss(nn.Module):
         self.T = T
         self.num_labels = num_labels
 
-    def forward(self, logits: torch.Tensor, highway_logits: torch.Tensor, targets: torch.Tensor,
-                soft_targets: torch.Tensor) -> RomeBertLossOutput:
+    def forward(
+        self,
+        logits: torch.Tensor,
+        highway_logits: torch.Tensor,
+        targets: torch.Tensor,
+        soft_targets: torch.Tensor,
+    ) -> RomeBertLossOutput:
         """
         Args:
             logits (torch.Tensor):
@@ -56,15 +62,33 @@ class RomeBertLoss(nn.Module):
         distill_losses = []
         for i in range(self.n_blocks - 1):
             if self.num_labels == 1:
-                _mse = (1. - self.gamma) * self.mse_loss(highway_logits[i].view(-1), targets.view(-1))
-                _kld = self.kld_loss(self.log_softmax(highway_logits[i].view(-1) / T),
-                                     self.softmax(soft_targets.view(-1) / T)) * self.gamma * T * T
+                _mse = (1.0 - self.gamma) * self.mse_loss(
+                    highway_logits[i].view(-1), targets.view(-1)
+                )
+                _kld = (
+                    self.kld_loss(
+                        self.log_softmax(highway_logits[i].view(-1) / T),
+                        self.softmax(soft_targets.view(-1) / T),
+                    )
+                    * self.gamma
+                    * T
+                    * T
+                )
                 multi_losses.append(_mse)
                 distill_losses.append(_kld)
             else:
-                _ce = (1. - self.gamma) * self.ce_loss(highway_logits[i].view(-1, self.num_labels), targets.view(-1))
-                _kld = self.kld_loss(self.log_softmax(highway_logits[i].view(-1, self.num_labels) / T),
-                                     self.softmax(soft_targets.view(-1, self.num_labels) / T)) * self.gamma * T * T
+                _ce = (1.0 - self.gamma) * self.ce_loss(
+                    highway_logits[i].view(-1, self.num_labels), targets.view(-1)
+                )
+                _kld = (
+                    self.kld_loss(
+                        self.log_softmax(highway_logits[i].view(-1, self.num_labels) / T),
+                        self.softmax(soft_targets.view(-1, self.num_labels) / T),
+                    )
+                    * self.gamma
+                    * T
+                    * T
+                )
                 multi_losses.append(_ce)
                 distill_losses.append(_kld)
 
@@ -74,8 +98,5 @@ class RomeBertLoss(nn.Module):
         loss = l_loss + d_loss + m_loss
 
         return RomeBertLossOutput(
-            full_loss=loss,
-            distill_loss=d_loss,
-            multi_loss=m_loss,
-            last_loss=l_loss
+            full_loss=loss, distill_loss=d_loss, multi_loss=m_loss, last_loss=l_loss
         )

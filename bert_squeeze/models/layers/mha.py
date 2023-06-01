@@ -1,9 +1,10 @@
 # Taken from:
 # https://github.com/autoliuweijie/FastBERT/blob/859632f67eb97b1624b26c8f8766972153e6382b/uer/layers/multi_headed_attn.py
 
-import torch.nn as nn
-import torch
 import math
+
+import torch
+import torch.nn as nn
 
 
 class MultiHeadedAttention(nn.Module):
@@ -18,9 +19,9 @@ class MultiHeadedAttention(nn.Module):
         self.heads_num = heads_num
         self.per_head_size = hidden_size // heads_num
 
-        self.linear_layers = nn.ModuleList([
-            nn.Linear(hidden_size, hidden_size) for _ in range(3)
-        ])
+        self.linear_layers = nn.ModuleList(
+            [nn.Linear(hidden_size, hidden_size) for _ in range(3)]
+        )
 
         self.dropout = nn.Dropout(dropout)
         self.final_linear = nn.Linear(hidden_size, hidden_size)
@@ -39,10 +40,14 @@ class MultiHeadedAttention(nn.Module):
         batch_size, seq_length, hidden_size = key.size()
 
         def unshape(x):
-            return x.transpose(1, 2).contiguous().view(batch_size, seq_length, hidden_size)
+            return (
+                x.transpose(1, 2).contiguous().view(batch_size, seq_length, hidden_size)
+            )
 
         query, key, value = [
-            layer(x).view(batch_size, -1, self.heads_num, self.per_head_size).transpose(1, 2)
+            layer(x)
+            .view(batch_size, -1, self.heads_num, self.per_head_size)
+            .transpose(1, 2)
             for layer, x in zip(self.linear_layers, (query, key, value))
         ]
 

@@ -8,7 +8,9 @@ from transformers import BertForSequenceClassification
 
 @pytest.fixture
 def conf():
-    path = resource_filename("bert_squeeze", "../tests/fixtures/resources/dummy_hard_labeler_config.yaml")
+    path = resource_filename(
+        "bert_squeeze", "../tests/fixtures/resources/dummy_hard_labeler_config.yaml"
+    )
     return omegaconf.OmegaConf.load(path)
 
 

@@ -1,27 +1,31 @@
 import collections.abc
 import logging
 import os
-import pytorch_lightning as pl
 import sys
-from omegaconf import DictConfig, OmegaConf
 from typing import List
+
+import pytorch_lightning as pl
+from omegaconf import DictConfig, OmegaConf
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 
-def load_model_from_exp(path_to_folder: str, module: pl.LightningModule) -> pl.LightningModule:
+def load_model_from_exp(
+    path_to_folder: str, module: pl.LightningModule
+) -> pl.LightningModule:
     """
     Helper function to load a `pl.LightningModule` from a previous experiment.
     The folder needs to have the following structure:
-    ```
-    folder
-    ┣━━ .hydra/
-    ┃   ┗━━ config.yaml
-    ┗━━ checkpoints/
-        ┣━━ checkpoints_0.ckpt
-        ┃   ....
-        ┗━━ checkpoints_n.ckpt
-    ```
+
+    .. code-block::
+
+        folder
+        ┣━━ .hydra/
+        ┃   ┗━━ config.yaml
+        ┗━━ checkpoints/
+            ┣━━ checkpoints_0.ckpt
+            ┃   ....
+            ┗━━ checkpoints_n.ckpt
 
     Args:
         path_to_folder (str):
@@ -36,7 +40,11 @@ def load_model_from_exp(path_to_folder: str, module: pl.LightningModule) -> pl.L
     config_file = os.path.join(path_to_folder, ".hydra/config.yaml")
     config = OmegaConf.load(config_file)
 
-    checkpoints = [file for file in os.listdir(os.path.join(path_to_folder, "checkpoints")) if file.endswith(".ckpt")]
+    checkpoints = [
+        file
+        for file in os.listdir(os.path.join(path_to_folder, "checkpoints"))
+        if file.endswith(".ckpt")
+    ]
     checkpoint_path = os.path.join(path_to_folder, "checkpoints", checkpoints[-1])
 
     logging.info(f"Loading model '{module}'")

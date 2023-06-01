@@ -22,10 +22,10 @@ class ConstantReplacementScheduler:
     """
 
     def __init__(
-            self,
-            bert_encoder: TheseusBertEncoder,
-            replacing_rate: float,
-            replacing_steps: int = None
+        self,
+        bert_encoder: TheseusBertEncoder,
+        replacing_rate: float,
+        replacing_steps: int = None,
     ):
         self.bert_encoder = bert_encoder
         self.replacing_rate = replacing_rate
@@ -73,10 +73,10 @@ class LinearReplacementScheduler:
     """
 
     def __init__(
-            self,
-            bert_encoder: TheseusBertEncoder,
-            base_replacing_rate: float,
-            coefficient: int
+        self,
+        bert_encoder: TheseusBertEncoder,
+        base_replacing_rate: float,
+        coefficient: int,
     ):
         self.bert_encoder = bert_encoder
         self.base_replacing_rate = base_replacing_rate
@@ -94,6 +94,8 @@ class LinearReplacementScheduler:
                 replacing rate
         """
         self.step_counter += 1
-        current_replacing_rate = min(self.coefficient * self.step_counter + self.base_replacing_rate, 1.0)
+        current_replacing_rate = min(
+            self.coefficient * self.step_counter + self.base_replacing_rate, 1.0
+        )
         self.bert_encoder.set_replacing_rate(current_replacing_rate)
         return current_replacing_rate

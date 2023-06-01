@@ -1,18 +1,18 @@
-from collections import defaultdict
-
 import logging
 import os
+from collections import defaultdict
+from typing import Dict, List, Tuple, Union
+
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
 from overrides import overrides
 from transformers import AutoModel
 from transformers.models.bert.modeling_bert import BertEmbeddings
-from typing import Dict, List, Tuple, Union
 
+from ..utils.types import FastBertLoss
 from .base_lt_module import BaseTransformerModule
 from .custom_transformers.fastbert import FastBertGraph
-from ..utils.types import FastBertLoss
 
 
 class LtFastBert(BaseTransformerModule):
@@ -30,23 +30,32 @@ class LtFastBert(BaseTransformerModule):
     """
 
     def __init__(
-            self,
-            training_config: DictConfig,
-            num_labels: int,
-            pretrained_model: str,
-            **kwargs
+        self,
+        training_config: DictConfig,
+        num_labels: int,
+        pretrained_model: str,
+        **kwargs,
     ):
         super().__init__(training_config, num_labels, pretrained_model, **kwargs)
         self.training_stage = getattr(kwargs, "training_stage", 0)
 
         self._build_model()
         if self.training_stage == 0:
-            self._load_pretrained_bert_model(getattr(kwargs, "pretrained_model_path", None))
+            self._load_pretrained_bert_model(
+                getattr(kwargs, "pretrained_model_path", None)
+            )
 
     @overrides
-    def forward(self, input_ids: torch.Tensor = None, token_type_ids: torch.Tensor = None,
-                attention_mask: torch.Tensor = None, inference: torch.Tensor = False, inference_speed: float = 0.5,
-                training_stage: int = 0, **kwargs) -> torch.Tensor:
+    def forward(
+        self,
+        input_ids: torch.Tensor = None,
+        token_type_ids: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
+        inference: torch.Tensor = False,
+        inference_speed: float = 0.5,
+        training_stage: int = 0,
+        **kwargs,
+    ) -> torch.Tensor:
         """
         Args:
             input_ids (torch.Tensor):
@@ -99,17 +108,19 @@ class LtFastBert(BaseTransformerModule):
             device=self.device,
             inference=inference,
             inference_speed=inference_speed,
-            training_stage=training_stage
+            training_stage=training_stage,
         )
         return output
 
     @overrides
     def training_step(self, batch, batch_idx, *args, **kwargs) -> dict:
         """"""
-        inputs = {"input_ids": batch["input_ids"],
-                  "attention_mask": batch["attention_mask"],
-                  "token_type_ids": batch["token_type_ids"],
-                  "training_stage": self.training_stage}
+        inputs = {
+            "input_ids": batch["input_ids"],
+            "attention_mask": batch["attention_mask"],
+            "token_type_ids": batch["token_type_ids"],
+            "training_stage": self.training_stage,
+        }
 
         outputs = self.forward(**inputs)
         losses = self.loss(outputs, batch["labels"])
@@ -124,11 +135,17 @@ class LtFastBert(BaseTransformerModule):
 
         self.scorer.add(logits, batch["labels"], losses)
         if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
-            logging_loss = {key: torch.stack(val).mean() for key, val in self.scorer.losses.items()}
+            logging_loss = {
+                key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
+            }
             for key, value in logging_loss.items():
-                self.logger.experiment[f"train/{key}"].log(value=value, step=self.global_step)
+                self.logger.experiment[f"train/{key}"].log(
+                    value=value, step=self.global_step
+                )
 
-            self.logger.experiment["train/acc"].log(self.scorer.acc, step=self.global_step)
+            self.logger.experiment["train/acc"].log(
+                self.scorer.acc, step=self.global_step
+            )
             self.scorer.reset()
 
         return {"loss": losses.full_loss}
@@ -136,10 +153,12 @@ class LtFastBert(BaseTransformerModule):
     @overrides
     def validation_step(self, batch, batch_idx, *args, **kwargs) -> dict:
         """"""
-        inputs = {"input_ids": batch["input_ids"],
-                  "attention_mask": batch["attention_mask"],
-                  "token_type_ids": batch["token_type_ids"],
-                  "training_stage": self.training_stage}
+        inputs = {
+            "input_ids": batch["input_ids"],
+            "attention_mask": batch["attention_mask"],
+            "token_type_ids": batch["token_type_ids"],
+            "training_stage": self.training_stage,
+        }
 
         outputs = self.forward(**inputs)
         losses = self.loss(outputs, batch["labels"])
@@ -157,10 +176,12 @@ class LtFastBert(BaseTransformerModule):
     @overrides
     def test_step(self, batch, batch_idx, *args, **kwargs) -> dict:
         """"""
-        inputs = {"input_ids": batch["input_ids"],
-                  "attention_mask": batch["attention_mask"],
-                  "token_type_ids": batch["token_type_ids"],
-                  "training_stage": self.training_stage}
+        inputs = {
+            "input_ids": batch["input_ids"],
+            "attention_mask": batch["attention_mask"],
+            "token_type_ids": batch["token_type_ids"],
+            "training_stage": self.training_stage,
+        }
 
         outputs = self.forward(**inputs)
         losses = self.loss(outputs, batch["labels"])
@@ -219,8 +240,13 @@ class LtFastBert(BaseTransformerModule):
         logging.info("Backbone and final classification layer successfully unfroze.")
 
     @overrides
-    def loss(self, outputs: Union[torch.Tensor, List[torch.Tensor]], labels: torch.Tensor, *args,
-             **kwargs) -> FastBertLoss:
+    def loss(
+        self,
+        outputs: Union[torch.Tensor, List[torch.Tensor]],
+        labels: torch.Tensor,
+        *args,
+        **kwargs,
+    ) -> FastBertLoss:
         """
         Handles the loss computation part.
 
@@ -250,7 +276,9 @@ class LtFastBert(BaseTransformerModule):
             for i, student_logits in enumerate(outputs[:-1]):
                 student_prob = F.softmax(student_logits, dim=-1)
                 student_log_prob = F.log_softmax(student_logits, dim=-1)
-                kl_div = torch.sum(student_prob * (student_log_prob - teacher_log_prob), 1)
+                kl_div = torch.sum(
+                    student_prob * (student_log_prob - teacher_log_prob), 1
+                )
                 kl_div = torch.mean(kl_div)
                 kl_divergences[f"kl_layer_{i}"] = kl_div.detach().cpu()
                 loss += kl_div

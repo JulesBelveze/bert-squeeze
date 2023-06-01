@@ -1,14 +1,14 @@
 import logging
 import os
+from typing import Any, Dict, List, Optional
+
 import pytorch_lightning as pl
 import torch.nn
 from hydra.utils import instantiate
+from lightning.pytorch.callbacks import Callback
+from lightning.pytorch.loggers import Logger, TensorBoardLogger
 from omegaconf import DictConfig, OmegaConf
 from pkg_resources import resource_filename
-from pytorch_lightning.callbacks.callback import Callback
-from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.loggers.logger import Logger
-from typing import Any, Dict, List, Optional
 
 from bert_squeeze.utils.utils_fct import deep_update, load_model_from_exp
 
@@ -16,7 +16,7 @@ CONFIG_MAPPER = {
     "distil": "distil.yaml",
     "distil-parallel": "distil_parallel.yaml",
     "distil-soft": "distil_soft.yaml",
-    "distil-hard": "distil_hard.yaml"
+    "distil-hard": "distil_hard.yaml",
 }
 
 
@@ -53,41 +53,44 @@ class DistilAssistant(object):
             list of callbacks to use during training
 
     Example:
-
-    ```python
-    >>> from bert_squeeze.assistants import DistilAssistant
-    >>> distil_assistant = DistilAssistant(
-            "distil-parallel",
-            data_kwargs={"path": resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py")},
-            teacher_kwargs={
-                "_target_": transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
-                "pretrained_model_name_or_path": "bert-base-cased"
-            }
-        )
-    ```
+        >>> from bert_squeeze.assistants import DistilAssistant
+        >>> distil_assistant = DistilAssistant(
+                "distil-parallel",
+                data_kwargs={"path": resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py")},
+                teacher_kwargs={
+                    "_target_": transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
+                    "pretrained_model_name_or_path": "bert-base-cased"
+                }
+            )
     """
 
     def __init__(
-            self,
-            name: str,
-            general_kwargs: Dict[str, Any] = None,
-            train_kwargs: Dict[str, Any] = None,
-            student_kwargs: Dict[str, Any] = None,
-            teacher_kwargs: Dict[str, Any] = {},
-            data_kwargs: Dict[str, Any] = None,
-            logger_kwargs: Dict[str, Any] = None,
-            callbacks: List[Callback] = None
+        self,
+        name: str,
+        general_kwargs: Dict[str, Any] = None,
+        train_kwargs: Dict[str, Any] = None,
+        student_kwargs: Dict[str, Any] = None,
+        teacher_kwargs: Dict[str, Any] = {},
+        data_kwargs: Dict[str, Any] = None,
+        logger_kwargs: Dict[str, Any] = None,
+        callbacks: List[Callback] = None,
     ):
         conf = OmegaConf.load(
-            resource_filename("bert_squeeze", os.path.join("assistants/configs", CONFIG_MAPPER[name]))
+            resource_filename(
+                "bert_squeeze", os.path.join("assistants/configs", CONFIG_MAPPER[name])
+            )
         )
         self._teacher_checkpoint = teacher_kwargs.pop("checkpoint_path", None)
 
         for name in ["teacher_module", "student_module"]:
-            conf["data"][name]["dataset_config"] = deep_update(conf["data"][name]["dataset_config"], data_kwargs)
+            conf["data"][name]["dataset_config"] = deep_update(
+                conf["data"][name]["dataset_config"], data_kwargs
+            )
 
-        for name, kws in zip(["general", "train", "data", "logger", "callbacks"],
-                             [general_kwargs, train_kwargs, data_kwargs, logger_kwargs, callbacks]):
+        for name, kws in zip(
+            ["general", "train", "data", "logger", "callbacks"],
+            [general_kwargs, train_kwargs, data_kwargs, logger_kwargs, callbacks],
+        ):
             if kws is not None:
                 conf[name] = deep_update(conf[name], kws)
 
@@ -127,11 +130,17 @@ class DistilAssistant(object):
 
             if self._teacher_checkpoint is not None:
                 if isinstance(self.teacher, pl.LightningModule):
-                    self.model.teacher = load_model_from_exp(self._teacher_checkpoint, module=self.model.teacher)
+                    self.model.teacher = load_model_from_exp(
+                        self._teacher_checkpoint, module=self.model.teacher
+                    )
                 elif isinstance(self.teacher, torch.nn.Module):
-                    self.model.teacher.load_state_dict(torch.load(self._teacher_checkpoint))
+                    self.model.teacher.load_state_dict(
+                        torch.load(self._teacher_checkpoint)
+                    )
                 else:
-                    raise TypeError(f"Unexpected type '{type(self.teacher)}' for 'teacher'.")
+                    raise TypeError(
+                        f"Unexpected type '{type(self.teacher)}' for 'teacher'."
+                    )
 
         return self._model
 
@@ -159,8 +168,6 @@ class DistilAssistant(object):
     def data(self) -> Any:
         """"""
         if self._data is None:
-            # import ipdb
-            # ipdb.set_trace()
             data = instantiate(self._data_conf, _recursive_=True)
             data.prepare_data()
             data.setup()
@@ -192,7 +199,9 @@ class DistilAssistant(object):
         """"""
         if self._callbacks is None:
             if self._callbacks_conf is not None:
-                self.callbacks = [instantiate(callback) for callback in self._callbacks_conf]
+                self.callbacks = [
+                    instantiate(callback) for callback in self._callbacks_conf
+                ]
             else:
                 self.callbacks = []
         return self._callbacks

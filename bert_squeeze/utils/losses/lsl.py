@@ -16,15 +16,11 @@ class LabelSmoothingLoss(torch.nn.Module):
             Cross Entropy loss and if `smoothing=1` we get a uniform distribution
     """
 
-    def __init__(
-            self,
-            nb_classes: int,
-            smoothing: float = 0.0,
-            dim: int = -1
-    ):
+    def __init__(self, nb_classes: int, smoothing: float = 0.0, dim: int = -1):
         super(LabelSmoothingLoss, self).__init__()
-        assert 0 <= smoothing < 1, \
-            f"Smoothing parameter should be between 0 and 1, got {smoothing}"
+        assert (
+            0 <= smoothing < 1
+        ), f"Smoothing parameter should be between 0 and 1, got {smoothing}"
 
         self.confidence = 1.0 - smoothing
         self.smoothing = smoothing

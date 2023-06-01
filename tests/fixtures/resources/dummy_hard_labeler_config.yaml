@@ -10,8 +10,8 @@ hard_labeler:
     max_length: 350
   dataset_config:
     is_local: false
-    path: "emotion"
-    split: "split"
+    path: "Setfit/emotion"
+    split: "train[:10%]"
     text_col: "text"
     max_samples: 200
   max_length: ${hard_labeler.labeler_config.max_length}

@@ -1,11 +1,17 @@
 # This is heavily inspired by the following repo:
 # https://github.com/castorini/DeeBERT
+from abc import ABC
+from typing import List, Union
+
 import torch
 import torch.nn as nn
-from abc import ABC
 from transformers import PretrainedConfig
-from transformers.models.bert.modeling_bert import BertEmbeddings, BertLayer, BertPooler, BertPreTrainedModel
-from typing import List, Union
+from transformers.models.bert.modeling_bert import (
+    BertEmbeddings,
+    BertLayer,
+    BertPooler,
+    BertPreTrainedModel,
+)
 
 from ...utils.errors import RampException
 from ...utils.losses import entropy
@@ -14,7 +20,7 @@ from ...utils.types import DeeBertEncoderOutput, DeeBertModelOutput, RampOutput
 
 class OffRamp(nn.Module):
     """
-    Classification layers (referred to as off-ramps) in the paper.
+    Classification layers (referred to as off-ramps) in the DeeBERT paper.
 
     Args:
         config (PretrainedConfig):
@@ -22,10 +28,7 @@ class OffRamp(nn.Module):
             arguments, defining the model architecture
     """
 
-    def __init__(
-            self,
-            config: PretrainedConfig
-    ):
+    def __init__(self, config: PretrainedConfig):
         super(OffRamp, self).__init__()
         self.pooler = BertPooler(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -44,10 +47,7 @@ class OffRamp(nn.Module):
         pooled_output = self.pooler(hidden_states[:, 0].unsqueeze(1))
         output = self.dropout(pooled_output)
         logits = self.classifier(output)
-        return RampOutput(
-            logits=logits,
-            pooled_output=pooled_output
-        )
+        return RampOutput(logits=logits, pooled_output=pooled_output)
 
 
 class DeeBertEncoder(nn.Module):
@@ -61,16 +61,15 @@ class DeeBertEncoder(nn.Module):
             arguments, defining the model architecture
     """
 
-    def __init__(
-            self,
-            config: PretrainedConfig
-    ):
+    def __init__(self, config: PretrainedConfig):
         super(DeeBertEncoder, self).__init__()
         self.config = config
         self.layer = nn.ModuleList([BertLayer(config)] * config.num_hidden_layers)
         self.ramp = nn.ModuleList([OffRamp(config)] * config.num_hidden_layers)
 
-        self.early_exit_entropy = [-1, ] * config.num_hidden_layers
+        self.early_exit_entropy = [
+            -1,
+        ] * config.num_hidden_layers
 
     def set_early_exit_entropy(self, x: Union[List[float], float]) -> None:
         """
@@ -87,7 +86,9 @@ class DeeBertEncoder(nn.Module):
         elif isinstance(x, list):
             self.early_exit_entropy = x
         else:
-            raise TypeError(f"Expected 'x' to be of type 'float' or 'list' but got :'{type(x)}'")
+            raise TypeError(
+                f"Expected 'x' to be of type 'float' or 'list' but got :'{type(x)}'"
+            )
 
     def init_highway_pooler(self, pooler: torch.nn.ModuleDict) -> None:
         """
@@ -102,16 +103,22 @@ class DeeBertEncoder(nn.Module):
             for name, param in ramp.pooler.state_dict().items():
                 param.copy_(loaded_model[name])
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor = None, head_mask: torch.Tensor = None,
-                encoder_hidden_states: torch.Tensor = None, encoder_attention_mask: torch.Tensor = None,
-                output_attentions: bool = False, output_hidden_states: bool = False) -> DeeBertEncoderOutput:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor = None,
+        head_mask: torch.Tensor = None,
+        encoder_hidden_states: torch.Tensor = None,
+        encoder_attention_mask: torch.Tensor = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+    ) -> DeeBertEncoderOutput:
         """"""
         all_hidden_states = tuple() if output_hidden_states else None
         all_attentions = tuple() if output_attentions else None
         all_ramps = tuple()
 
         for i, layer_module in enumerate(self.layer):
-
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -120,7 +127,7 @@ class DeeBertEncoder(nn.Module):
                 attention_mask=attention_mask,
                 head_mask=head_mask[i],
                 encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask
+                encoder_attention_mask=encoder_attention_mask,
             )  # output of the BertLayer
             hidden_states = layer_outputs[0]  # (bs * seq_len * hidden_dim)
 
@@ -152,7 +159,7 @@ class DeeBertEncoder(nn.Module):
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
-            ramps_exit=all_ramps
+            ramps_exit=all_ramps,
         )
 
 
@@ -166,10 +173,7 @@ class DeeBertModel(BertPreTrainedModel, ABC):
             arguments, defining the model architecture
     """
 
-    def __init__(
-            self,
-            config: PretrainedConfig
-    ):
+    def __init__(self, config: PretrainedConfig):
         super(DeeBertModel, self).__init__(config)
         self.config = config
 
@@ -193,22 +197,29 @@ class DeeBertModel(BertPreTrainedModel, ABC):
         self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune) -> None:
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def forward(self, input_ids: torch.Tensor = None, attention_mask: torch.Tensor = None,
-                token_type_ids: torch.Tensor = None, position_ids: torch.Tensor = None,
-                head_mask: torch.Tensor = None, inputs_embeds: torch.Tensor = None,
-                encoder_hidden_states: torch.Tensor = None, encoder_attention_mask: torch.Tensor = None) \
-            -> DeeBertModelOutput:
-        """
-        """
+    def forward(
+        self,
+        input_ids: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
+        token_type_ids: torch.Tensor = None,
+        position_ids: torch.Tensor = None,
+        head_mask: torch.Tensor = None,
+        inputs_embeds: torch.Tensor = None,
+        encoder_hidden_states: torch.Tensor = None,
+        encoder_attention_mask: torch.Tensor = None,
+    ) -> DeeBertModelOutput:
+        """ """
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
@@ -237,8 +248,13 @@ class DeeBertModel(BertPreTrainedModel, ABC):
             if self.config.is_decoder:
                 batch_size, seq_length = input_shape
                 seq_ids = torch.arange(seq_length, device=device)
-                causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
-                extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
+                causal_mask = (
+                    seq_ids[None, None, :].repeat(batch_size, seq_length, 1)
+                    <= seq_ids[None, :, None]
+                )
+                extended_attention_mask = (
+                    causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
+                )
             else:
                 extended_attention_mask = attention_mask[:, None, None, :]
 
@@ -247,7 +263,9 @@ class DeeBertModel(BertPreTrainedModel, ABC):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(
+            dtype=next(self.parameters()).dtype
+        )  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
@@ -258,8 +276,11 @@ class DeeBertModel(BertPreTrainedModel, ABC):
             encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
 
         encoder_extended_attention_mask = encoder_extended_attention_mask.to(
-            dtype=next(self.parameters()).dtype)  # fp16 compatibility
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -10000.0
+            dtype=next(self.parameters()).dtype
+        )  # fp16 compatibility
+        encoder_extended_attention_mask = (
+            1.0 - encoder_extended_attention_mask
+        ) * -10000.0
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -268,23 +289,35 @@ class DeeBertModel(BertPreTrainedModel, ABC):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         if head_mask is not None:
             if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                head_mask = head_mask.expand(self.config.num_hidden_layers, -1, -1, -1, -1)
+                head_mask = (
+                    head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+                )
+                head_mask = head_mask.expand(
+                    self.config.num_hidden_layers, -1, -1, -1, -1
+                )
             elif head_mask.dim() == 2:
-                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(
-                    -1)  # We can specify head_mask for each layer
+                head_mask = (
+                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+                )  # We can specify head_mask for each layer
             head_mask = head_mask.to(
-                dtype=next(self.parameters()).dtype)  # switch to fload if need + fp16 compatibility
+                dtype=next(self.parameters()).dtype
+            )  # switch to fload if need + fp16 compatibility
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
-        embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids,
-                                           token_type_ids=token_type_ids, inputs_embeds=inputs_embeds)
-        encoder_outputs = self.encoder(embedding_output,
-                                       attention_mask=extended_attention_mask,
-                                       head_mask=head_mask,
-                                       encoder_hidden_states=encoder_hidden_states,
-                                       encoder_attention_mask=encoder_extended_attention_mask)
+        embedding_output = self.embeddings(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+        )
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_extended_attention_mask,
+        )
         sequence_output = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(sequence_output)
 
@@ -293,5 +326,5 @@ class DeeBertModel(BertPreTrainedModel, ABC):
             pooled_output=pooled_output,
             hidden_states=encoder_hidden_states,
             attentions=encoder_outputs.attentions,
-            ramps_exits=encoder_outputs.ramps_exit
+            ramps_exits=encoder_outputs.ramps_exit,
         )

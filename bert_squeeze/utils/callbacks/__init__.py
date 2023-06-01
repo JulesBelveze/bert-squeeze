@@ -1,2 +1,2 @@
 from .checkpointing import CheckpointEveryNSteps
-from .quantization import TransformerQAT, DynamicQuantization
+from .quantization import DynamicQuantization, TransformerQAT

@@ -1,5 +1,6 @@
 import pytest
-from fixtures.dummy_models import Lr
+
+from tests.fixtures.dummy_models import Lr
 
 
 @pytest.fixture(scope="module")
