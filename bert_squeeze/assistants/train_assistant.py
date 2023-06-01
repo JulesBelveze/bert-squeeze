@@ -26,10 +26,11 @@ class TrainAssistant(object):
     For every available model for fine-tuning it will load a default configuration that
     can be overwritten by passing some keyword arguments.
     It contains four main sub-configurations:
-    - general: various high level parameters unrelated to the training procedure
-    - train: training related parameters
-    - model: parameters necessary to build and define the model
-    - data: parameters necessary to define the dataset and featurize it
+
+    - *general*: various high level parameters unrelated to the training procedure
+    - *train*: training related parameters
+    - *model*: parameters necessary to build and define the model
+    - *data*: parameters necessary to define the dataset and featurize it
 
     Args:
         name (str):

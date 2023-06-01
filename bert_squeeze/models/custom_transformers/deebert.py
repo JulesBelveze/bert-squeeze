@@ -20,7 +20,7 @@ from ...utils.types import DeeBertEncoderOutput, DeeBertModelOutput, RampOutput
 
 class OffRamp(nn.Module):
     """
-    Classification layers (referred to as off-ramps) in the paper.
+    Classification layers (referred to as off-ramps) in the DeeBERT paper.
 
     Args:
         config (PretrainedConfig):

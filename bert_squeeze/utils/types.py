@@ -14,19 +14,19 @@ class RampOutput:
 
 @dataclass
 class DeeBertEncoderOutput:
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    ramps_exit: Tuple[RampOutput] = None
+    ramps_exit: Optional[Tuple[RampOutput]] = None
 
 
 @dataclass
 class DeeBertModelOutput:
-    sequence_output: torch.FloatTensor = None
-    pooled_output: torch.FloatTensor = None
-    hidden_states: torch.FloatTensor = None
-    attentions: torch.FloatTensor = None
-    ramps_exits: torch.FloatTensor = None
+    sequence_output: Optional[torch.FloatTensor] = None
+    pooled_output: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[torch.FloatTensor] = None
+    attentions: Optional[torch.FloatTensor] = None
+    ramps_exits: Optional[torch.FloatTensor] = None
 
 
 @dataclass

@@ -21,7 +21,9 @@ class ConferenceConfig(datasets.BuilderConfig):
 
 
 class ConferenceDataset(datasets.GeneratorBasedBuilder):
-    """Conference dataset"""
+    """
+    Conference dataset
+    """
 
     BUILDER_CONFIG_CLASS = ConferenceConfig
     BUILDER_CONFIGS = [

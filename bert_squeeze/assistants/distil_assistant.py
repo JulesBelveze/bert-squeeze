@@ -53,18 +53,15 @@ class DistilAssistant(object):
             list of callbacks to use during training
 
     Example:
-
-    ```python
-    >>> from bert_squeeze.assistants import DistilAssistant
-    >>> distil_assistant = DistilAssistant(
-            "distil-parallel",
-            data_kwargs={"path": resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py")},
-            teacher_kwargs={
-                "_target_": transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
-                "pretrained_model_name_or_path": "bert-base-cased"
-            }
-        )
-    ```
+        >>> from bert_squeeze.assistants import DistilAssistant
+        >>> distil_assistant = DistilAssistant(
+                "distil-parallel",
+                data_kwargs={"path": resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py")},
+                teacher_kwargs={
+                    "_target_": transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
+                    "pretrained_model_name_or_path": "bert-base-cased"
+                }
+            )
     """
 
     def __init__(

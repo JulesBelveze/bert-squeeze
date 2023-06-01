@@ -18,7 +18,9 @@ class UnlabeledConfig(datasets.BuilderConfig):
 
 
 class DatasetUnlabeled(datasets.GeneratorBasedBuilder):
-    """Unlabeled dataset"""
+    """
+    Dataset to use for soft distillation.
+    """
 
     BUILDER_CONFIG_CLASS = UnlabeledConfig
     BUILDER_CONFIGS = [

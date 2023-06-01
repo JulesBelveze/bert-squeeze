@@ -16,15 +16,16 @@ def load_model_from_exp(
     """
     Helper function to load a `pl.LightningModule` from a previous experiment.
     The folder needs to have the following structure:
-    ```
-    folder
-    ┣━━ .hydra/
-    ┃   ┗━━ config.yaml
-    ┗━━ checkpoints/
-        ┣━━ checkpoints_0.ckpt
-        ┃   ....
-        ┗━━ checkpoints_n.ckpt
-    ```
+
+    .. code-block::
+
+        folder
+        ┣━━ .hydra/
+        ┃   ┗━━ config.yaml
+        ┗━━ checkpoints/
+            ┣━━ checkpoints_0.ckpt
+            ┃   ....
+            ┗━━ checkpoints_n.ckpt
 
     Args:
         path_to_folder (str):

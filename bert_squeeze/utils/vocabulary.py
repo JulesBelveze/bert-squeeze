@@ -1,5 +1,5 @@
 import logging
-from typing import Iterable, List
+from typing import List, Optional
 
 
 class Vocabulary(object):
@@ -13,7 +13,13 @@ class Vocabulary(object):
             maximum number of words to use to build the vocabulary
     """
 
-    def __init__(self, path_to_voc: str = None, max_words: int = None, *args, **kwargs):
+    def __init__(
+        self,
+        path_to_voc: Optional[str] = None,
+        max_words: Optional[int] = None,
+        *args,
+        **kwargs,
+    ):
         self.max_words = max_words if max_words is not None else 10e7
         self.vocabulary = {"UNK": 0}
 

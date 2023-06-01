@@ -8,9 +8,14 @@ from pkg_resources import resource_filename
 
 
 class ModelWrapper:
+    """
+    ModelWrapper
+    """
+
     def __init__(
         self, checkpoint_path: str, preprocessor, postprocessor=None, *args, **kwargs
     ):
+        """"""
         filepath = resource_filename("bert-squeeze", checkpoint_path)
         self.session = self._get_ort_session(filepath, **kwargs)
 

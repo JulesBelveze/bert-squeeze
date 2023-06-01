@@ -18,7 +18,9 @@ class ParallelConfig(datasets.BuilderConfig):
 
 
 class ParallelDataset(datasets.GeneratorBasedBuilder):
-    """Parallel dataset"""
+    """
+    Dataset for parallel distillation
+    """
 
     BUILDER_CONFIG_CLASS = ParallelConfig
     BUILDER_CONFIGS = [
