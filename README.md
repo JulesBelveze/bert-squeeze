@@ -1,9 +1,9 @@
+
 <img src="./images/bert-squeeze.png" height="25%" align="right"/>
 
-<p align="center">
-   <img src="https://img.shields.io/badge/Python-FFD43B?style=for-the-badge&logo=python&logoColor=darkgreen" height="20px">
-   <img src="https://img.shields.io/badge/PyTorch Lightning-792EE5?style=for-the-badge&logo=PyTorch Lightning&logoColor=white" height=20px>
-</p>
+[![PyPI version](https://badge.fury.io/py/bert-squeeze.svg)](https://pypi.org/project/bert-squeeze/)
+[![github actions docs](https://github.com/JulesBelveze/bert-squeeze/actions/workflows/documentation.yaml/badge.svg)](https://julesbelveze.github.io/bert-squeeze/)
+
 
 # Bert-squeeze
 
