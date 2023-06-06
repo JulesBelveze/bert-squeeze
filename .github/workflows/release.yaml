@@ -11,13 +11,14 @@ jobs:
     name: Poetry Build and PyPI Publish
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - name: Checkout Code
+        uses: actions/checkout@v2
+      - name: Setup Python
+        uses: actions/setup-python@v2
       - name: Install Poetry
         run: |
-          curl -sSL https://install.python-poetry.org | python3 - --version $POETRY_VERSION \
-          curl -sSL https://install.python-poetry.org | POETRY_VERSION=$POETRY_VERSION python3 - \
-          echo "${HOME}/.poetry/bin" >> $GITHUB_PATH \
+          pip install --upgrade pip
+          pip install poetry==$POETRY_VERSION
           poetry config pypi-token.pypi "${{ secrets.PYPI_API_KEY }}"
       - name: Build package
         run: poetry install
