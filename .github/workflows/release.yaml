@@ -3,10 +3,6 @@ on:
   release:
     types: [published]
 
-  push:
-    branches:
-      - main
-
 jobs:
   pypi_release:
     name: Poetry Build and PyPI Publish
