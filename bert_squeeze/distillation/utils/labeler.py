@@ -3,7 +3,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Tuple, Union
 
 import datasets
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 import torch.nn.functional as F
 from datasets import Dataset, DatasetDict

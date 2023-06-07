@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch.nn
 from hydra.utils import instantiate
 from lightning.pytorch.callbacks import Callback
