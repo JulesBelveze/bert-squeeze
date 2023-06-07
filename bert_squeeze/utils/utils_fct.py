@@ -4,7 +4,7 @@ import os
 import sys
 from typing import List
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from omegaconf import DictConfig, OmegaConf
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)

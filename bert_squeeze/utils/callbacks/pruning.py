@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, List, Union
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 from pytorch_lightning.callbacks.base import Callback
 from torch.optim import Optimizer

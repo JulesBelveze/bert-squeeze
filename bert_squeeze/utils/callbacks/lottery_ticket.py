@@ -5,8 +5,8 @@ import logging
 from datetime import datetime
 from typing import Tuple
 
+import lightning.pytorch as pl
 import numpy as np
-import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks.base import Callback
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
