@@ -113,7 +113,7 @@ class LtFastBert(BaseTransformerModule):
         return output
 
     @overrides
-    def training_step(self, batch, batch_idx, *args, **kwargs) -> dict:
+    def training_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
         """"""
         inputs = {
             "input_ids": batch["input_ids"],
@@ -138,20 +138,14 @@ class LtFastBert(BaseTransformerModule):
             logging_loss = {
                 key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
             }
-            for key, value in logging_loss.items():
-                self.logger.experiment[f"train/{key}"].log(
-                    value=value, step=self.global_step
-                )
-
-            self.logger.experiment["train/acc"].log(
-                self.scorer.acc, step=self.global_step
-            )
+            self.log_dict({f"train/loss_{key}": val for key, val in logging_loss.items()})
+            self.log("train/acc", self.scorer.acc)
             self.scorer.reset()
 
-        return {"loss": losses.full_loss}
+        return losses.full_loss
 
     @overrides
-    def validation_step(self, batch, batch_idx, *args, **kwargs) -> dict:
+    def validation_step(self, batch, batch_idx, *args, **kwargs) -> None:
         """"""
         inputs = {
             "input_ids": batch["input_ids"],
@@ -171,10 +165,12 @@ class LtFastBert(BaseTransformerModule):
             # outputs[:-1] is list of all the student classification layers logits
             logits = outputs[:-1]
         self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), losses)
-        return {"loss": losses.full_loss, "logits": logits.cpu()}
+        self.validation_step_outputs.append(
+            {"loss": losses.full_loss, "logits": logits.cpu()}
+        )
 
     @overrides
-    def test_step(self, batch, batch_idx, *args, **kwargs) -> dict:
+    def test_step(self, batch, batch_idx, *args, **kwargs) -> None:
         """"""
         inputs = {
             "input_ids": batch["input_ids"],
@@ -191,7 +187,7 @@ class LtFastBert(BaseTransformerModule):
         logits = outputs[:-1]
 
         self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), losses)
-        return {"loss": losses.full_loss, "logits": logits.cpu()}
+        self.test_step_outputs.append({"loss": losses.full_loss, "logits": logits.cpu()})
 
     @overrides
     def _build_model(self):

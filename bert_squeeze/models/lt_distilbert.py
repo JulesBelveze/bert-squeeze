@@ -78,20 +78,15 @@ class LtCustomDistilBert(BaseTransformerModule):
             logging_loss = {
                 key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
             }
-            for key, value in logging_loss.items():
-                self.logger.experiment[f"train/loss_{key}"].log(
-                    value=value, step=self.global_step
-                )
+            self.log_dict({f"train/loss_{key}": val for key, val in logging_loss.items()})
 
-            self.logger.experiment["train/acc"].log(
-                self.scorer.acc, step=self.global_step
-            )
+            self.log("train/acc", self.scorer.acc)
             self.scorer.reset()
 
         return loss
 
     @overrides
-    def validation_step(self, batch, batch_idx, *args, **kwargs) -> dict:
+    def validation_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
         """"""
         inputs = {
             "input_ids": batch["input_ids"],
@@ -102,10 +97,13 @@ class LtCustomDistilBert(BaseTransformerModule):
         loss = self.loss(logits, batch["labels"])
 
         self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        return {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
+        self.validation_step_outputs.append(
+            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
+        )
+        return loss
 
     @overrides
-    def test_step(self, batch, batch_idx, *args, **kwargs) -> dict:
+    def test_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
         """"""
         inputs = {
             "input_ids": batch["input_ids"],
@@ -116,7 +114,10 @@ class LtCustomDistilBert(BaseTransformerModule):
         loss = self.loss(logits, batch["labels"])
 
         self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        return {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
+        self.test_step_outputs.append(
+            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
+        )
+        return loss
 
     @overrides
     def _build_model(self):

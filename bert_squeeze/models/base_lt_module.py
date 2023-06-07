@@ -2,9 +2,9 @@ import logging
 from copy import deepcopy
 from typing import Dict, List, Tuple
 
+import lightning.pytorch as pl
 import matplotlib.pyplot as plt
 import numpy as np
-import pytorch_lightning as pl
 import seaborn as sns
 import torch
 import torch.nn.functional as F
@@ -50,6 +50,10 @@ class BaseTransformerModule(pl.LightningModule):
             pretrained_model, num_labels=num_labels
         )
 
+        self.training_step_outputs = []
+        self.test_step_outputs = []
+        self.validation_step_outputs = []
+
         self._set_scorers(training_config.get("scorer_type", "regular"))
         self._set_objective()
 
@@ -61,31 +65,34 @@ class BaseTransformerModule(pl.LightningModule):
         """"""
         raise NotImplementedError()
 
+    def on_train_epoch_end(self) -> None:
+        """"""
+        self.scorer.reset()
+        self.training_step_outputs.clear()
+
     def validation_step(self, batch, batch_idx, *args, **kwargs):
         """"""
         raise NotImplementedError()
 
-    def test_step(self, batch, batch_idx, *args, **kwargs):
+    def on_validation_epoch_end(self):
         """"""
-        raise NotImplementedError()
-
-    def training_epoch_end(self, _) -> None:
-        """"""
-        self.scorer.reset()
-
-    def validation_epoch_end(self, test_step_outputs: List[dict]):
-        """"""
-        all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])
+        all_logits = torch.cat([pred["logits"] for pred in self.validation_step_outputs])
         all_probs = F.softmax(all_logits, dim=-1)
         labels_probs = all_probs.numpy()
 
         self.log_eval_report(labels_probs)
         self.valid_scorer.reset()
+        self.validation_step_outputs.clear()
 
-    def test_epoch_end(self, outputs) -> None:
+    def test_step(self, batch, batch_idx, *args, **kwargs):
+        """"""
+        raise NotImplementedError()
+
+    def on_test_epoch_end(self) -> None:
         """"""
         self.log("Test results", self.test_scorer.get_table())
         self.test_scorer.reset()
+        self.test_step_outputs.clear()
 
     def configure_optimizers(self) -> Tuple[List, List]:
         """
@@ -325,7 +332,7 @@ class BaseTransformerModule(pl.LightningModule):
             labels (torch.Tensor):
                 ground truth labels
         """
-        return self.objective(logits.view(-1, self.num_labels), labels.view(-1))
+        return self.objective(logits.view(-1, self.num_labels), labels.view(-1).long())
 
     def log_eval_report(self, probs: np.array) -> None:
         """
@@ -339,24 +346,21 @@ class BaseTransformerModule(pl.LightningModule):
                 predicted probabilities
         """
         table = self.valid_scorer.get_table()
-        self.logger.experiment["eval/report"].log(table)
+        self.logger.experiment.add_text("eval/report", table)
 
         logging_loss = {
             key: torch.stack(val).mean() for key, val in self.valid_scorer.losses.items()
         }
-        for key, value in logging_loss.items():
-            self.logger.experiment[f"eval/loss_{key}"].log(value)
+        self.log_dict({f"eval/loss_{key}": val for key, val in logging_loss.items()})
 
         eval_report = self.valid_scorer.to_dict()
         for key, value in eval_report.items():
             if not isinstance(value, list) and not isinstance(value, np.ndarray):
-                self.logger.experiment["eval/{}".format(key)].log(
-                    value=value, step=self.global_step
-                )
+                self.log("eval/{}".format(key), value)
 
         for i in range(probs.shape[1]):
             fig = plt.figure(figsize=(15, 15))
             sns.distplot(probs[:, i], kde=False, bins=100)
             plt.title("Probability boxplot for label {}".format(i))
-            self.logger.experiment["eval/dist_label_{}".format(i)].log(fig)
+            self.logger.experiment.add_figure("eval/dist_label_{}".format(i), fig)
             plt.close("all")
