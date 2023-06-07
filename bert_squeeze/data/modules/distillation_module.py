@@ -1,7 +1,7 @@
 from typing import Optional, Union
 
 import datasets
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from datasets import Features
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader

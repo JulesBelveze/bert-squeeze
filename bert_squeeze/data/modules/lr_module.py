@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 
 import datasets
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from datasets import Dataset, DatasetDict
 from hydra.core.hydra_config import HydraConfig
 from sklearn.feature_extraction.text import CountVectorizer

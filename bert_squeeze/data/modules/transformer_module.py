@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 
 import datasets
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from omegaconf import DictConfig
 from overrides import overrides
 from torch.utils.data import DataLoader
@@ -105,7 +105,7 @@ class TransformerDataModule(pl.LightningDataModule):
         """
         return DataLoader(
             self.train,
-            collate_fn=self._collate_fn(),
+            # collate_fn=self._collate_fn(),
             batch_size=self.train_batch_size,
             drop_last=True,
             num_workers=0,
@@ -118,7 +118,7 @@ class TransformerDataModule(pl.LightningDataModule):
         """
         return DataLoader(
             self.test,
-            collate_fn=self._collate_fn(),
+            # collate_fn=self._collate_fn(),
             batch_size=self.eval_batch_size,
             drop_last=True,
             num_workers=0,
@@ -131,7 +131,7 @@ class TransformerDataModule(pl.LightningDataModule):
         """
         return DataLoader(
             self.val,
-            collate_fn=self._collate_fn(),
+            # collate_fn=self._collate_fn(),
             batch_size=self.eval_batch_size,
             drop_last=True,
             num_workers=0,
