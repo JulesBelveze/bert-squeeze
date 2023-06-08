@@ -1,9 +1,9 @@
 import logging
 from typing import List
 
+import lightning.pytorch as pl
 import matplotlib.pyplot as plt
 import numpy as np
-import pytorch_lightning as pl
 import seaborn as sns
 import torch
 import torch.nn.functional as F
@@ -48,6 +48,10 @@ class LtLSTM(pl.LightningModule):
         self.hidden_dim = hidden_dim
         self.num_labels = num_labels
 
+        self.training_step_outputs = []
+        self.test_step_outputs = []
+        self.validation_step_outputs = []
+
         self._set_scorers()
         self._set_objective()
         self._build_model()
@@ -83,43 +87,43 @@ class LtLSTM(pl.LightningModule):
             logging_loss = {
                 key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
             }
-            for key, value in logging_loss.items():
-                self.logger.experiment[f"train/loss_{key}"].log(
-                    value=value, step=self.global_step
-                )
-
-            self.logger.experiment["train/acc"].log(
-                self.scorer.acc, step=self.global_step
-            )
+            self.log_dict({f"train/loss_{key}": val for key, val in logging_loss.items()})
+            self.log("train/acc", self.scorer.acc)
             self.scorer.reset()
         return loss
 
-    def validation_step(self, batch, batch_idx, *args, **kwargs) -> dict:
+    def validation_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
         """"""
         logits = self.forward(tokens=batch["features"])
         loss = self.loss(logits, batch["labels"])
 
         self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        return {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
+        self.validation_step_outputs.append(
+            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
+        )
+        return loss
 
-    def test_step(self, batch, batch_idx, *args, **kwargs) -> dict:
+    def on_validation_epoch_end(self) -> None:
         """"""
-        logits = self.forward(tokens=batch["features"])
-        loss = self.loss(logits, batch["labels"])
-
-        self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        return {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
-
-    def validation_epoch_end(self, test_step_outputs: List[dict]) -> None:
-        """"""
-        all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])
+        all_logits = torch.cat([pred["logits"] for pred in self.validation_step_outputs])
         all_probs = F.softmax(all_logits, dim=-1)
         labels_probs = all_probs.numpy()
 
         self.log_eval_report(labels_probs)
         self.valid_scorer.reset()
 
-    def test_epoch_end(self, outputs) -> None:
+    def test_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
+        """"""
+        logits = self.forward(tokens=batch["features"])
+        loss = self.loss(logits, batch["labels"])
+
+        self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
+        self.test_step_outputs.append(
+            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
+        )
+        return loss
+
+    def on_test_epoch_end(self) -> None:
         """"""
         print(self.test_scorer.get_table())
         self.test_scorer.reset()
@@ -218,24 +222,21 @@ class LtLSTM(pl.LightningModule):
                 predicted probabilities
         """
         table = self.valid_scorer.get_table()
-        self.logger.experiment["eval/report"].log(table)
+        self.logger.experiment.add_text("eval/report", table)
 
         logging_loss = {
             key: torch.stack(val).mean() for key, val in self.valid_scorer.losses.items()
         }
-        for key, value in logging_loss.items():
-            self.logger.experiment[f"eval/loss_{key}"].log(value)
+        self.log_dict({f"eval/loss_{key}": val for key, val in logging_loss.items()})
 
         eval_report = self.valid_scorer.to_dict()
         for key, value in eval_report.items():
             if not isinstance(value, list) and not isinstance(value, np.ndarray):
-                self.logger.experiment["eval/{}".format(key)].log(
-                    value=value, step=self.global_step
-                )
+                self.log("eval/{}".format(key), value)
 
         for i in range(probs.shape[1]):
             fig = plt.figure(figsize=(15, 15))
             sns.distplot(probs[:, i], kde=False, bins=100)
             plt.title("Probability boxplot for label {}".format(i))
-            self.logger.experiment["eval/dist_label_{}".format(i)].log(fig)
+            self.logger.experiment.add_figure("eval/dist_label_{}".format(i), fig)
             plt.close("all")

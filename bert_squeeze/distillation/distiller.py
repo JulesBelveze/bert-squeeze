@@ -1,9 +1,9 @@
 import logging
 from typing import Any, Dict, List, Tuple, Union
 
+import lightning.pytorch as pl
 import matplotlib.pyplot as plt
 import numpy as np
-import pytorch_lightning as pl
 import seaborn as sns
 import torch
 import torch.nn.functional as F
@@ -48,6 +48,10 @@ class BaseDistiller(pl.LightningModule):
         self.teacher = teacher
         self.student = student
         self.teacher_checkpoint = teacher_checkpoint
+
+        self.training_step_outputs = []
+        self.test_step_outputs = []
+        self.validation_step_outputs = []
 
         self._set_objectives()
         self._set_scorers()
@@ -265,14 +269,14 @@ class BaseDistiller(pl.LightningModule):
     def validation_step(self, batch, _) -> Dict:
         raise NotImplementedError()
 
-    def training_epoch_end(self, _) -> None:
+    def on_train_epoch_end(self) -> None:
         """"""
         self.s_scorer.reset()
 
-    def validation_epoch_end(self, test_step_outputs: List[Dict]) -> None:
+    def on_validation_epoch_end(self) -> None:
         raise NotImplementedError()
 
-    def test_epoch_end(self, test_step_outputs: List[Dict]) -> None:
+    def on_test_epoch_end(self) -> None:
         raise NotImplementedError()
 
     def loss(
@@ -292,22 +296,21 @@ class BaseDistiller(pl.LightningModule):
                 predicted probabilities
         """
         table = self.s_valid_scorer.get_table()
-        self.logger.experiment["eval/report"].log(table)
+        self.logger.experiment.add_text("eval/report", table)
 
         # logging losses to neptune
         logging_loss = {
             key: torch.stack(val).mean()
             for key, val in self.s_valid_scorer.losses.items()
         }
-        for key, value in logging_loss.items():
-            self.logger.experiment[f"eval/loss_{key}"].log(value)
+        self.log_dict({f"eval/loss_{key}": val for key, val in logging_loss.items()})
 
         # logging other metrics
         eval_report = self.s_valid_scorer.to_dict()
         for key, value in eval_report.items():
             if not isinstance(value, list) and not isinstance(value, np.ndarray):
-                self.logger.experiment["eval/{}".format(key)].log(
-                    value=value, step=self.global_step
+                self.log_dict(
+                    {f"eval/loss_{key}": val for key, val in logging_loss.items()}
                 )
 
         # logging probability distributions
@@ -315,7 +318,7 @@ class BaseDistiller(pl.LightningModule):
             fig = plt.figure(figsize=(15, 15))
             sns.distplot(probs[i], kde=False, bins=100)
             plt.title("Probability boxplot for label {}".format(i))
-            self.logger.experiment["eval/dist_label_{}".format(i)].log(fig)
+            self.logger.experiment.add_figure("eval/dist_label_{}".format(i), fig)
             plt.close("all")
 
 
@@ -429,14 +432,12 @@ class Distiller(BaseDistiller):
         self.s_scorer.add(s_logits.detach().cpu(), batch["s_labels"].cpu(), loss)
         if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
             logging_loss = {
-                key: torch.stack(val).mean() for key, val in self.s_scorer.losses.items()
+                f"train/{key}": torch.stack(val).mean()
+                for key, val in self.s_scorer.losses.items()
             }
-            for key, value in logging_loss.items():
-                self.logger.experiment[f"loss_{key}"].log(value)
+            self.log_dict(logging_loss)
 
-            self.logger.experiment["train/acc"].log(
-                self.s_scorer.acc, step=self.global_step
-            )
+            self.log("train/acc", self.scorer.acc)
         return loss.full_loss
 
     @overrides
@@ -449,7 +450,10 @@ class Distiller(BaseDistiller):
         self.s_test_scorer.add(
             s_logits.detach().cpu(), batch["labels"].detach().cpu(), loss
         )
-        return {"loss": loss.full_loss, "logits": s_logits.detach().cpu()}
+        self.test_step_outputs.append(
+            {"loss": loss.full_loss, "logits": s_logits.detach().cpu()}
+        )
+        return {"loss": loss.full_loss}
 
     @overrides
     def validation_step(self, batch, _) -> Dict:
@@ -461,12 +465,15 @@ class Distiller(BaseDistiller):
         self.s_valid_scorer.add(
             s_logits.detach().cpu(), batch["s_labels"].detach().cpu(), loss
         )
-        return {"loss": loss.full_loss, "logits": s_logits.detach().cpu()}
+        self.validation_step_outputs.append(
+            {"loss": loss.full_loss, "logits": s_logits.detach().cpu()}
+        )
+        return {"loss": loss.full_loss}
 
     @overrides
-    def validation_epoch_end(self, test_step_outputs: List[Dict]) -> None:
+    def on_validation_epoch_end(self) -> None:
         """"""
-        all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])
+        all_logits = torch.cat([pred["logits"] for pred in self.validation_step_outputs])
         all_probs = F.softmax(all_logits, dim=-1)
         labels_probs = [all_probs[:, i] for i in range(all_probs.shape[-1])]
 
@@ -474,9 +481,9 @@ class Distiller(BaseDistiller):
         self.s_valid_scorer.reset()
 
     @overrides
-    def test_epoch_end(self, test_step_outputs: List[Dict]) -> None:
+    def on_test_epoch_end(self) -> None:
         """"""
-        all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])
+        all_logits = torch.cat([pred["logits"] for pred in self.test_step_outputs])
         all_probs = F.softmax(all_logits, dim=-1)
         labels_probs = [all_probs[:, i] for i in range(all_probs.shape[-1])]
 
@@ -603,7 +610,6 @@ class ParallelDistiller(BaseDistiller):
         s_logits_original, s_logits_translated = self.get_student_logits(batch)
 
         loss = self.loss(t_logits, s_logits_original, s_logits_translated)
-
         return loss.full_loss
 
     @overrides
@@ -616,7 +622,10 @@ class ParallelDistiller(BaseDistiller):
         self.s_test_scorer.add(
             s_logits_original.detach().cpu(), batch["labels"].detach().cpu(), loss
         )
-        return {"loss": loss.full_loss, "logits": s_logits_original.detach().cpu()}
+        self.test_step_outputs.append(
+            {"loss": loss.full_loss, "logits": s_logits_original.detach().cpu()}
+        )
+        return {"loss": loss.full_loss}
 
     @overrides
     def validation_step(self, batch, _) -> Dict:
@@ -628,12 +637,15 @@ class ParallelDistiller(BaseDistiller):
         self.s_valid_scorer.add(
             s_logits_original.detach().cpu(), batch["s_labels"].detach().cpu(), loss
         )
-        return {"loss": loss.full_loss, "logits": s_logits_original.detach().cpu()}
+        self.validation_step_outputs.append(
+            {"loss": loss.full_loss, "logits": s_logits_original.detach().cpu()}
+        )
+        return {"loss": loss.full_loss}
 
     @overrides
-    def validation_epoch_end(self, test_step_outputs: List[Dict]) -> None:
+    def on_validation_epoch_end(self) -> None:
         """"""
-        all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])
+        all_logits = torch.cat([pred["logits"] for pred in self.validation_step_outputs])
         all_probs = F.softmax(all_logits, dim=-1)
         labels_probs = [all_probs[:, i] for i in range(all_probs.shape[-1])]
 
@@ -641,9 +653,9 @@ class ParallelDistiller(BaseDistiller):
         self.s_valid_scorer.reset()
 
     @overrides
-    def test_epoch_end(self, test_step_outputs: List[Dict]) -> None:
+    def on_test_epoch_end(self) -> None:
         """"""
-        all_logits = torch.cat([pred["logits"] for pred in test_step_outputs])
+        all_logits = torch.cat([pred["logits"] for pred in self.test_step_outputs])
         all_probs = F.softmax(all_logits, dim=-1)
         labels_probs = [all_probs[:, i] for i in range(all_probs.shape[-1])]
 

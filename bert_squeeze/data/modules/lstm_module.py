@@ -3,8 +3,8 @@ import re
 from typing import Any, Dict, List, Optional
 
 import datasets
+import lightning.pytorch as pl
 import numpy as np
-import pytorch_lightning as pl
 import torch
 from datasets import DatasetDict
 from hydra.core.hydra_config import HydraConfig

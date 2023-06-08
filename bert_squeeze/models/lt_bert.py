@@ -84,27 +84,20 @@ class LtCustomBert(BaseTransformerModule):
             "token_type_ids": batch["token_type_ids"],
         }
         logits = self.forward(**inputs)
-        loss = self.loss(logits, batch["labels"])
+        loss = self.loss(logits=logits, labels=batch["labels"])
 
         self.scorer.add(logits.detach().cpu(), batch["labels"], loss.detach().cpu())
         if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
             logging_loss = {
                 key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
             }
-            for key, value in logging_loss.items():
-                self.logger.experiment[f"train/loss_{key}"].log(
-                    value=value, step=self.global_step
-                )
-
-            self.logger.experiment["train/acc"].log(
-                self.scorer.acc, step=self.global_step
-            )
+            self.log_dict({f"eval/loss_{key}": val for key, val in logging_loss.items()})
+            self.log("train/acc", self.scorer.acc)
             self.scorer.reset()
-
         return loss
 
     @overrides
-    def validation_step(self, batch, batch_idx, *args, **kwargs) -> dict:
+    def validation_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
         """"""
         inputs = {
             "input_ids": batch["input_ids"],
@@ -112,13 +105,16 @@ class LtCustomBert(BaseTransformerModule):
             "token_type_ids": batch["token_type_ids"],
         }
         logits = self.forward(**inputs)
-        loss = self.loss(logits, batch["labels"])
+        loss = self.loss(logits=logits, labels=batch["labels"].float())
 
         self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        return {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
+        self.validation_step_outputs.append(
+            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
+        )
+        return loss
 
     @overrides
-    def test_step(self, batch, batch_idx, *args, **kwargs) -> dict:
+    def test_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
         """"""
         inputs = {
             "input_ids": batch["input_ids"],
@@ -126,9 +122,12 @@ class LtCustomBert(BaseTransformerModule):
             "token_type_ids": batch["token_type_ids"],
         }
         logits = self.forward(**inputs)
-        loss = self.loss(logits, batch["labels"])
+        loss = self.loss(logits=logits, labels=batch["labels"])
         self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        return {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
+        self.test_step_outputs.append(
+            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
+        )
+        return loss
 
     @overrides
     def _build_model(self):

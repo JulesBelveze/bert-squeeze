@@ -1,4 +1,4 @@
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from pytorch_lightning.callbacks import BaseFinetuning
 from torch.optim.optimizer import Optimizer
 

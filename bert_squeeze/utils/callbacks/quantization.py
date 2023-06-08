@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Any, Iterable, List
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 from pytorch_lightning.callbacks import QuantizationAwareTraining
 from pytorch_lightning.callbacks.base import Callback
