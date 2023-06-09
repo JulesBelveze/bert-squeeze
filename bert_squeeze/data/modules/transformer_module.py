@@ -107,8 +107,7 @@ class TransformerDataModule(pl.LightningDataModule):
             self.train,
             # collate_fn=self._collate_fn(),
             batch_size=self.train_batch_size,
-            drop_last=True,
-            num_workers=0,
+            drop_last=True
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -120,8 +119,7 @@ class TransformerDataModule(pl.LightningDataModule):
             self.test,
             # collate_fn=self._collate_fn(),
             batch_size=self.eval_batch_size,
-            drop_last=True,
-            num_workers=0,
+            drop_last=True
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -133,8 +131,7 @@ class TransformerDataModule(pl.LightningDataModule):
             self.val,
             # collate_fn=self._collate_fn(),
             batch_size=self.eval_batch_size,
-            drop_last=True,
-            num_workers=0,
+            drop_last=True
         )
 
 
