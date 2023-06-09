@@ -11,7 +11,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 
 def load_model_from_exp(
-    path_to_folder: str, module: pl.LightningModule
+        path_to_folder: str, module: pl.LightningModule
 ) -> pl.LightningModule:
     """
     Helper function to load a `pl.LightningModule` from a previous experiment.
@@ -87,6 +87,13 @@ def get_neptune_tags(args: DictConfig) -> List[str]:
 
 
 def deep_update(d, u):
+    """"""
+    if isinstance(u, list):
+        if d is None:
+            return u
+        d.extend(u)
+        return d
+
     for k, v in u.items():
         if isinstance(v, collections.abc.Mapping):
             d[k] = deep_update(d.get(k, {}), v)
