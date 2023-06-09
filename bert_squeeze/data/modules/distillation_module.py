@@ -6,10 +6,10 @@ from datasets import Features
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
-from ...distillation.utils.labeler import HardLabeler
 from .lr_module import LrDataModule
 from .lstm_module import LSTMDataModule
 from .transformer_module import TransformerDataModule
+from ...distillation.utils.labeler import HardLabeler
 
 TeacherDataModule = Union[LrDataModule, TransformerDataModule, LSTMDataModule]
 StudentDataModule = Union[LrDataModule, TransformerDataModule, LSTMDataModule]
@@ -39,12 +39,12 @@ class DistillationDataModule(pl.LightningDataModule):
     """
 
     def __init__(
-        self,
-        teacher_module: TeacherDataModule,
-        student_module: StudentDataModule,
-        soft_data_config: DictConfig = None,
-        hard_labeler: HardLabeler = None,
-        **kwargs,
+            self,
+            teacher_module: TeacherDataModule,
+            student_module: StudentDataModule,
+            soft_data_config: DictConfig = None,
+            hard_labeler: HardLabeler = None,
+            **kwargs,
     ):
         super().__init__()
         assert student_module.dataset_config.path == teacher_module.dataset_config.path
@@ -61,6 +61,29 @@ class DistillationDataModule(pl.LightningDataModule):
         self.train = None
         self.test = None
         self.val = None
+
+    @staticmethod
+    def _concat_dataset(
+            a: Union[datasets.Dataset, datasets.DatasetDict],
+            b: Union[datasets.Dataset, datasets.DatasetDict]
+    ) -> Union[datasets.Dataset, datasets.DatasetDict]:
+        """"""
+        assert type(a) == type(b) and a.keys() == b.keys()
+
+        if isinstance(a, datasets.DatasetDict):
+            concat_dataset = datasets.DatasetDict(
+                {
+                    key: datasets.concatenate_datasets(
+                        [a[key], b[key]], axis=1
+                    )
+                    for key in a.keys()
+                }
+            )
+        else:
+            concat_dataset = datasets.concatenate_datasets(
+                [a, b], axis=1
+            )
+        return concat_dataset
 
     def create_hard_dataset(self) -> datasets.Dataset:
         """"""
@@ -176,14 +199,7 @@ class DistillationDataModule(pl.LightningDataModule):
                 )
 
         # Merging the student and teacher datasets into a single one
-        concat_dataset = datasets.DatasetDict(
-            {
-                key: datasets.concatenate_datasets(
-                    [teacher_data[key], student_data[key]], axis=1
-                )
-                for key in ["train", "test", "validation"]
-            }
-        )
+        concat_dataset = self._concat_dataset(teacher_data, student_data)
         concat_dataset = concat_dataset.shuffle()
         concat_dataset.set_format(type="torch")
         return concat_dataset
@@ -200,7 +216,8 @@ class DistillationDataModule(pl.LightningDataModule):
         featurized_dataset = self.featurize()
 
         self.train = featurized_dataset["train"]
-        self.val = featurized_dataset["validation"]
+        self.val = featurized_dataset["validation"] if "validation" in featurized_dataset.keys() else \
+            featurized_dataset["test"]
         self.test = featurized_dataset["test"]
 
     def train_dataloader(self) -> DataLoader:
@@ -209,7 +226,7 @@ class DistillationDataModule(pl.LightningDataModule):
             DataLoader: Train dataloader
         """
         return DataLoader(
-            self.train, batch_size=self.train_batch_size, drop_last=True, num_workers=0
+            self.train, batch_size=self.train_batch_size, drop_last=True
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -218,7 +235,7 @@ class DistillationDataModule(pl.LightningDataModule):
             DataLoader: Test dataloader
         """
         return DataLoader(
-            self.test, batch_size=self.eval_batch_size, drop_last=True, num_workers=0
+            self.test, batch_size=self.eval_batch_size, drop_last=True
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -227,5 +244,5 @@ class DistillationDataModule(pl.LightningDataModule):
             DataLoader: Validation dataloader
         """
         return DataLoader(
-            self.val, batch_size=self.eval_batch_size, drop_last=True, num_workers=0
+            self.val, batch_size=self.eval_batch_size, drop_last=True
         )
