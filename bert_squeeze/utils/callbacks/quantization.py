@@ -17,7 +17,9 @@ class DynamicQuantization(Callback):
             list of submodule names to apply dynamic quantization to
     """
 
-    def __init__(self, layers_to_quantize: Iterable[str] = None, *args: Any, **kwargs: Any):
+    def __init__(
+        self, layers_to_quantize: Iterable[str] = None, *args: Any, **kwargs: Any
+    ):
         super().__init__(*args, **kwargs)
         self.layers = set(layers_to_quantize) if layers_to_quantize is not None else None
 
@@ -26,7 +28,9 @@ class DynamicQuantization(Callback):
         if self.layers is None:
             self.layers = set([layer for layer, _ in pl_module.named_parameters()])
 
-        quantized_module = torch.quantization.quantize_dynamic(pl_module, self.layers, dtype=torch.qint8)
+        quantized_module = torch.quantization.quantize_dynamic(
+            pl_module, self.layers, dtype=torch.qint8
+        )
 
         torch.save(quantized_module.state_dict(), "quantized_model.ckpt")
         logging.info(

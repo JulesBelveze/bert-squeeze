@@ -23,17 +23,14 @@ class ThresholdBasedPruning(Callback):
     """
 
     def __init__(
-            self, threshold: float, start_pruning_epoch: int = 10, *args: Any, **kwargs: Any
+        self, threshold: float, start_pruning_epoch: int = 10, *args: Any, **kwargs: Any
     ):
         super().__init__()
         self.threshold = threshold
         self.start_pruning_epoch = start_pruning_epoch
 
     def on_before_optimizer_step(
-            self,
-            trainer: pl.Trainer,
-            pl_module: pl.LightningModule,
-            optimizer: Optimizer
+        self, trainer: pl.Trainer, pl_module: pl.LightningModule, optimizer: Optimizer
     ) -> None:
         """
         Method called before `optimizer.step()` to zero prune gradients
@@ -51,7 +48,7 @@ class ThresholdBasedPruning(Callback):
             self._zero_pruned_gradients(pl_module)
 
     def on_train_epoch_end(
-            self, trainer: pl.Trainer, pl_module: pl.LightningModule
+        self, trainer: pl.Trainer, pl_module: pl.LightningModule
     ) -> None:
         """
         Method called at the end of a training epoch to prune the model.
@@ -129,11 +126,11 @@ class SparsityBasedPruning(Callback):
     """
 
     def __init__(
-            self,
-            sparsity_level: float = 0.0,
-            layers_to_exclude: List[str] = None,
-            *args: Any,
-            **kwargs: Any,
+        self,
+        sparsity_level: float = 0.0,
+        layers_to_exclude: List[str] = None,
+        *args: Any,
+        **kwargs: Any,
     ):
         super().__init__(*args, **kwargs)
         self.sparsity_level = sparsity_level

@@ -32,4 +32,7 @@ def entropy(p: torch.Tensor) -> torch.Tensor:
         torch.Tensor:
             entropy of the predicted probabilities
     """
-    return torch.distributions.Categorical(probs=p).entropy()
+    try:
+        return torch.distributions.Categorical(probs=p).entropy()
+    except ValueError:
+        return torch.distributions.Categorical(logits=p).entropy()

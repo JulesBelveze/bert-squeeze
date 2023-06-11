@@ -11,7 +11,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 
 def load_model_from_exp(
-        path_to_folder: str, module: pl.LightningModule
+    path_to_folder: str, module: pl.LightningModule
 ) -> pl.LightningModule:
     """
     Helper function to load a `pl.LightningModule` from a previous experiment.
