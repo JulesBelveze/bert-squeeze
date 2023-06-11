@@ -103,7 +103,7 @@ class LtFastBert(BaseTransformerModule):
         embedding_output = self.embeddings(input_ids, token_type_ids)
 
         output = self.encoder(
-            hidden_states=embedding_output,
+            embeddings=embedding_output,
             attention_mask=extended_attention_mask,
             device=self.device,
             inference=inference,

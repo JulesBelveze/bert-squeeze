@@ -159,10 +159,10 @@ class FastBertScorer:
     def to_dict(self) -> Dict[str, Dict[str, float]]:
         """"""
         return {
-            "acc": self.acc,
-            "prec": self.precision,
-            "rec": self.recall,
-            "f1": self.f1,
+            "acc": {key: np.mean(val) for key, val in self.acc.items()},
+            "prec": {key: np.mean(val) for key, val in self.precision.items()},
+            "rec": {key: np.mean(val) for key, val in self.recall.items()},
+            "f1": {key: np.mean(val) for key, val in self.f1.items()},
         }
 
     def reset(self) -> None:

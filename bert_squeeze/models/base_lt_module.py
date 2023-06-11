@@ -54,7 +54,7 @@ class BaseTransformerModule(pl.LightningModule):
         self.test_step_outputs = []
         self.validation_step_outputs = []
 
-        self._set_scorers(training_config.get("scorer_type", "regular"))
+        self._set_scorers(kwargs.get("scorer_type", "regular"))
         self._set_objective()
 
     def forward(self, **kwargs):
@@ -76,11 +76,14 @@ class BaseTransformerModule(pl.LightningModule):
 
     def on_validation_epoch_end(self):
         """"""
-        all_logits = torch.cat([pred["logits"] for pred in self.validation_step_outputs])
-        all_probs = F.softmax(all_logits, dim=-1)
-        labels_probs = all_probs.numpy()
+        if not self.trainer.sanity_checking:
+            all_logits = torch.cat(
+                [pred["logits"] for pred in self.validation_step_outputs]
+            )
+            all_probs = F.softmax(all_logits, dim=-1)
+            labels_probs = all_probs.numpy()
+            self.log_eval_report(labels_probs)
 
-        self.log_eval_report(labels_probs)
         self.valid_scorer.reset()
         self.validation_step_outputs.clear()
 
@@ -354,13 +357,15 @@ class BaseTransformerModule(pl.LightningModule):
         self.log_dict({f"eval/loss_{key}": val for key, val in logging_loss.items()})
 
         eval_report = self.valid_scorer.to_dict()
-        for key, value in eval_report.items():
-            if not isinstance(value, list) and not isinstance(value, np.ndarray):
-                self.log("eval/{}".format(key), value)
+        for metric, value in eval_report.items():
+            if isinstance(value, dict):
+                self.log_dict({f"eval/{metric}/{key}": v for key, v in value.items()})
+            elif not isinstance(value, list) and not isinstance(value, np.ndarray):
+                self.log("eval/{}".format(metric), value)
 
         for i in range(probs.shape[1]):
             fig = plt.figure(figsize=(15, 15))
-            sns.distplot(probs[:, i], kde=False, bins=100)
+            sns.histplot(probs[:, i], bins=100)
             plt.title("Probability boxplot for label {}".format(i))
             self.logger.experiment.add_figure("eval/dist_label_{}".format(i), fig)
             plt.close("all")
