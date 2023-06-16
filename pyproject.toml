@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bert-squeeze"
-version = "0.1.0"
+version = "0.1.1"
 description = "Tools for Transformers compression using PyTorch Lightning"
 authors = ["JulesBelveze <jules.belveze@hotmail.fr>"]
 keywords = ["nlp", "transformers", "bert"]
