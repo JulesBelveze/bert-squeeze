@@ -87,6 +87,13 @@ def get_neptune_tags(args: DictConfig) -> List[str]:
 
 
 def deep_update(d, u):
+    """"""
+    if isinstance(u, list):
+        if d is None:
+            return u
+        d.extend(u)
+        return d
+
     for k, v in u.items():
         if isinstance(v, collections.abc.Mapping):
             d[k] = deep_update(d.get(k, {}), v)

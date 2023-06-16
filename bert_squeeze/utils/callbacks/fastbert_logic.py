@@ -1,5 +1,5 @@
 import lightning.pytorch as pl
-from pytorch_lightning.callbacks import BaseFinetuning
+from lightning.pytorch.callbacks import BaseFinetuning
 from torch.optim.optimizer import Optimizer
 
 
@@ -31,11 +31,7 @@ class FastBertLogic(BaseFinetuning):
         ), "The 'training_stage' should be 0 when starting to finetune FastBert."
 
     def finetune_function(
-        self,
-        pl_module: pl.LightningModule,
-        current_epoch: int,
-        optimizer: Optimizer,
-        optimizer_idx: int,
+        self, pl_module: pl.LightningModule, current_epoch: int, optimizer: Optimizer
     ) -> None:
         """
         Called when the epoch begins
@@ -46,8 +42,6 @@ class FastBertLogic(BaseFinetuning):
                 current epoch we are in
             optimizer (Optimizer):
                 optimizer used for training
-            optimizer_idx (int):
-                index of the optimizer to use
         """
         if current_epoch >= self.freeze_at_epoch:
             pl_module.training_stage = 1

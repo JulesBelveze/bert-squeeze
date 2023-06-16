@@ -23,8 +23,8 @@ Content
    :caption: Getting started
 
    installation
-   concepts
-   faq
+   tutorials/Training
+   tutorials/Distillation
 
 
 .. toctree::
@@ -32,6 +32,7 @@ Content
    :caption: Bertsqueeze
 
    overview
+   concepts
    assistants
    distillation
    models
@@ -40,7 +41,7 @@ Content
    :maxdepth: 2
    :caption: API References
 
-   api`
+   api
    GitHub Repository <https://github.com/JulesBelveze/bert-squeeze>
 
 

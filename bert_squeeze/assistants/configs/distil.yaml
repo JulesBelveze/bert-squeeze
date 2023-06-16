@@ -14,6 +14,7 @@ general:
 train:
   adam_eps: 1e-8
   accumulation_steps: 1
+  alpha: 0.5
   auto_lr: false
   discriminative_learning: true
   dropout: 0.2
@@ -35,13 +36,15 @@ train:
 model:
   _target_: bert_squeeze.distillation.distiller.Distiller
   teacher:
-    _target_: transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
-    pretrained_model_name_or_path: "bert-base-uncased"
+    _target_: bert_squeeze.models.lt_bert.LtCustomBert
+    pretrained_model: "bert-base-uncased"
     num_labels: ${general.num_labels}
+    training_config: ${train}
   student:
-    _target_: transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
-    pretrained_model_name_or_path: "bert-base-cased"
+    _target_: bert_squeeze.models.lt_bert.LtCustomBert
+    pretrained_model: "bert-base-cased"
     num_labels: ${general.num_labels}
+    training_config: ${train}
   training_config: ${train}
 
 
@@ -55,7 +58,7 @@ data:
       split:
       text_col: "text"
       label_col: "label"
-    tokenizer_name: ${model.teacher.pretrained_model_name_or_path}
+    tokenizer_name: ${model.teacher.pretrained_model}
     max_length: 256
   student_module:
     _target_: bert_squeeze.data.modules.transformer_module.TransformerDataModule
@@ -65,5 +68,7 @@ data:
       split: ${data.teacher_module.dataset_config.split}
       text_col: ${data.teacher_module.dataset_config.text_col}
       label_col: ${data.teacher_module.dataset_config.label_col}
-    tokenizer_name: ${model.student.pretrained_model_name_or_path}
+    tokenizer_name: ${model.student.pretrained_model}
     max_length: 256
+
+callbacks:

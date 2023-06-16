@@ -27,6 +27,7 @@ extensions = [
     "sphinx_copybutton",
     "sphinx.ext.githubpages",
     "sphinxcontrib.autodoc_pydantic",
+    "nbsphinx",
     "myst_parser"
 ]
 autoclass_content = 'both'

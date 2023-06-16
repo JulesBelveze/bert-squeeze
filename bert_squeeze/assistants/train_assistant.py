@@ -15,7 +15,7 @@ CONFIG_MAPPER = {
     "lstm": "train_lstm.yaml",
     "deebert": "train_deebert.yaml",
     "fastbert": "train_fastbert.yaml",
-    "theseus-bert": "train_theseus_bert.yaml",
+    "theseusbert": "train_theseus_bert.yaml",
 }
 
 
@@ -59,11 +59,17 @@ class TrainAssistant(object):
         logger_kwargs: Dict[str, Any] = None,
         callbacks: List[Callback] = None,
     ):
-        conf = OmegaConf.load(
-            resource_filename(
-                "bert_squeeze", os.path.join("assistants/configs", CONFIG_MAPPER[name])
+        try:
+            conf = OmegaConf.load(
+                resource_filename(
+                    "bert_squeeze",
+                    os.path.join("assistants/configs", CONFIG_MAPPER[name]),
+                )
             )
-        )
+        except KeyError:
+            raise ValueError(
+                f"'{name}' is not a valid configuration name, please use one of the following: {CONFIG_MAPPER.keys()}"
+            )
         if (
             data_kwargs is not None
             and data_kwargs.get("dataset_config", {}).get("path") is not None

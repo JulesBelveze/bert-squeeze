@@ -7,6 +7,9 @@
 */*/__pycache__/
 */*/*/__pycache__/
 
+# docs
+docs/_build
+
 # data
 bert-squeeze/data/classification
 bert-squeeze/data/unlabeled

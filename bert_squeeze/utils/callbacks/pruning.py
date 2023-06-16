@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Union
 
 import lightning.pytorch as pl
 import torch
-from pytorch_lightning.callbacks.base import Callback
+from lightning.pytorch.callbacks import Callback
 from torch.optim import Optimizer
 
 STEP_OUTPUT = Union[torch.Tensor, Dict[str, Any]]
@@ -25,16 +25,12 @@ class ThresholdBasedPruning(Callback):
     def __init__(
         self, threshold: float, start_pruning_epoch: int = 10, *args: Any, **kwargs: Any
     ):
-        super().__init__(*args, **kwargs)
+        super().__init__()
         self.threshold = threshold
         self.start_pruning_epoch = start_pruning_epoch
 
     def on_before_optimizer_step(
-        self,
-        trainer: pl.Trainer,
-        pl_module: pl.LightningModule,
-        optimizer: Optimizer,
-        optimizer_idx: int,
+        self, trainer: pl.Trainer, pl_module: pl.LightningModule, optimizer: Optimizer
     ) -> None:
         """
         Method called before `optimizer.step()` to zero prune gradients
@@ -46,8 +42,6 @@ class ThresholdBasedPruning(Callback):
                 Lightning module
             optimizer (Optimizer):
                 optimizer used for training
-            optimizer_idx (int):
-                index of the optimizer to use
 
         """
         if pl_module.current_epoch >= self.start_pruning_epoch != -1:
@@ -81,6 +75,7 @@ class ThresholdBasedPruning(Callback):
             pl_module (pl.LightningModule):
                 Lightning module
         """
+        print("Pruning model...")
         if self.start_pruning_epoch == -1:
             self._prune_model(pl_module)
 
@@ -92,6 +87,12 @@ class ThresholdBasedPruning(Callback):
             pl_module (pl.LightningModule):
                 Lightning module
         """
+        try:
+            # Only prune the student when performing distillation
+            pl_module = pl_module.get_submodule("student")
+        except AttributeError:
+            pass
+
         for name, param in pl_module.named_parameters():
             if "weight" in name:
                 param_mask = torch.abs(param) < self.threshold
@@ -173,6 +174,12 @@ class SparsityBasedPruning(Callback):
             pl_module (pl.LightningModule):
                 Lightning module
         """
+        try:
+            # Only prune the student when performing distillation
+            pl_module = pl_module.get_submodule("student")
+        except AttributeError:
+            pass
+
         with torch.no_grad():
             for param in pl_module.parameters():
                 mask = torch.lt(torch.abs(param), threshold)
