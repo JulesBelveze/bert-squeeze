@@ -1,0 +1,906 @@
+<!doctype html>
+<html class="no-js" lang="en">
+  <head><meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta property="og:title" content="Training" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="tutorials/Training.html" />
+<meta property="og:site_name" content="bertsqueeze" />
+<meta property="og:description" content="Training a simple Transformer model: We start by training a simple Transformer model on the Setfit/emotion dataset. We chose microsoft/xtremedistil-l6-h256-uncased as it is a relatively lightweight..." />
+<meta property="og:image:width" content="1146" />
+<meta property="og:image:height" content="600" />
+<meta property="og:image" content="/_images/social_previews/summary_tutorials_Training_297dc3d9.png" />
+<meta property="og:image:alt" content="Training a simple Transformer model: We start by training a simple Transformer model on the Setfit/emotion dataset. We chose microsoft/xtremedistil-l6-h256-u..." />
+<meta name="description" content="Training a simple Transformer model: We start by training a simple Transformer model on the Setfit/emotion dataset. We chose microsoft/xtremedistil-l6-h256-uncased as it is a relatively lightweight..." />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Distillation + Pruning + Quantization" href="Distillation.html" /><link rel="prev" title="Installation" href="../installation.html" />
+
+    <link rel="shortcut icon" href="../_static/bert-squeeze.png"/><!-- Generated with Sphinx 7.0.1 and Furo 2023.05.20 -->
+        <title>Training - bertsqueeze</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=e6660623a769aa55fea372102b9bf3151b292993" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?digest=30d1aed668e5c3a91c3e3bf6a60b675221979f0e" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f8f8f8;
+  --color-code-foreground: black;
+  --color-brand-primary: #547fff;
+  --color-brand-content: #547fff;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #547fff;
+  --color-brand-content: #547fff;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #547fff;
+  --color-brand-content: #547fff;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-half" viewBox="0 0 24 24">
+    <title>Auto light/dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-shadow">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M13 12h5" />
+      <path d="M13 15h4" />
+      <path d="M13 18h1" />
+      <path d="M13 9h4" />
+      <path d="M13 6h1" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
+<label class="overlay sidebar-overlay" for="__navigation">
+  <div class="visually-hidden">Hide navigation sidebar</div>
+</label>
+<label class="overlay toc-overlay" for="__toc">
+  <div class="visually-hidden">Hide table of contents sidebar</div>
+</label>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <div class="visually-hidden">Toggle site navigation sidebar</div>
+        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">bertsqueeze</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle">
+          <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+          <svg class="theme-icon-when-auto"><use href="#svg-sun-half"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <div class="visually-hidden">Toggle table of contents sidebar</div>
+        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo only-light" src="../_static/bert-squeeze.png" alt="Light Logo"/>
+    <img class="sidebar-logo only-dark" src="../_static/bert-squeeze.png" alt="Dark Logo"/>
+  </div>
+  
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Distillation.html">Distillation + Pruning + Quantization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Bertsqueeze</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../concepts.html">Concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../assistants.html">Assistants</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distillation.html">Distillation</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><div class="visually-hidden">Toggle navigation of Distillation</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../distillation.utils.html">Distillation Utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../models.html">Models</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API References</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../api.html">API</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><div class="visually-hidden">Toggle navigation of API</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../assistants.html">Assistants</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../models.html">Models</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../distillation.html">Distillation</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><div class="visually-hidden">Toggle navigation of Distillation</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../distillation.utils.html">Distillation Utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../data.html">Data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../inference.html">Inference</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../bert_squeeze.utils.html">Utilities</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><div class="visually-hidden">Toggle navigation of Utilities</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../bert_squeeze.utils.utils_fct.html">Utility functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../bert_squeeze.utils.vocabulary.html">Vocabulary</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../bert_squeeze.utils.artifacts.html">Artifacts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../bert_squeeze.utils.callbacks.html">Callbacks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../bert_squeeze.utils.losses.html">Losses</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../bert_squeeze.utils.schedulers.html">Schedulers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../bert_squeeze.utils.scorers.html">Scorers</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/JulesBelveze/bert-squeeze">GitHub Repository</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/JulesBelveze/bert-squeeze/edit/main/docs/tutorials/Training.ipynb" title="Edit this page">
+    <svg aria-hidden="true" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+      <path d="M4 20h4l10.5 -10.5a1.5 1.5 0 0 0 -4 -4l-10.5 10.5v4" />
+      <line x1="13.5" y1="6.5" x2="17.5" y2="10.5" />
+    </svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle">
+              <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+              <svg class="theme-icon-when-auto"><use href="#svg-sun-half"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <div class="visually-hidden">Toggle table of contents sidebar</div>
+            <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+          </label>
+        </div>
+        <article role="main">
+          <section id="Training">
+<h1>Training<a class="headerlink" href="#Training" title="Permalink to this heading">#</a></h1>
+<section id="Training-a-simple-Transformer-model">
+<h2>Training a simple Transformer model<a class="headerlink" href="#Training-a-simple-Transformer-model" title="Permalink to this heading">#</a></h2>
+<p>We start by training a simple Transformer model on the <code class="docutils literal notranslate"><span class="pre">Setfit/emotion</span></code> dataset. We chose <code class="docutils literal notranslate"><span class="pre">microsoft/xtremedistil-l6-h256-uncased</span></code> as it is a relatively lightweight base model.</p>
+<p>Note: in the following sections we limit the number of training steps in the <code class="docutils literal notranslate"><span class="pre">Trainer</span></code> as it is a simple demo code but you will need to increase (or unset) the <code class="docutils literal notranslate"><span class="pre">max_steps</span></code> parameter to achieve decent performance.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from bert_squeeze.assistants import TrainAssistant
+from lightning.pytorch import Trainer
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/Users/julesbelveze/Desktop/bert-squeeze/.venv/bert_squeeze/lib/python3.8/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>config_assistant = {
+    &quot;name&quot;: &quot;bert&quot;,
+    &quot;train_kwargs&quot;: {
+        &quot;objective&quot;: &quot;ce&quot;
+    },
+    &quot;model_kwargs&quot;: {
+        &quot;pretrained_model&quot;: &quot;microsoft/xtremedistil-l6-h256-uncased&quot;,
+        &quot;num_labels&quot;: 6
+    },
+    &quot;data_kwargs&quot;: {
+        &quot;max_length&quot;: 64,
+        &quot;tokenizer_name&quot;: &quot;microsoft/xtremedistil-l6-h256-uncased&quot;,
+        &quot;dataset_config&quot;: {
+            &quot;path&quot;: &quot;Setfit/emotion&quot;
+        }
+    }
+}
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>assistant = TrainAssistant(**config_assistant)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+WARNING:root:Found value for `dataset_config.path` which conflicts with parameter `dataset_path`, usingvalue from the later.
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>model = assistant.model
+
+train_dataloader = assistant.data.train_dataloader()
+test_dataloader = assistant.data.test_dataloader()
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+WARNING:datasets.builder:Using custom data configuration Setfit--emotion-89147fdf376d67e2
+WARNING:datasets.builder:Reusing dataset json (/Users/julesbelveze/.cache/huggingface/datasets/json/Setfit--emotion-89147fdf376d67e2/0.0.0/ac0ca5f5289a6cf108e706efcf040422dbbfa8e658dee6a819f20d76bb84d26b)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:00&lt;00:00, 365.50it/s]
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+INFO:root:Dataset &#39;Setfit/emotion&#39; successfully loaded.
+WARNING:datasets.arrow_dataset:Loading cached processed dataset at /Users/julesbelveze/.cache/huggingface/datasets/json/Setfit--emotion-89147fdf376d67e2/0.0.0/ac0ca5f5289a6cf108e706efcf040422dbbfa8e658dee6a819f20d76bb84d26b/cache-6e5f71b3bbea4a96.arrow
+WARNING:datasets.arrow_dataset:Loading cached processed dataset at /Users/julesbelveze/.cache/huggingface/datasets/json/Setfit--emotion-89147fdf376d67e2/0.0.0/ac0ca5f5289a6cf108e706efcf040422dbbfa8e658dee6a819f20d76bb84d26b/cache-5a6336aaca39c01e.arrow
+WARNING:datasets.arrow_dataset:Loading cached processed dataset at /Users/julesbelveze/.cache/huggingface/datasets/json/Setfit--emotion-89147fdf376d67e2/0.0.0/ac0ca5f5289a6cf108e706efcf040422dbbfa8e658dee6a819f20d76bb84d26b/cache-6f41d000bddb1cc5.arrow
+DatasetDict({
+    train: Dataset({
+        features: [&#39;labels&#39;, &#39;label_text&#39;, &#39;input_ids&#39;, &#39;token_type_ids&#39;, &#39;attention_mask&#39;],
+        num_rows: 16000
+    })
+    test: Dataset({
+        features: [&#39;labels&#39;, &#39;label_text&#39;, &#39;input_ids&#39;, &#39;token_type_ids&#39;, &#39;attention_mask&#39;],
+        num_rows: 2000
+    })
+    validation: Dataset({
+        features: [&#39;labels&#39;, &#39;label_text&#39;, &#39;input_ids&#39;, &#39;token_type_ids&#39;, &#39;attention_mask&#39;],
+        num_rows: 2000
+    })
+})
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>basic_trainer = Trainer(
+    max_steps=10
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>basic_trainer.fit(
+    model=model,
+    train_dataloaders=train_dataloader,
+    val_dataloaders=test_dataloader
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+
+  | Name       | Type             | Params
+------------------------------------------------
+0 | objective  | CrossEntropyLoss | 0
+1 | encoder    | CustomBertModel  | 12.8 M
+2 | classifier | Sequential       | 67.8 K
+------------------------------------------------
+12.8 M    Trainable params
+0         Non-trainable params
+12.8 M    Total params
+51.272    Total estimated model params size (MB)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Sanity Checking DataLoader 0:   0%|                                                                                                                                                                                     | 0/2 [00:00&lt;?, ?it/s]
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/Users/julesbelveze/Desktop/bert-squeeze/.venv/bert_squeeze/lib/python3.8/site-packages/lightning/pytorch/trainer/connectors/data_connector.py:430: PossibleUserWarning: The dataloader, val_dataloader, does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` (try 8 which is the number of cpus on this machine) in the `DataLoader` init to improve performance.
+  rank_zero_warn(
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/Users/julesbelveze/Desktop/bert-squeeze/.venv/bert_squeeze/lib/python3.8/site-packages/lightning/pytorch/trainer/connectors/data_connector.py:430: PossibleUserWarning: The dataloader, train_dataloader, does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` (try 8 which is the number of cpus on this machine) in the `DataLoader` init to improve performance.
+  rank_zero_warn(
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Epoch 0:   0%|▎                                                                                                                                                                                     | 1/500 [00:01&lt;09:27,  1.14s/it, v_num=14]
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/Users/julesbelveze/Desktop/bert-squeeze/bert_squeeze/utils/optimizers/bert_adam.py:226: UserWarning: This overload of add_ is deprecated:
+        add_(Number alpha, Tensor other)
+Consider using one of the following signatures instead:
+        add_(Tensor other, *, Number alpha) (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/torch/csrc/utils/python_arg_parser.cpp:1485.)
+  next_m.mul_(beta1).add_(1 - beta1, grad)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Epoch 0:   2%|███▌                                                                                                                                                                                 | 10/500 [00:10&lt;08:34,  1.05s/it, v_num=14]
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+`Trainer.fit` stopped: `max_steps=10` reached.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Epoch 0:   2%|███▌                                                                                                                                                                                 | 10/500 [00:10&lt;08:54,  1.09s/it, v_num=14]
+</pre></div></div>
+</div>
+</section>
+<section id="Training-FastBert">
+<h2>Training FastBert<a class="headerlink" href="#Training-FastBert" title="Permalink to this heading">#</a></h2>
+<p>Fine-tuning a <code class="docutils literal notranslate"><span class="pre">FastBert</span></code> model is as easy as fine-tuning a regular BERT. The only difference is that you need to use the <code class="docutils literal notranslate"><span class="pre">FastBertLogic</span></code> callback. The callback is in charge of freezing the model’s backbone after some steps.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>config_assistant_fastbert = {
+    &quot;name&quot;: &quot;fastbert&quot;,
+    &quot;train_kwargs&quot;: {
+        &quot;objective&quot;: &quot;ce&quot;
+    },
+    &quot;model_kwargs&quot;: {
+        &quot;pretrained_model&quot;: &quot;microsoft/xtremedistil-l6-h256-uncased&quot;,
+        &quot;num_labels&quot;: 6
+    },
+    &quot;data_kwargs&quot;: {
+        &quot;max_length&quot;: 64,
+        &quot;tokenizer_name&quot;: &quot;microsoft/xtremedistil-l6-h256-uncased&quot;,
+        &quot;dataset_config&quot;: {
+            &quot;path&quot;: &quot;Setfit/emotion&quot;
+        }
+    }
+}
+
+fastbert_assistant = TrainAssistant(**config_assistant_fastbert)
+
+basic_trainer = Trainer(
+    max_steps=10,
+    callbacks=fastbert_assistant.callbacks
+)
+
+basic_trainer.fit(
+    model=fastbert_assistant.model,
+    train_dataloaders=fastbert_assistant.data.train_dataloader(),
+    val_dataloaders=fastbert_assistant.data.test_dataloader()
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+WARNING:root:Found value for `dataset_config.path` which conflicts with parameter `dataset_path`, usingvalue from the later.
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+WARNING:datasets.builder:Using custom data configuration Setfit--emotion-89147fdf376d67e2
+WARNING:datasets.builder:Reusing dataset json (/Users/julesbelveze/.cache/huggingface/datasets/json/Setfit--emotion-89147fdf376d67e2/0.0.0/ac0ca5f5289a6cf108e706efcf040422dbbfa8e658dee6a819f20d76bb84d26b)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:00&lt;00:00, 554.02it/s]
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+INFO:root:Dataset &#39;Setfit/emotion&#39; successfully loaded.
+WARNING:datasets.arrow_dataset:Loading cached processed dataset at /Users/julesbelveze/.cache/huggingface/datasets/json/Setfit--emotion-89147fdf376d67e2/0.0.0/ac0ca5f5289a6cf108e706efcf040422dbbfa8e658dee6a819f20d76bb84d26b/cache-59ba575e7730665b.arrow
+WARNING:datasets.arrow_dataset:Loading cached processed dataset at /Users/julesbelveze/.cache/huggingface/datasets/json/Setfit--emotion-89147fdf376d67e2/0.0.0/ac0ca5f5289a6cf108e706efcf040422dbbfa8e658dee6a819f20d76bb84d26b/cache-889acfd77e30ecff.arrow
+WARNING:datasets.arrow_dataset:Loading cached processed dataset at /Users/julesbelveze/.cache/huggingface/datasets/json/Setfit--emotion-89147fdf376d67e2/0.0.0/ac0ca5f5289a6cf108e706efcf040422dbbfa8e658dee6a819f20d76bb84d26b/cache-e076430c3e6abb98.arrow
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+
+
+  | Name       | Type             | Params
+------------------------------------------------
+0 | objective  | CrossEntropyLoss | 0
+1 | embeddings | BertEmbeddings   | 7.9 M
+2 | encoder    | FastBertGraph    | 6.7 M
+------------------------------------------------
+14.7 M    Trainable params
+0         Non-trainable params
+14.7 M    Total params
+58.669    Total estimated model params size (MB)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+DatasetDict({
+    train: Dataset({
+        features: [&#39;labels&#39;, &#39;label_text&#39;, &#39;input_ids&#39;, &#39;token_type_ids&#39;, &#39;attention_mask&#39;],
+        num_rows: 16000
+    })
+    test: Dataset({
+        features: [&#39;labels&#39;, &#39;label_text&#39;, &#39;input_ids&#39;, &#39;token_type_ids&#39;, &#39;attention_mask&#39;],
+        num_rows: 2000
+    })
+    validation: Dataset({
+        features: [&#39;labels&#39;, &#39;label_text&#39;, &#39;input_ids&#39;, &#39;token_type_ids&#39;, &#39;attention_mask&#39;],
+        num_rows: 2000
+    })
+})
+Epoch 0:   2%|███▌                                                                                                                                                                                 | 10/500 [00:11&lt;09:11,  1.13s/it, v_num=15]
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+`Trainer.fit` stopped: `max_steps=10` reached.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Epoch 0:   2%|███▌                                                                                                                                                                                 | 10/500 [00:11&lt;09:24,  1.15s/it, v_num=15]
+</pre></div></div>
+</div>
+</section>
+<section id="Training-TheseusBert">
+<h2>Training TheseusBert<a class="headerlink" href="#Training-TheseusBert" title="Permalink to this heading">#</a></h2>
+<p>Similarly, fine-tuning a <code class="docutils literal notranslate"><span class="pre">TheseusBert</span></code> model is as simple as fine-tuning a regular BERT. For <code class="docutils literal notranslate"><span class="pre">TheseusBert</span></code> you do not even need to use a callback. The submodules are indeed substituted through a scheduler.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>config_assistant_fastbert = {
+    &quot;name&quot;: &quot;theseusbert&quot;,
+    &quot;train_kwargs&quot;: {
+        &quot;objective&quot;: &quot;ce&quot;
+    },
+    &quot;model_kwargs&quot;: {
+        &quot;pretrained_model&quot;: &quot;microsoft/xtremedistil-l6-h256-uncased&quot;,
+        &quot;num_labels&quot;: 6
+    },
+    &quot;data_kwargs&quot;: {
+        &quot;max_length&quot;: 64,
+        &quot;tokenizer_name&quot;: &quot;microsoft/xtremedistil-l6-h256-uncased&quot;,
+        &quot;dataset_config&quot;: {
+            &quot;path&quot;: &quot;Setfit/emotion&quot;
+        }
+    }
+}
+
+fastbert_assistant = TrainAssistant(**config_assistant_fastbert)
+
+basic_trainer = Trainer(
+    max_steps=10
+)
+
+basic_trainer.fit(
+    model=fastbert_assistant.model,
+    train_dataloaders=fastbert_assistant.data.train_dataloader(),
+    val_dataloaders=fastbert_assistant.data.test_dataloader()
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+WARNING:root:Found value for `dataset_config.path` which conflicts with parameter `dataset_path`, usingvalue from the later.
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+Some weights of TheseusBertModel were not initialized from the model checkpoint at microsoft/xtremedistil-l6-h256-uncased and are newly initialized: [&#39;encoder.successor_layers.2.attention.self.key.weight&#39;, &#39;encoder.successor_layers.2.attention.output.dense.weight&#39;, &#39;encoder.successor_layers.3.attention.output.dense.bias&#39;, &#39;encoder.successor_layers.2.attention.self.key.bias&#39;, &#39;encoder.successor_layers.5.attention.output.dense.bias&#39;, &#39;encoder.successor_layers.1.attention.self.query.bias&#39;, &#39;encoder.successor_layers.1.attention.self.value.bias&#39;, &#39;encoder.successor_layers.2.attention.output.LayerNorm.weight&#39;, &#39;encoder.successor_layers.1.output.dense.bias&#39;, &#39;encoder.successor_layers.2.attention.output.dense.bias&#39;, &#39;encoder.successor_layers.3.intermediate.dense.bias&#39;, &#39;encoder.successor_layers.3.attention.self.query.weight&#39;, &#39;encoder.successor_layers.1.attention.self.key.weight&#39;, &#39;encoder.successor_layers.3.attention.output.dense.weight&#39;, &#39;encoder.successor_layers.4.attention.self.value.bias&#39;, &#39;encoder.successor_layers.2.intermediate.dense.bias&#39;, &#39;encoder.successor_layers.1.intermediate.dense.bias&#39;, &#39;encoder.successor_layers.5.output.dense.bias&#39;, &#39;encoder.successor_layers.0.attention.self.key.bias&#39;, &#39;encoder.successor_layers.1.attention.self.value.weight&#39;, &#39;encoder.successor_layers.5.attention.self.query.weight&#39;, &#39;encoder.successor_layers.0.output.LayerNorm.bias&#39;, &#39;encoder.successor_layers.0.attention.output.dense.bias&#39;, &#39;encoder.successor_layers.0.attention.output.LayerNorm.bias&#39;, &#39;encoder.successor_layers.4.output.LayerNorm.bias&#39;, &#39;encoder.successor_layers.0.attention.self.value.bias&#39;, &#39;encoder.successor_layers.3.attention.self.key.weight&#39;, &#39;encoder.successor_layers.0.output.dense.bias&#39;, &#39;encoder.successor_layers.3.attention.self.value.weight&#39;, &#39;encoder.successor_layers.1.intermediate.dense.weight&#39;, &#39;encoder.successor_layers.3.output.dense.weight&#39;, &#39;encoder.successor_layers.1.attention.output.dense.weight&#39;, &#39;encoder.successor_layers.0.attention.self.query.bias&#39;, &#39;encoder.successor_layers.2.attention.self.query.bias&#39;, &#39;encoder.successor_layers.5.attention.output.LayerNorm.weight&#39;, &#39;encoder.successor_layers.1.attention.output.dense.bias&#39;, &#39;encoder.successor_layers.1.attention.output.LayerNorm.weight&#39;, &#39;encoder.successor_layers.2.intermediate.dense.weight&#39;, &#39;encoder.successor_layers.1.output.LayerNorm.bias&#39;, &#39;encoder.successor_layers.5.attention.self.key.bias&#39;, &#39;encoder.successor_layers.0.attention.self.key.weight&#39;, &#39;encoder.successor_layers.3.attention.self.query.bias&#39;, &#39;encoder.successor_layers.4.attention.output.dense.weight&#39;, &#39;encoder.successor_layers.5.attention.self.query.bias&#39;, &#39;encoder.successor_layers.0.attention.output.dense.weight&#39;, &#39;encoder.successor_layers.5.output.dense.weight&#39;, &#39;encoder.successor_layers.4.attention.self.query.bias&#39;, &#39;encoder.successor_layers.0.attention.self.query.weight&#39;, &#39;encoder.successor_layers.2.output.dense.bias&#39;, &#39;encoder.successor_layers.0.output.LayerNorm.weight&#39;, &#39;encoder.successor_layers.4.output.LayerNorm.weight&#39;, &#39;encoder.successor_layers.3.intermediate.dense.weight&#39;, &#39;encoder.successor_layers.1.attention.self.key.bias&#39;, &#39;encoder.successor_layers.2.output.LayerNorm.bias&#39;, &#39;encoder.successor_layers.4.attention.self.key.bias&#39;, &#39;encoder.successor_layers.0.intermediate.dense.weight&#39;, &#39;encoder.successor_layers.1.output.dense.weight&#39;, &#39;encoder.successor_layers.5.output.LayerNorm.bias&#39;, &#39;encoder.successor_layers.4.output.dense.bias&#39;, &#39;encoder.successor_layers.3.attention.output.LayerNorm.bias&#39;, &#39;encoder.successor_layers.0.attention.self.value.weight&#39;, &#39;encoder.successor_layers.3.attention.self.key.bias&#39;, &#39;encoder.successor_layers.5.attention.output.LayerNorm.bias&#39;, &#39;encoder.successor_layers.4.output.dense.weight&#39;, &#39;encoder.successor_layers.4.attention.output.LayerNorm.weight&#39;, &#39;encoder.successor_layers.4.attention.self.value.weight&#39;, &#39;encoder.successor_layers.2.attention.self.value.bias&#39;, &#39;encoder.successor_layers.4.attention.output.LayerNorm.bias&#39;, &#39;encoder.successor_layers.5.attention.self.value.bias&#39;, &#39;encoder.successor_layers.0.attention.output.LayerNorm.weight&#39;, &#39;encoder.successor_layers.3.output.dense.bias&#39;, &#39;encoder.successor_layers.4.attention.output.dense.bias&#39;, &#39;encoder.successor_layers.3.output.LayerNorm.weight&#39;, &#39;encoder.successor_layers.2.output.LayerNorm.weight&#39;, &#39;encoder.successor_layers.4.attention.self.key.weight&#39;, &#39;encoder.successor_layers.5.attention.output.dense.weight&#39;, &#39;encoder.successor_layers.0.output.dense.weight&#39;, &#39;encoder.successor_layers.3.output.LayerNorm.bias&#39;, &#39;encoder.successor_layers.4.attention.self.query.weight&#39;, &#39;encoder.successor_layers.2.attention.self.value.weight&#39;, &#39;encoder.successor_layers.0.intermediate.dense.bias&#39;, &#39;encoder.successor_layers.4.intermediate.dense.weight&#39;, &#39;encoder.successor_layers.5.intermediate.dense.bias&#39;, &#39;encoder.successor_layers.5.output.LayerNorm.weight&#39;, &#39;encoder.successor_layers.2.attention.self.query.weight&#39;, &#39;encoder.successor_layers.3.attention.self.value.bias&#39;, &#39;encoder.successor_layers.1.attention.output.LayerNorm.bias&#39;, &#39;encoder.successor_layers.2.output.dense.weight&#39;, &#39;encoder.successor_layers.5.intermediate.dense.weight&#39;, &#39;encoder.successor_layers.4.intermediate.dense.bias&#39;, &#39;encoder.successor_layers.1.attention.self.query.weight&#39;, &#39;encoder.successor_layers.3.attention.output.LayerNorm.weight&#39;, &#39;encoder.successor_layers.5.attention.self.value.weight&#39;, &#39;encoder.successor_layers.1.output.LayerNorm.weight&#39;, &#39;encoder.successor_layers.2.attention.output.LayerNorm.bias&#39;, &#39;encoder.successor_layers.5.attention.self.key.weight&#39;]
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+WARNING:datasets.builder:Using custom data configuration Setfit--emotion-89147fdf376d67e2
+WARNING:datasets.builder:Reusing dataset json (/Users/julesbelveze/.cache/huggingface/datasets/json/Setfit--emotion-89147fdf376d67e2/0.0.0/ac0ca5f5289a6cf108e706efcf040422dbbfa8e658dee6a819f20d76bb84d26b)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:00&lt;00:00, 378.92it/s]
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+INFO:root:Dataset &#39;Setfit/emotion&#39; successfully loaded.
+WARNING:datasets.arrow_dataset:Loading cached processed dataset at /Users/julesbelveze/.cache/huggingface/datasets/json/Setfit--emotion-89147fdf376d67e2/0.0.0/ac0ca5f5289a6cf108e706efcf040422dbbfa8e658dee6a819f20d76bb84d26b/cache-59ba575e7730665b.arrow
+WARNING:datasets.arrow_dataset:Loading cached processed dataset at /Users/julesbelveze/.cache/huggingface/datasets/json/Setfit--emotion-89147fdf376d67e2/0.0.0/ac0ca5f5289a6cf108e706efcf040422dbbfa8e658dee6a819f20d76bb84d26b/cache-889acfd77e30ecff.arrow
+WARNING:datasets.arrow_dataset:Loading cached processed dataset at /Users/julesbelveze/.cache/huggingface/datasets/json/Setfit--emotion-89147fdf376d67e2/0.0.0/ac0ca5f5289a6cf108e706efcf040422dbbfa8e658dee6a819f20d76bb84d26b/cache-e076430c3e6abb98.arrow
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+
+
+  | Name       | Type             | Params
+------------------------------------------------
+0 | objective  | CrossEntropyLoss | 0
+1 | encoder    | TheseusBertModel | 17.5 M
+2 | classifier | Sequential       | 67.8 K
+------------------------------------------------
+17.6 M    Trainable params
+0         Non-trainable params
+17.6 M    Total params
+70.226    Total estimated model params size (MB)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+DatasetDict({
+    train: Dataset({
+        features: [&#39;labels&#39;, &#39;label_text&#39;, &#39;input_ids&#39;, &#39;token_type_ids&#39;, &#39;attention_mask&#39;],
+        num_rows: 16000
+    })
+    test: Dataset({
+        features: [&#39;labels&#39;, &#39;label_text&#39;, &#39;input_ids&#39;, &#39;token_type_ids&#39;, &#39;attention_mask&#39;],
+        num_rows: 2000
+    })
+    validation: Dataset({
+        features: [&#39;labels&#39;, &#39;label_text&#39;, &#39;input_ids&#39;, &#39;token_type_ids&#39;, &#39;attention_mask&#39;],
+        num_rows: 2000
+    })
+})
+Epoch 0:   2%|███▌                                                                                                                                                                                 | 10/500 [00:10&lt;08:34,  1.05s/it, v_num=16]
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+`Trainer.fit` stopped: `max_steps=10` reached.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Epoch 0:   2%|███▌                                                                                                                                                                                 | 10/500 [00:10&lt;08:51,  1.08s/it, v_num=16]
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="Distillation.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Distillation + Pruning + Quantization</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="../installation.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Installation</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2023, Jules Belveze
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/JulesBelveze/bert-squeeze" aria-label="GitHub">
+                <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path>
+                </svg>
+            </a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Training</a><ul>
+<li><a class="reference internal" href="#Training-a-simple-Transformer-model">Training a simple Transformer model</a></li>
+<li><a class="reference internal" href="#Training-FastBert">Training FastBert</a></li>
+<li><a class="reference internal" href="#Training-TheseusBert">Training TheseusBert</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/scripts/furo.js"></script>
+    <script src="../_static/clipboard.min.js"></script>
+    <script src="../_static/copybutton.js"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    </body>
+</html>
