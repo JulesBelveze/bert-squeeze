@@ -59,9 +59,11 @@ class DeeBertEncoder(nn.Module):
         config (PretrainedConfig):
             Configuration to use to instantiate a model according to the specified
             arguments, defining the model architecture
+        inference (bool):
+            Whether to run the encoder in inference mode
     """
 
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PretrainedConfig, inference: bool):
         super(DeeBertEncoder, self).__init__()
         self.config = config
         self.layer = nn.ModuleList([BertLayer(config)] * config.num_hidden_layers)
@@ -70,6 +72,7 @@ class DeeBertEncoder(nn.Module):
         self.early_exit_entropy = [
             -1,
         ] * config.num_hidden_layers
+        self.inference = inference
 
     def set_early_exit_entropy(self, x: Union[List[float], float]) -> None:
         """
@@ -116,51 +119,76 @@ class DeeBertEncoder(nn.Module):
         """"""
         all_hidden_states = tuple() if output_hidden_states else None
         all_attentions = tuple() if output_attentions else None
-        all_ramps = tuple()
 
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
+        if not self.inference:
+            all_ramps = tuple()
 
-            layer_outputs = layer_module(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                head_mask=head_mask[i],
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-            )  # output of the BertLayer
-            hidden_states = layer_outputs[0]  # (bs * seq_len * hidden_dim)
+            for i, layer_module in enumerate(self.layer):
+                if output_hidden_states:
+                    all_hidden_states += (hidden_states,)
 
-            if output_attentions:
-                attention = layer_outputs[1]
-                all_attentions += (attention,)
+                layer_outputs = layer_module(
+                    hidden_states=hidden_states,
+                    attention_mask=attention_mask,
+                    head_mask=head_mask[i],
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                )  # output of the BertLayer
+                hidden_states = layer_outputs[0]  # (bs * seq_len * hidden_dim)
 
-            ramp_exit = self.ramp[i](hidden_states)  # RampOutput
+                if output_attentions:
+                    attention = layer_outputs[1]
+                    all_attentions += (attention,)
 
-            # At test time we sequentially compute the entropy of the output of each ramp
-            # and exit the model by throwing an exception when enough information has been
-            # computed.
-            # During training, we want to train all the layers regardless the entropy.
-            if not self.training:
+                ramp_exit = self.ramp[i](hidden_states)  # RampOutput
+                all_ramps += (ramp_exit,)
+
+                # Add last layer
+                if output_hidden_states:
+                    all_hidden_states = all_hidden_states + (hidden_states,)
+
+            return DeeBertEncoderOutput(
+                last_hidden_state=hidden_states,
+                hidden_states=all_hidden_states,
+                attentions=all_attentions,
+                ramps_exit=all_ramps,
+                exit_layer=i,
+            )
+        else:
+            all_ramps = [
+                0,
+            ] * hidden_states.shape[0]
+            positions = torch.arange(start=0, end=hidden_states.shape[0]).long()
+
+            for i, layer_module in enumerate(self.layer):
+                layer_outputs = layer_module(
+                    hidden_states=hidden_states,
+                    attention_mask=attention_mask,
+                    head_mask=head_mask[i],
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                )  # output of the BertLayer
+                hidden_states = layer_outputs[0]
+                ramp_exit = self.ramp[i](hidden_states)
                 ramp_exit.entropy = entropy(ramp_exit.logits)
-                all_ramps += (ramp_exit,)
 
-                # we don't go deeper in the model if the entropy is lower than the set threshold
-                if ramp_exit.entropy < self.early_exit_entropy[i]:
-                    raise RampException(all_ramps, i + 1)
-            else:
-                all_ramps += (ramp_exit,)
+                if i == len(self.layer) - 1:
+                    for idx, pos in enumerate(positions):
+                        all_ramps[pos] = ramp_exit[idx]
+                else:
+                    enough_info = ramp_exit.entropy < self.early_exit_entropy[i]
+                    right_pos = positions[enough_info]
 
-        # Add last layer
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+                    for idx, pos in enumerate(right_pos):
+                        all_ramps[pos] = ramp_exit[idx]
 
-        return DeeBertEncoderOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
-            ramps_exit=all_ramps,
-        )
+                    hidden_states = hidden_states[~enough_info]
+                    attention_mask = attention_mask[~enough_info]
+                    positions = positions[~enough_info]
+
+                    if positions.nelement() == 0:
+                        return DeeBertEncoderOutput(ramps_exit=all_ramps, exit_layer=i)
+            return DeeBertEncoderOutput(ramps_exit=all_ramps, exit_layer=i)
 
 
 class DeeBertModel(BertPreTrainedModel, ABC):
@@ -171,17 +199,23 @@ class DeeBertModel(BertPreTrainedModel, ABC):
         config (PretrainedConfig):
             Configuration to use to instantiate a model according to the specified
             arguments, defining the model architecture
+        inference (bool):
+            Whether to run the encoder in inference mode
     """
 
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PretrainedConfig, inference: bool = False):
         super(DeeBertModel, self).__init__(config)
         self.config = config
 
         self.embeddings = BertEmbeddings(config)
-        self.encoder = DeeBertEncoder(config)
+        self.encoder = DeeBertEncoder(config, inference)
         self.pooler = BertPooler(config)
 
         self.init_weights()
+
+    def set_inference_mode(self, inference: bool) -> None:
+        """"""
+        self.encoder.inference = inference
 
     def init_highway_pooler(self) -> None:
         """
@@ -318,8 +352,10 @@ class DeeBertModel(BertPreTrainedModel, ABC):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
         )
-        sequence_output = encoder_outputs.last_hidden_state
-        pooled_output = self.pooler(sequence_output)
+        sequence_output = (
+            None if self.encoder.inference else encoder_outputs.last_hidden_state
+        )
+        pooled_output = None if self.encoder.inference else self.pooler(sequence_output)
 
         return DeeBertModelOutput(
             sequence_output=sequence_output,
@@ -327,4 +363,5 @@ class DeeBertModel(BertPreTrainedModel, ABC):
             hidden_states=encoder_hidden_states,
             attentions=encoder_outputs.attentions,
             ramps_exits=encoder_outputs.ramps_exit,
+            exit_layer=encoder_outputs.exit_layer,
         )

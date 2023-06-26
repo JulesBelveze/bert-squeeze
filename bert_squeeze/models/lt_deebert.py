@@ -77,26 +77,24 @@ class LtDeeBert(BaseTransformerModule):
             int:
                 index of the exited ramp
         """
-        try:
-            exit_layer = self.num_layers
-            outputs = self.bert(
-                input_ids,
-                attention_mask=attention_mask,
-                token_type_ids=token_type_ids,
-                position_ids=position_ids,
-                head_mask=head_mask,
-            )
-            pooled_output = outputs.pooled_output
+        outputs = self.bert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+        )
 
+        if self.training:
+            exit_layer = self.num_layers
+            pooled_output = outputs.pooled_output
             pooled_output = self.dropout(pooled_output)
             logits = self.classifier(pooled_output)
             ramps_exits = outputs.ramps_exits
-
-        except RampException as e:
-            outputs = e.message
-            ramps_exits = outputs[-1]
-            exit_layer = e.exit_layer
-            logits = outputs[0]
+        else:
+            ramps_exits = outputs.ramps_exits
+            exit_layer = outputs.exit_layer
+            logits = outputs.logits
 
         return logits, ramps_exits, exit_layer
 
@@ -110,7 +108,10 @@ class LtDeeBert(BaseTransformerModule):
         }
         logits, ramps_exits, exit_layer = self.forward(**inputs)
         loss = self.loss(
-            logits=logits, labels=batch["labels"], train_ramps=self.train_highway
+            logits=logits,
+            labels=batch["labels"],
+            train_ramps=self.train_highway,
+            ramps_exits=ramps_exits,
         )
 
         self.scorer.add(logits.detach().cpu(), batch["labels"], loss.detach().cpu())
@@ -137,7 +138,10 @@ class LtDeeBert(BaseTransformerModule):
         }
         logits, ramps_exits, exit_layer = self.forward(**inputs)
         loss = self.loss(
-            logits=logits, labels=batch["labels"], train_ramps=self.train_highway
+            logits=logits,
+            labels=batch["labels"],
+            ramps_exits=ramps_exits,
+            train_ramps=self.train_highway,
         )
         self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
         self.validation_step_outputs.append(
@@ -153,6 +157,42 @@ class LtDeeBert(BaseTransformerModule):
 
         self.log_eval_report(labels_probs)
         self.valid_scorer.reset()
+
+    @overrides
+    def test_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
+        """"""
+        inputs = {
+            "input_ids": batch["input_ids"],
+            "attention_mask": batch["attention_mask"],
+            "token_type_ids": batch["token_type_ids"],
+        }
+        logits, ramps_exits, exit_layer = self.forward(**inputs)
+        loss = self.loss(
+            logits=logits, labels=batch["labels"], train_ramps=self.train_highway
+        )
+        self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
+        self.test_step_outputs.append(
+            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
+        )
+        return loss
+
+    def on_test_epoch_end(self) -> None:
+        """"""
+        logging.info(self.test_scorer.get_table())
+        self.test_scorer.reset()
+
+    def predict_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
+        """"""
+        self.bert.set_inference_mode(inference=True)
+
+        inputs = {
+            "input_ids": batch["input_ids"],
+            "attention_mask": batch["attention_mask"],
+            "token_type_ids": batch["token_type_ids"],
+        }
+        logits, _, _ = self.forward(**inputs)
+        preds = torch.softmax(logits, dim=-1)
+        return preds
 
     @overrides
     def _get_optimizer_parameters(self) -> List[Dict]:
@@ -313,9 +353,9 @@ class LtDeeBert(BaseTransformerModule):
         # We want to fine-tune each individual ramp
         if train_ramps:
             ramps_losses = []
-            # We train all but the last off ramp (corresponds to stage 2 in paper)
+            # We train all but the last off-ramp (corresponds to stage 2 in paper)
             for ramps_exit in ramps_exits[:-1]:
-                ramps_logits = ramps_exit[0]
+                ramps_logits = ramps_exit.logits
 
                 loss_fct = CrossEntropyLoss()
                 ramps_loss = loss_fct(
@@ -325,35 +365,12 @@ class LtDeeBert(BaseTransformerModule):
 
             loss = sum(ramps_losses)
         else:
-            # We only train the last off ramp
+            # We only train the last off-ramp
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(
                 logits.view(-1, self.model_config.num_labels), labels.view(-1)
             )
         return loss
-
-    @overrides
-    def test_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        """"""
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"],
-        }
-        logits, ramps_exits, exit_layer = self.forward(**inputs)
-        loss = self.loss(
-            logits=logits, labels=batch["labels"], train_ramps=self.train_highway
-        )
-        self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        self.test_step_outputs.append(
-            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
-        )
-        return loss
-
-    def on_test_epoch_end(self) -> None:
-        """"""
-        logging.info(self.test_scorer.get_table())
-        self.test_scorer.reset()
 
     @overrides
     def _build_model(self):

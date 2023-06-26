@@ -1,6 +1,6 @@
 import dataclasses
 from dataclasses import dataclass, field
-from typing import Optional, Tuple, TypeVar
+from typing import List, Optional, Tuple, TypeVar, Union
 
 import torch
 
@@ -9,11 +9,22 @@ import torch
 class RampOutput:
     logits: torch.Tensor
     pooled_output: torch.Tensor
-    entropy: Optional[float] = None
+    entropy: Optional[Union[float, torch.Tensor]] = None
+
+    def __getitem__(self, item):
+        """"""
+        if self.logits.squeeze().dim() == 1:
+            return self
+        return RampOutput(
+            logits=self.logits[item],
+            pooled_output=self.pooled_output[item],
+            entropy=None if self.entropy is None else self.entropy[item],
+        )
 
 
 @dataclass
 class DeeBertEncoderOutput:
+    exit_layer: int
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -22,11 +33,17 @@ class DeeBertEncoderOutput:
 
 @dataclass
 class DeeBertModelOutput:
+    exit_layer: int
     sequence_output: Optional[torch.FloatTensor] = None
     pooled_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[torch.FloatTensor] = None
     attentions: Optional[torch.FloatTensor] = None
     ramps_exits: Optional[torch.FloatTensor] = None
+
+    @property
+    def logits(self) -> torch.Tensor:
+        """"""
+        return torch.stack([ramp.logits for ramp in self.ramps_exits], dim=0)
 
 
 @dataclass
