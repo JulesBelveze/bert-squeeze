@@ -8,8 +8,10 @@ from hydra.core.hydra_config import HydraConfig
 from sklearn.feature_extraction.text import CountVectorizer
 from torch.utils.data import DataLoader
 
+from .base import BaseDataModule
 
-class LrDataModule(pl.LightningDataModule):
+
+class LrDataModule(BaseDataModule):
     """
     DataModule for Logistic Regression which can be seen as a bag of n-grams.
 
@@ -38,20 +40,6 @@ class LrDataModule(pl.LightningDataModule):
         self.train = None
         self.test = None
         self.val = None
-
-    def load_dataset(self) -> None:
-        """
-        Load dataset
-        """
-        if self.dataset_config.is_local:
-            self.dataset = datasets.load_dataset(
-                self.dataset_config.path, split=self.dataset_config.split
-            )
-        else:
-            self.dataset = datasets.load_dataset(
-                self.dataset_config.path, split=self.dataset_config.split
-            )
-        logging.info(f"Dataset '{self.dataset_config.path}' successfully loaded.")
 
     def featurize(self) -> DatasetDict:
         """
@@ -101,10 +89,6 @@ class LrDataModule(pl.LightningDataModule):
         dataset.set_format(type='torch', columns=["features", "labels"])
         logging.info("LrFeaturizer: data successfully featurized and Dataset created.")
         return dataset
-
-    def prepare_data(self) -> None:
-        """"""
-        self.load_dataset()
 
     def setup(self, stage: Optional[str] = None):
         """"""

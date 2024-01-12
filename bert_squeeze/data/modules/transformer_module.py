@@ -8,8 +8,10 @@ from overrides import overrides
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
+from .base import BaseDataModule
 
-class TransformerDataModule(pl.LightningDataModule):
+
+class TransformerDataModule(BaseDataModule):
     """
     DataModule for Transformer-based models.
 
@@ -41,18 +43,6 @@ class TransformerDataModule(pl.LightningDataModule):
         self.test = None
         self.val = None
 
-    def load_dataset(self) -> None:
-        """"""
-        if self.dataset_config.is_local:
-            self.dataset = datasets.load_dataset(
-                self.dataset_config.path  # , split=self.dataset_config.split
-            )
-        else:
-            self.dataset = datasets.load_dataset(
-                self.dataset_config.path  # , split=self.dataset_config.split
-            )
-        logging.info(f"Dataset '{self.dataset_config.path}' successfully loaded.")
-
     def featurize(self) -> datasets.DatasetDict:
         """
         Returns:
@@ -77,10 +67,6 @@ class TransformerDataModule(pl.LightningDataModule):
 
         tokenized_dataset.set_format(type='torch', columns=columns)
         return tokenized_dataset
-
-    def prepare_data(self) -> None:
-        """"""
-        self.load_dataset()
 
     def setup(self, stage: Optional[str] = None):
         """"""

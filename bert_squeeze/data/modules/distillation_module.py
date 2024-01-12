@@ -99,9 +99,7 @@ class DistillationDataModule(pl.LightningDataModule):
             example["label"] = -100
             return example
 
-        soft_dataset = datasets.load_dataset(
-            self.soft_dataset_config.path,  # split=self.soft_dataset_config.split
-        )
+        soft_dataset = datasets.load_dataset(self.soft_dataset_config.path)
 
         if self.soft_dataset_config.text_col != "text":
             soft_dataset = soft_dataset.rename_column(
