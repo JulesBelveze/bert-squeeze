@@ -45,11 +45,11 @@ class LrDataModule(pl.LightningDataModule):
         """
         if self.dataset_config.is_local:
             self.dataset = datasets.load_dataset(
-                self.dataset_config.path, self.dataset_config.split
+                self.dataset_config.path, split=self.dataset_config.split
             )
         else:
             self.dataset = datasets.load_dataset(
-                self.dataset_config.path, self.dataset_config.split
+                self.dataset_config.path, split=self.dataset_config.split
             )
         logging.info(f"Dataset '{self.dataset_config.path}' successfully loaded.")
 

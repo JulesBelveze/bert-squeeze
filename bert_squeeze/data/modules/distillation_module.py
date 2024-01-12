@@ -100,7 +100,7 @@ class DistillationDataModule(pl.LightningDataModule):
             return example
 
         soft_dataset = datasets.load_dataset(
-            self.soft_dataset_config.path, self.soft_dataset_config.split
+            self.soft_dataset_config.path,  # split=self.soft_dataset_config.split
         )
 
         if self.soft_dataset_config.text_col != "text":

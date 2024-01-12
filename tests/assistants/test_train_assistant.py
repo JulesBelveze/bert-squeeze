@@ -18,9 +18,7 @@ from bert_squeeze.models import (
 def lr_assistant():
     return TrainAssistant(
         "lr",
-        data_kwargs={
-            "dataset_config": {"path": "Setfit/emotion", "split": "train[:10%]"}
-        },
+        data_kwargs={"dataset_config": {"path": "Setfit/emotion"}},
         general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
     )
 
@@ -42,9 +40,7 @@ class TestTrainAssistant:
         """"""
         bert_assistant = TrainAssistant(
             "bert",
-            data_kwargs={
-                "dataset_config": {"path": "Setfit/emotion", "split": "train[:10%]"}
-            },
+            data_kwargs={"dataset_config": {"path": "Setfit/emotion"}},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             model_kwargs={"pretrained_model": "bert-base-uncased"},
         )
@@ -57,9 +53,7 @@ class TestTrainAssistant:
         """"""
         lstm_assistant = TrainAssistant(
             "lstm",
-            data_kwargs={
-                "dataset_config": {"path": "Setfit/emotion", "split": "train[:10%]"}
-            },
+            data_kwargs={"dataset_config": {"path": "Setfit/emotion"}},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
         )
         assert lstm_assistant.general.num_labels == 6
@@ -70,9 +64,7 @@ class TestTrainAssistant:
         """"""
         deebert_assistant = TrainAssistant(
             "deebert",
-            data_kwargs={
-                "dataset_config": {"path": "Setfit/emotion", "split": "train[:10%]"}
-            },
+            data_kwargs={"dataset_config": {"path": "Setfit/emotion"}},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             model_kwargs={"pretrained_model": "bert-base-uncased"},
         )
@@ -85,9 +77,7 @@ class TestTrainAssistant:
         """"""
         fastbert_assistant = TrainAssistant(
             "fastbert",
-            data_kwargs={
-                "dataset_config": {"path": "Setfit/emotion", "split": "train[:10%]"}
-            },
+            data_kwargs={"dataset_config": {"path": "Setfit/emotion"}},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             model_kwargs={"pretrained_model": "bert-base-uncased"},
         )
@@ -102,10 +92,8 @@ class TestTrainAssistant:
     def test_theseusbert_assistant(self):
         """"""
         fastbert_assistant = TrainAssistant(
-            "theseus-bert",
-            data_kwargs={
-                "dataset_config": {"path": "Setfit/emotion", "split": "train[:10%]"}
-            },
+            "theseusbert",
+            data_kwargs={"dataset_config": {"path": "Setfit/emotion"}},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             model_kwargs={"pretrained_model": "bert-base-uncased"},
         )

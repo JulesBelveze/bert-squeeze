@@ -115,13 +115,13 @@ class HardLabeler(object):
                 resource_filename(
                     "bert-squeeze", f"data/{self.dataset_config.path}_dataset.py"
                 ),
-                self.dataset_config.split,
+                split=self.dataset_config.split,
             )
         else:
             dataset = datasets.load_dataset(
-                self.dataset_config.path, self.dataset_config.split
+                self.dataset_config.path, split=self.dataset_config.split
             )
-        dataset = dataset["train"].select(range(self.dataset_config.max_samples))
+        dataset = dataset.select(range(self.dataset_config.max_samples))
 
         logging.info("Featurizing hard dataset for labeling.")
         featurized_dataset = self.featurize(dataset)
