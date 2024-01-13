@@ -210,7 +210,7 @@ class LtFastBert(BaseTransformerModule):
             tmp_model = AutoModel.from_pretrained(self.pretrained_model)
             # XXX during thetest this creates a `model.safetensors` not a `pytorch_model.bin`
             # so th enext line fails
-            tmp_model.save_pretrained("tmp_model")
+            tmp_model.save_pretrained("tmp_model", safe_serialization=False)
 
             pretrained_model_path = os.path.join("tmp_model", "pytorch_model.bin")
 

@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 from transformers import BertForSequenceClassification
 
 from bert_squeeze.assistants.distil_assistant import DistilAssistant
+from bert_squeeze.models.lt_bert import LtCustomBert
 
 
 class TestDistilAssistant:
@@ -52,8 +53,8 @@ class TestDistilAssistant:
             data_kwargs={"path": "emotion"},
             general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
             teacher_kwargs={
-                "_target_": "transformers.models.auto.AutoModelForSequenceClassification.from_pretrained",
-                "pretrained_model_name_or_path": "microsoft/xtremedistil-l6-h256-uncased",
+                "_target_": "tests.fixtures.dummy_models.Lr",
+                "checkpoints": "../tests/fixtures/resources/lr_dummy.bin",
             },
         )
 
@@ -101,15 +102,36 @@ class TestDistilAssistant:
                 "_target_": "tests.fixtures.dummy_models.Lr",
             },
             data_kwargs={
-                "is_local": False,
-                "path": "SetFit/emotion",
-                "train_batch_size": 16,
-                "eval_batch_size": 4,
-            },
+                "teacher_module": {
+                    "_target_": "bert_squeeze.data.modules.lr_module.LrDataModule",
+                    "dataset_config": {
+                        "is_local": False,
+                        "path": "SetFit/emotion",
+                        "train_batch_size": 16,
+                        "eval_batch_size": 4,
+                        "text_col": "text",
+                        "label_col": "label"
+                    },
+                    "max_features": 5000
+                },
+                "student_module": {
+                    "_target_": "bert_squeeze.data.modules.lr_module.LrDataModule",
+                    "dataset_config": {
+                        "is_local": False,
+                        "path": "SetFit/emotion",
+                        "train_batch_size": 16,
+                        "eval_batch_size": 4,
+                        "text_col": "text",
+                        "label_col": "label"
+                    },
+                    "max_features": 5000
+                },
+
+            }
         )
         assert isinstance(distil_assistant.data.train_dataloader(), DataLoader)
-        assert len(distil_assistant.data.train_dataloader()) == 1000
-        assert len(distil_assistant.data.val_dataloader()) == 500
+        assert len(distil_assistant.data.train_dataloader()) == 500
+        assert len(distil_assistant.data.val_dataloader()) == 62
 
 
 class TestDistilSoftAssistant:
