@@ -58,7 +58,6 @@ class TransformerDataModule(BaseDataModule):
             ),
             batched=True,
         )
-        tokenized_dataset = tokenized_dataset.remove_columns([self.text_col])
 
         if self.label_col != "labels":
             tokenized_dataset = tokenized_dataset.rename_column(self.label_col, "labels")
@@ -71,6 +70,12 @@ class TransformerDataModule(BaseDataModule):
         # if "distilbert" not in self.tokenizer.name_or_path:
         if self.task_type == "classification":
             columns += ["token_type_ids"]
+
+        for subset in tokenized_dataset.keys():
+            columns_to_remove = set(tokenized_dataset[subset].column_names) - set(columns)
+            tokenized_dataset[subset] = tokenized_dataset[subset].remove_columns(
+                list(columns_to_remove)
+            )
 
         tokenized_dataset.set_format(type='torch', columns=columns)
         return tokenized_dataset
