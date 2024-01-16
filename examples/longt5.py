@@ -17,7 +17,8 @@ config_assistant = {
     },
     "data_kwargs": {
         "teacher_module": {
-            "max_length": 16384,
+            # "max_length": 16384,
+            "max_length": 512,
             "task_type": "text2text-generation",
             "dataset_config": {
                 "path": "kmfoda/booksum",
@@ -26,7 +27,8 @@ config_assistant = {
             },
         },
         "student_module": {
-            "max_length": 16384,
+            # "max_length": 16384,
+            "max_length": 512,
             "task_type": "text2text-generation",
         },
     },
