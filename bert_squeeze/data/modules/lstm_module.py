@@ -11,6 +11,7 @@ from hydra.core.hydra_config import HydraConfig
 from torch.utils.data import DataLoader
 
 from ...utils.vocabulary import Vocabulary
+from .base import BaseDataModule
 
 
 def collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
@@ -31,7 +32,7 @@ def collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
     return {"features": torch.LongTensor(stacked), "labels": torch.LongTensor(labels)}
 
 
-class LSTMDataModule(pl.LightningDataModule):
+class LSTMDataModule(BaseDataModule):
     """
     DataModule for LSTM models
 
@@ -67,18 +68,6 @@ class LSTMDataModule(pl.LightningDataModule):
         self.train = None
         self.test = None
         self.val = None
-
-    def load_dataset(self) -> None:
-        """"""
-        if self.dataset_config.is_local:
-            self.dataset = datasets.load_dataset(
-                self.dataset_config.path, self.dataset_config.split
-            )
-        else:
-            self.dataset = datasets.load_dataset(
-                self.dataset_config.path, self.dataset_config.split
-            )
-        logging.info(f"Dataset '{self.dataset_config.path}' successfully loaded.")
 
     def clean_str(self, example: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -147,10 +136,6 @@ class LSTMDataModule(pl.LightningDataModule):
         featurized_dataset.set_format(type='np', columns=["features", "labels"])
         logging.info("Data successfully featurized and Dataset created.")
         return featurized_dataset
-
-    def prepare_data(self) -> None:
-        """"""
-        self.load_dataset()
 
     def setup(self, stage: Optional[str] = None):
         """"""

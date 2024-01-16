@@ -36,15 +36,13 @@ train:
 model:
   _target_: bert_squeeze.distillation.distiller.Distiller
   teacher:
-    _target_: bert_squeeze.models.lt_bert.LtCustomBert
-    pretrained_model: "bert-base-uncased"
+    _target_: transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
+    pretrained_model_name_or_path: "bert-base-uncased"
     num_labels: ${general.num_labels}
-    training_config: ${train}
   student:
-    _target_: bert_squeeze.models.lt_bert.LtCustomBert
-    pretrained_model: "bert-base-cased"
+    _target_: transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
+    pretrained_model_name_or_path: "bert-base-cased"
     num_labels: ${general.num_labels}
-    training_config: ${train}
   training_config: ${train}
 
 
