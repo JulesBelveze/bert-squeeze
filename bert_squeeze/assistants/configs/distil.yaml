@@ -4,12 +4,11 @@ general:
   do_eval: false
   get_mismatched: true
   evaluate_during_training: true
-  labels: [ 0, 1 ]
+  labels: [0, 1]
   num_labels: 2
   output_dir: outputs
   save_steps: 500
   validation_every_n_epoch: 1
-
 
 train:
   adam_eps: 1e-8
@@ -19,7 +18,7 @@ train:
   discriminative_learning: true
   dropout: 0.2
   layer_lr_decay: 0.95
-  learning_rates: [ 2e-5 ]
+  learning_rates: [2e-5]
   logging_steps: 50
   lr_scheduler: true
   max_grad_norm: 1.0
@@ -31,7 +30,6 @@ train:
   warmup_ratio: 0.06
   warmup_steps: true
   weight_decay: 0.01
-
 
 model:
   _target_: bert_squeeze.distillation.distiller.Distiller
@@ -45,7 +43,6 @@ model:
     num_labels: ${general.num_labels}
   training_config: ${train}
 
-
 data:
   _target_: bert_squeeze.data.modules.distillation_module.DistillationDataModule
   teacher_module:
@@ -56,7 +53,7 @@ data:
       split:
       text_col: "text"
       label_col: "label"
-    tokenizer_name: ${model.teacher.pretrained_model}
+    tokenizer_name: ${model.teacher.pretrained_model_name_or_path}
     max_length: 256
   student_module:
     _target_: bert_squeeze.data.modules.transformer_module.TransformerDataModule
@@ -66,7 +63,7 @@ data:
       split: ${data.teacher_module.dataset_config.split}
       text_col: ${data.teacher_module.dataset_config.text_col}
       label_col: ${data.teacher_module.dataset_config.label_col}
-    tokenizer_name: ${model.student.pretrained_model}
+    tokenizer_name: ${model.student.pretrained_model_name_or_path}
     max_length: 256
 
 callbacks:
