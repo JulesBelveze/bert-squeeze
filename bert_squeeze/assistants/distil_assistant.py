@@ -65,15 +65,15 @@ class DistilAssistant(object):
     """
 
     def __init__(
-            self,
-            name: str,
-            general_kwargs: Dict[str, Any] = None,
-            train_kwargs: Dict[str, Any] = None,
-            student_kwargs: Dict[str, Any] = None,
-            teacher_kwargs: Dict[str, Any] = {},
-            data_kwargs: Dict[str, Any] = None,
-            logger_kwargs: Dict[str, Any] = None,
-            callbacks: List[Callback] = None,
+        self,
+        name: str,
+        general_kwargs: Dict[str, Any] = None,
+        train_kwargs: Dict[str, Any] = None,
+        student_kwargs: Dict[str, Any] = None,
+        teacher_kwargs: Dict[str, Any] = {},
+        data_kwargs: Dict[str, Any] = None,
+        logger_kwargs: Dict[str, Any] = None,
+        callbacks: List[Callback] = None,
     ):
         conf = OmegaConf.load(
             resource_filename(
@@ -88,8 +88,8 @@ class DistilAssistant(object):
             )
 
         for name, kws in zip(
-                ["general", "train", "data", "logger", "callbacks"],
-                [general_kwargs, train_kwargs, data_kwargs, logger_kwargs, callbacks],
+            ["general", "train", "data", "logger", "callbacks"],
+            [general_kwargs, train_kwargs, data_kwargs, logger_kwargs, callbacks],
         ):
             if kws is not None:
                 if "_target_" in kws and kws["_target_"] != conf[name]["_target_"]:
@@ -97,7 +97,11 @@ class DistilAssistant(object):
                     conf[name] = kws
                 elif name == "data":
                     for module in ["teacher_module", "student_module"]:
-                        if module in kws and conf[name][module]["_target_"] != kws[module]["_target_"]:
+                        if (
+                            module in kws
+                            and "_target_" in kws[module]
+                            and conf[name][module]["_target_"] != kws[module]["_target_"]
+                        ):
                             del conf[name][module]
                             conf[name][module] = kws[module]
 
