@@ -364,6 +364,7 @@ class Distiller(BaseDistiller):
             for key, val in batch.items()
             if key.startswith("t_") and "labels" not in key
         }
+
         with torch.no_grad():
             outputs = self.teacher.forward(**teacher_inputs)
 

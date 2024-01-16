@@ -35,6 +35,7 @@ class TransformerDataModule(BaseDataModule):
         self.max_length = max_length
         self.train_batch_size = kwargs.get("train_batch_size", 32)
         self.eval_batch_size = kwargs.get("eval_batch_size", 32)
+        self.task_type = kwargs.get("task_type", "classification")
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
@@ -54,7 +55,8 @@ class TransformerDataModule(BaseDataModule):
                 padding="max_length",
                 max_length=self.max_length,
                 truncation=True,
-            )
+            ),
+            batched=True,
         )
         tokenized_dataset = tokenized_dataset.remove_columns([self.text_col])
 
@@ -62,7 +64,12 @@ class TransformerDataModule(BaseDataModule):
             tokenized_dataset = tokenized_dataset.rename_column(self.label_col, "labels")
 
         columns = ["input_ids", "attention_mask", "labels"]
-        if "distilbert" not in self.tokenizer.name_or_path:
+
+        # this column is only nedeed for sequence classification or question answering
+        # using the name model as a heuristic is risky, so I am introducing a task type
+        # that defaults to "classification"
+        # if "distilbert" not in self.tokenizer.name_or_path:
+        if self.task_type == "classification":
             columns += ["token_type_ids"]
 
         tokenized_dataset.set_format(type='torch', columns=columns)
