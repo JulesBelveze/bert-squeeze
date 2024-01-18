@@ -46,12 +46,8 @@ You are all set!
 
 # Quickstarts
 
-You can find a bunch of already prepared configurations under the examples folder. Just choose the one you need and run
-the following:
-
-```commandline
-python3 -m bert-squeeze.main -cp=examples -cn=wanted_config
-```
+You can find a bunch of examples on how to use the library to simply train models or perform optimization techniques 
+(distillation, pruning, quantization) in the [docs](https://julesbelveze.github.io/bert-squeeze/index.html).
 
 Disclaimer: I have not extensively tested all procedures and thus do not guarantee the performance of every implemented
 method.
