@@ -184,3 +184,24 @@ class SparsityBasedPruning(Callback):
             for param in pl_module.parameters():
                 mask = torch.lt(torch.abs(param), threshold)
                 param.data[mask] = 0.0
+
+
+class LayerPruning(Callback):
+    """
+    Callback to reduce the number of decoder layers
+    """
+
+    def __init__(self, num_decoder_layers, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.num_decoder_layers = num_decoder_layers
+
+    def setup(self, trainer, pl_module, stage):
+        if stage == 'fit':
+            model = pl_module.student
+            new_size = int(model.config.num_decoder_layers / self.num_decoder_layers)
+            layers_to_remove = [i for i in range(1, new_size * 2, 2)]
+
+            for i in reversed(layers_to_remove):
+                del model.decoder.block[i]
+
+            model.config.num_decoder_layers = new_size

@@ -32,9 +32,8 @@ config_assistant = {
     },
     "callbacks": [
         {
-            "_target_": "bert_squeeze.utils.callbacks.pruning.ThresholdBasedPruning",
-            "threshold": 0.2,
-            "start_pruning_epoch": -1,
+            "_target_": "bert_squeeze.utils.callbacks.pruning.LayerPruning",
+            "num_decoder_layers": 2,
         },
         {"_target_": "bert_squeeze.utils.callbacks.quantization.DynamicQuantization"},
     ],
