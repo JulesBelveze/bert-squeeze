@@ -5,6 +5,7 @@ import lightning.pytorch as pl
 from datasets import Features
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
+from torch import tensor
 
 from ...distillation.utils.labeler import HardLabeler
 from .lr_module import LrDataModule
@@ -222,18 +223,30 @@ class DistillationDataModule(pl.LightningDataModule):
         Returns:
             DataLoader: Train dataloader
         """
-        return DataLoader(self.train, batch_size=self.train_batch_size, drop_last=True)
+        return DataLoader(
+            self.train,
+            batch_size=self.train_batch_size,
+            drop_last=True,
+        )
 
     def test_dataloader(self) -> DataLoader:
         """
         Returns:
             DataLoader: Test dataloader
         """
-        return DataLoader(self.test, batch_size=self.eval_batch_size, drop_last=True)
+        return DataLoader(
+            self.test,
+            batch_size=self.eval_batch_size,
+            drop_last=True,
+        )
 
     def val_dataloader(self) -> DataLoader:
         """
         Returns:
             DataLoader: Validation dataloader
         """
-        return DataLoader(self.val, batch_size=self.eval_batch_size, drop_last=True)
+        return DataLoader(
+            self.val,
+            batch_size=self.eval_batch_size,
+            drop_last=True,
+        )

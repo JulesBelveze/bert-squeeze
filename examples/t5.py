@@ -6,30 +6,28 @@ from lightning.pytorch import Trainer
 config_assistant = {
     "name": "distil",
     "teacher_kwargs": {
-        "_target_": "transformers.LongT5ForConditionalGeneration.from_pretrained",
-        "pretrained_model_name_or_path": "pszemraj/long-t5-tglobal-base-16384-book-summary",
-        "num_labels": 2,
+        "_target_": "transformers.T5ForConditionalGeneration.from_pretrained",
+        "pretrained_model_name_or_path": "JulesBelveze/t5-small-headline-generator",
     },
     "student_kwargs": {
-        "_target_": "transformers.LongT5ForConditionalGeneration.from_pretrained",
-        "pretrained_model_name_or_path": "pszemraj/long-t5-tglobal-base-16384-book-summary",
+        "_target_": "transformers.T5ForConditionalGeneration.from_pretrained",
+        "pretrained_model_name_or_path": "JulesBelveze/t5-small-headline-generator",
         "num_labels": 2,
     },
     "data_kwargs": {
         "teacher_module": {
-            # "max_length": 16384,
             "max_length": 512,
             "task_type": "text2text-generation",
             "dataset_config": {
-                "path": "kmfoda/booksum",
-                "text_col": "chapter",
-                "label_col": "summary_text",
+                "path": "JulesBelveze/tldr_news",
+                "text_col": "content",
+                "label_col": "headline",
             },
         },
         "student_module": {
-            # "max_length": 16384,
             "max_length": 512,
             "task_type": "text2text-generation",
+            "num_decoder_layers": 3,
         },
     },
     "callbacks": [

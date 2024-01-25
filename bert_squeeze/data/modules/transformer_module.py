@@ -91,6 +91,9 @@ class TransformerDataModule(BaseDataModule):
         """Helper function to merge a list of samples into a batch of Tensors"""
 
         def _collate(examples):
+            import pdb
+
+            pdb.set_trace()
             return self.tokenizer.pad(examples, return_tensors="pt")
 
         return _collate
@@ -102,7 +105,7 @@ class TransformerDataModule(BaseDataModule):
         """
         return DataLoader(
             self.train,
-            # collate_fn=self._collate_fn(),
+            collate_fn=self._collate_fn(),
             batch_size=self.train_batch_size,
             drop_last=True,
         )
