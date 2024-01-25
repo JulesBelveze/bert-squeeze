@@ -365,6 +365,10 @@ class Distiller(BaseDistiller):
             if key.startswith("t_") and "labels" not in key
         }
 
+        # why I though it was automated??
+        decoder_input_ids = self.teacher._shift_right(teacher_inputs["input_ids"])
+        teacher_inputs['decoder_input_ids'] = decoder_input_ids
+
         with torch.no_grad():
             outputs = self.teacher.forward(**teacher_inputs)
 
@@ -390,6 +394,10 @@ class Distiller(BaseDistiller):
             for key, val in batch.items()
             if key.startswith("s_") and "labels" not in key
         }
+        # why I though it was automated??
+        decoder_input_ids = self.student._shift_right(student_inputs["input_ids"])
+        student_inputs['decoder_input_ids'] = decoder_input_ids
+
         outputs = self.student.forward(**student_inputs)
 
         if isinstance(outputs, SequenceClassifierOutput):
@@ -422,8 +430,11 @@ class Distiller(BaseDistiller):
         Returns:
 
         """
+        # XXX labels here are not tokenized -- it's full text.... ?!
+
         # Ignore soft labeled indices (where label is `ignore_index`)
         active_idx = labels != ignore_index
+
         if active_idx.sum().item() > 0:
             objective = self.loss_ce(student_logits[active_idx], labels[active_idx])
         else:
