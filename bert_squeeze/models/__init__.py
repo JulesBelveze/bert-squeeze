@@ -5,3 +5,4 @@ from .lt_deebert import LtDeeBert
 from .lt_distilbert import LtCustomDistilBert
 from .lt_fastbert import LtFastBert
 from .lt_theseus_bert import LtTheseusBert
+from .lt_adapter import LtAdapter
