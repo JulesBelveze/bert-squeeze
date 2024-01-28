@@ -184,3 +184,67 @@ class SparsityBasedPruning(Callback):
             for param in pl_module.parameters():
                 mask = torch.lt(torch.abs(param), threshold)
                 param.data[mask] = 0.0
+
+
+class LayerPruning(Callback):
+    """
+    Callback for PyTorch Lightning to prune layers from an encoder and/or decoder in a model.
+
+    This modifies the student model's encoder and decoder to have the specified number of
+    layers by removing certain layers.
+
+    Attributes:
+        num_layers (int): An integer specifying the number of layers the encoder should have after pruning.
+        num_decoder_layers (int): An integer specifying the number of layers the decoder should have after pruning.
+    """
+
+    def __init__(self, num_layers: int, num_decoder_layers: int, *args, **kwargs):
+        """
+        Initializes the LayerPruning callback.
+
+        Args:
+            num_layers: The desired number of encoder layers remaining after pruning.
+            num_decoder_layers: The desired number of decoder layers remaining after pruning.
+        """
+
+        super().__init__(*args, **kwargs)
+        self.num_decoder_layers = num_decoder_layers
+        self.num_layers = num_layers
+
+    def _layers_to_remove(self, final_size: int) -> List[int]:
+        """
+        Determines the layers to remove to achieve the desired final size.
+
+        Args:
+            final_size (int): An integer representing the final size of the encoder or decoder
+                        after pruning the layers.
+
+        Returns:
+            List[int]: A list of ints representing the layers to be removed from the encoder or decoder.
+        """
+        return [i for i in range(1, final_size * 2, 2)]
+
+    def setup(self, trainer, pl_module, stage):
+        """
+        Sets up the student model's encoder and/or decoder layers according to the specified numbers,
+        by pruning the necessary layers.
+
+        Called when fit or test begins. Override to define the setup logic.
+
+        Args:
+            trainer: The PyTorch Lightning Trainer instance.
+            pl_module: The LightningModule instance being optimized or tested.
+            stage: A string specifying the stage ('fit' or 'test') to trigger different behavior.
+        """
+        if stage == 'fit':
+            model = pl_module.student
+
+            if model.config.num_decoder_layers != self.num_decoder_layers:
+                for i in reversed(self._layers_to_remove(self.num_decoder_layers)):
+                    del model.decoder.block[i]
+                model.config.num_decoder_layers = self.num_decoder_layers
+
+            if model.config.num_layers != self.num_layers:
+                for i in reversed(self._layers_to_remove(self.num_layers)):
+                    del model.encoder.block[i]
+                model.config.num_layers = self.num_layers
