@@ -68,7 +68,7 @@ class DistillationDataModule(pl.LightningDataModule):
         b: Union[datasets.Dataset, datasets.DatasetDict],
     ) -> Union[datasets.Dataset, datasets.DatasetDict]:
         """"""
-        assert type(a) == type(b) and a.keys() == b.keys()
+        assert isinstance(a, type(b)) and a.keys() == b.keys()
 
         if isinstance(a, datasets.DatasetDict):
             concat_dataset = datasets.DatasetDict(

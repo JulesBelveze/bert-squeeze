@@ -110,9 +110,9 @@ class TestDistilAssistant:
                         "train_batch_size": 16,
                         "eval_batch_size": 4,
                         "text_col": "text",
-                        "label_col": "label"
+                        "label_col": "label",
                     },
-                    "max_features": 5000
+                    "max_features": 5000,
                 },
                 "student_module": {
                     "_target_": "bert_squeeze.data.modules.lr_module.LrDataModule",
@@ -122,12 +122,11 @@ class TestDistilAssistant:
                         "train_batch_size": 16,
                         "eval_batch_size": 4,
                         "text_col": "text",
-                        "label_col": "label"
+                        "label_col": "label",
                     },
-                    "max_features": 5000
+                    "max_features": 5000,
                 },
-
-            }
+            },
         )
         assert isinstance(distil_assistant.data.train_dataloader(), DataLoader)
         assert len(distil_assistant.data.train_dataloader()) == 500

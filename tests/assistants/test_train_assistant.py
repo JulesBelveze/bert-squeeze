@@ -1,18 +1,18 @@
 import pytest
-from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch import Trainer
+from lightning.pytorch.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader
 
 from bert_squeeze.assistants.train_assistant import TrainAssistant
 from bert_squeeze.data.modules import LrDataModule, LSTMDataModule, TransformerDataModule
 from bert_squeeze.models import (
     BowLogisticRegression,
+    LtAdapter,
     LtCustomBert,
     LtDeeBert,
     LtFastBert,
     LtLSTM,
     LtTheseusBert,
-    LtAdapter
 )
 
 
@@ -86,7 +86,7 @@ class TestTrainAssistant:
         assert fastbert_assistant.general.num_labels == 6
         assert isinstance(fastbert_assistant.model, LtFastBert)
         assert (
-                fastbert_assistant.model.encoder.config._name_or_path == "bert-base-uncased"
+            fastbert_assistant.model.encoder.config._name_or_path == "bert-base-uncased"
         )
         assert isinstance(fastbert_assistant.data, TransformerDataModule)
         assert len(fastbert_assistant.callbacks) > 0
@@ -102,7 +102,7 @@ class TestTrainAssistant:
         assert fastbert_assistant.general.num_labels == 6
         assert isinstance(fastbert_assistant.model, LtTheseusBert)
         assert (
-                fastbert_assistant.model.encoder.config._name_or_path == "bert-base-uncased"
+            fastbert_assistant.model.encoder.config._name_or_path == "bert-base-uncased"
         )
         assert isinstance(fastbert_assistant.data, TransformerDataModule)
 
@@ -116,7 +116,7 @@ class TestTrainAssistant:
                 "pretrained_model": "bert-base-uncased",
                 "task_name": "setfit",
                 "labels": [0, 1, 2, 3, 4, 5],
-                "num_labels": 6
+                "num_labels": 6,
             },
         )
         assert adapter_assistant.general.num_labels == 6
@@ -133,20 +133,17 @@ class TestTrainAssistant:
                 "pretrained_model": "bert-base-uncased",
                 "task_name": "setfit",
                 "labels": [0, 1, 2, 3, 4, 5],
-                "num_labels": 6
-            }
+                "num_labels": 6,
+            },
         )
         model = adapter_assistant.model
 
         train_dataloader = adapter_assistant.data.train_dataloader()
         test_dataloader = adapter_assistant.data.test_dataloader()
 
-        basic_trainer = Trainer(
-            max_steps=4
-        )
+        basic_trainer = Trainer(max_steps=4)
         basic_trainer.fit(
             model=model,
             train_dataloaders=train_dataloader,
-            val_dataloaders=test_dataloader
+            val_dataloaders=test_dataloader,
         )
-

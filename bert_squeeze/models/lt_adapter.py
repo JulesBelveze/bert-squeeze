@@ -1,4 +1,4 @@
-from typing import Tuple, Union, List
+from typing import List, Tuple, Union
 
 import torch
 from adapters import AutoAdapterModel
@@ -32,14 +32,14 @@ class LtAdapter(BaseTransformerModule):
     """
 
     def __init__(
-            self,
-            training_config: DictConfig,
-            num_labels: int,
-            pretrained_model: str,
-            task_name: str,
-            adapter_config_name: str,
-            labels: Union[List[str], List[int]],
-            **kwargs,
+        self,
+        training_config: DictConfig,
+        num_labels: int,
+        pretrained_model: str,
+        task_name: str,
+        adapter_config_name: str,
+        labels: Union[List[str], List[int]],
+        **kwargs,
     ):
         super().__init__(training_config, num_labels, pretrained_model, **kwargs)
 
@@ -53,11 +53,11 @@ class LtAdapter(BaseTransformerModule):
 
     @overrides
     def forward(
-            self,
-            input_ids: torch.Tensor = None,
-            attention_mask: torch.Tensor = None,
-            token_type_ids: torch.Tensor = None,
-            **kwargs,
+        self,
+        input_ids: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
+        token_type_ids: torch.Tensor = None,
+        **kwargs,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Args:
@@ -76,9 +76,7 @@ class LtAdapter(BaseTransformerModule):
         https://github.com/huggingface/transformers/blob/b01f451ca38695c60175b34d245997ef4d18231d/src/transformers/modeling_outputs.py#L153
         """
         outputs = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids
+            input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
         )
         return outputs.logits
 
@@ -140,24 +138,15 @@ class LtAdapter(BaseTransformerModule):
     def _build_model(self):
         """"""
         config = AutoConfig.from_pretrained(
-            self.pretrained_model,
-            num_labels=self.model_config.num_labels
+            self.pretrained_model, num_labels=self.model_config.num_labels
         )
-        model = AutoAdapterModel.from_pretrained(
-            self.pretrained_model,
-            config=config
-        )
+        model = AutoAdapterModel.from_pretrained(self.pretrained_model, config=config)
 
-        model.add_adapter(
-            self.task_name,
-            config=self.adapter_config_name
-        )
+        model.add_adapter(self.task_name, config=self.adapter_config_name)
         model.add_classification_head(
             head_name=self.task_name,
             num_labels=self.model_config.num_labels,
-            id2label={
-                i: label for i, label in enumerate(self.labels)
-            }
+            id2label={i: label for i, label in enumerate(self.labels)},
         )
         model.set_active_adapters([self.task_name])
         model.train_adapter([self.task_name])
