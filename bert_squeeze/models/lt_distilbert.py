@@ -5,10 +5,10 @@ from omegaconf import DictConfig
 from overrides import overrides
 from transformers import AutoModel
 
-from .base_lt_module import BaseTransformerModule
+from .base_lt_module import BaseSequenceClassificationTransformerModule
 
 
-class LtCustomDistilBert(BaseTransformerModule):
+class LtCustomDistilBert(BaseSequenceClassificationTransformerModule):
     """
     Lightning module to fine-tune a DistilBERT based model on a sequence classification task.
 
@@ -22,22 +22,22 @@ class LtCustomDistilBert(BaseTransformerModule):
     """
 
     def __init__(
-        self,
-        training_config: DictConfig,
-        pretrained_model: str,
-        num_labels: int,
-        **kwargs,
+            self,
+            training_config: DictConfig,
+            pretrained_model: str,
+            num_labels: int,
+            **kwargs,
     ):
-        super().__init__(training_config, num_labels, pretrained_model, **kwargs)
+        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
         self._build_model()
 
     @overrides
     def forward(
-        self,
-        input_ids: torch.Tensor = None,
-        attention_mask: torch.Tensor = None,
-        output_attentions: bool = False,
-        **kwargs,
+            self,
+            input_ids: torch.Tensor = None,
+            attention_mask: torch.Tensor = None,
+            output_attentions: bool = False,
+            **kwargs,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Args:

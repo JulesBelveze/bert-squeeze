@@ -4,11 +4,11 @@ import torch
 from omegaconf import DictConfig
 from overrides import overrides
 
-from .base_lt_module import BaseTransformerModule
+from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers import CustomBertModel
 
 
-class LtCustomBert(BaseTransformerModule):
+class LtCustomBert(BaseSequenceClassificationTransformerModule):
     """
     Lightning module to fine-tune a BERT based model on a sequence classification task.
 
@@ -27,11 +27,11 @@ class LtCustomBert(BaseTransformerModule):
     def __init__(
         self,
         training_config: DictConfig,
-        num_labels: int,
         pretrained_model: str,
+        num_labels: int,
         **kwargs,
     ):
-        super().__init__(training_config, num_labels, pretrained_model, **kwargs)
+        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
         self._build_model()
 
     @overrides

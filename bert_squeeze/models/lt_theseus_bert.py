@@ -7,11 +7,11 @@ from ..utils.schedulers.theseus_schedulers import (
     ConstantReplacementScheduler,
     LinearReplacementScheduler,
 )
-from .base_lt_module import BaseTransformerModule
+from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers import TheseusBertModel
 
 
-class LtTheseusBert(BaseTransformerModule):
+class LtTheseusBert(BaseSequenceClassificationTransformerModule):
     """
     Lightning module to fine-tune a TheseusBert based model on a sequence classification
     task (see `models.custom_transformers.theseus_bert.py`) for detailed explanation.
@@ -28,14 +28,14 @@ class LtTheseusBert(BaseTransformerModule):
     """
 
     def __init__(
-        self,
-        training_config: DictConfig,
-        pretrained_model: str,
-        num_labels: int,
-        replacement_scheduler: DictConfig,
-        **kwargs,
+            self,
+            training_config: DictConfig,
+            pretrained_model: str,
+            num_labels: int,
+            replacement_scheduler: DictConfig,
+            **kwargs,
     ):
-        super().__init__(training_config, num_labels, pretrained_model, **kwargs)
+        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
 
         self._build_model()
         scheduler = {
@@ -50,13 +50,13 @@ class LtTheseusBert(BaseTransformerModule):
 
     @overrides
     def forward(
-        self,
-        input_ids: torch.Tensor = None,
-        attention_mask: torch.Tensor = None,
-        token_type_ids: torch.Tensor = None,
-        position_ids: torch.Tensor = None,
-        head_mask: torch.Tensor = None,
-        **kwargs,
+            self,
+            input_ids: torch.Tensor = None,
+            attention_mask: torch.Tensor = None,
+            token_type_ids: torch.Tensor = None,
+            position_ids: torch.Tensor = None,
+            head_mask: torch.Tensor = None,
+            **kwargs,
     ) -> torch.Tensor:
         """
         Args:

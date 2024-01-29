@@ -11,11 +11,11 @@ from transformers import AutoModel
 from transformers.models.bert.modeling_bert import BertEmbeddings
 
 from ..utils.types import FastBertLoss
-from .base_lt_module import BaseTransformerModule
+from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers.fastbert import FastBertGraph
 
 
-class LtFastBert(BaseTransformerModule):
+class LtFastBert(BaseSequenceClassificationTransformerModule):
     """
     Lightning module to fine-tune a FastBert based model on a sequence classification
     task (see `models.custom_transformers.fastbert.py`) for detailed explanation.
@@ -36,7 +36,7 @@ class LtFastBert(BaseTransformerModule):
         pretrained_model: str,
         **kwargs,
     ):
-        super().__init__(training_config, num_labels, pretrained_model, **kwargs)
+        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
         self.training_stage = getattr(kwargs, "training_stage", 0)
 
         self._build_model()
