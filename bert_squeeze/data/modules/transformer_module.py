@@ -4,7 +4,7 @@ import datasets
 from omegaconf import DictConfig
 from overrides import overrides
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, DataCollatorForSeq2Seq
 
 from .base import BaseDataModule
 
@@ -246,7 +246,12 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
                 }
             )
         columns = ["input_ids", "attention_mask", "labels"]
-        if "distilbert" not in self.tokenizer.name_or_path:
+        if not any(
+            [
+                model_name in self.tokenizer.name_or_path
+                for model_name in ["distilbert", "t5"]
+            ]
+        ):
             columns += ["token_type_ids"]
 
         tokenized_dataset.set_format(type='torch', columns=columns)
@@ -266,7 +271,7 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         """
         return DataLoader(
             self.train,
-            # collate_fn=self._collate_fn(),
+            collate_fn=self._collate_fn(),
             batch_size=self.train_batch_size,
             drop_last=True,
         )
@@ -278,7 +283,7 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         """
         return DataLoader(
             self.test,
-            # collate_fn=self._collate_fn(),
+            collate_fn=self._collate_fn(),
             batch_size=self.eval_batch_size,
             drop_last=True,
         )
@@ -290,7 +295,15 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         """
         return DataLoader(
             self.val,
-            # collate_fn=self._collate_fn(),
+            collate_fn=self._collate_fn(),
             batch_size=self.eval_batch_size,
             drop_last=True,
         )
+
+    def _collate_fn(self):
+        """Helper function to merge a list of samples into a batch of Tensors"""
+
+        def _collate(examples):
+            return self.tokenizer.pad(examples, return_tensors="pt")
+
+        return _collate

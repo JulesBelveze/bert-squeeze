@@ -88,10 +88,14 @@ class BaseTransformerModule(pl.LightningModule):
                                a list of schedulers to use during training
         """
         optimizer_parameters = self._get_optimizer_parameters()
-        if self.config.optimizer == "adamw":
+
+        optimizer_name = self.config.get("optimizer", "adamw")
+        if optimizer_name == "adamw":
             optimizer = AdamW(
                 optimizer_parameters,
-                lr=self.config.learning_rates[0],
+                lr=self.config.learning_rates[0]
+                if isinstance(self.config.learning_rates, ListConfig)
+                else self.config.learning_rate,
                 eps=self.config.adam_eps,
             )
 
@@ -100,20 +104,28 @@ class BaseTransformerModule(pl.LightningModule):
                 lr_scheduler = {"scheduler": scheduler, "name": "NeptuneLogger"}
                 return [optimizer], [lr_scheduler]
 
-        elif self.config.optimizer == "bertadam":
+        elif optimizer_name == "bertadam":
             optimizer = BertAdam(
                 optimizer_parameters,
-                lr=self.config.learning_rates[0],
+                lr=self.config.learning_rates[0]
+                if isinstance(self.config.learning_rates, ListConfig)
+                else self.config.learning_rate,
                 warmup=self.config.warmup_ratio,
             )
 
-        elif self.config.optimizer == "adam":
+        elif optimizer_name == "adam":
             optimizer = torch.optim.Adam(
-                optimizer_parameters, lr=self.config.learning_rates[0]
+                optimizer_parameters,
+                lr=self.config.learning_rates[0]
+                if isinstance(self.config.learning_rates, ListConfig)
+                else self.config.learning_rate,
             )
-        elif self.config.optimizer == "sgd":
+        elif optimizer_name == "sgd":
             optimizer = torch.optim.SGD(
-                optimizer_parameters, lr=self.config.learning_rates[0]
+                optimizer_parameters,
+                lr=self.config.learning_rates[0]
+                if isinstance(self.config.learning_rates, ListConfig)
+                else self.config.learning_rate,
             )
         else:
             raise ValueError(f"Optimizer '{self.config.optimizer}' not supported.")

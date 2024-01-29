@@ -1,0 +1,47 @@
+general:
+  debug: false
+  do_train: true
+  do_eval: false
+  get_mismatched: true
+  evaluate_during_training: true
+  output_dir: outputs
+  save_steps: 500
+  validation_every_n_epoch: 1
+
+train:
+  accumulation_steps: 1
+  adam_eps: 1e-8
+  auto_lr: false
+  discriminative_learning: false
+  dropout: 0.2
+  layer_lr_decay: 0.95
+  learning_rates: [ 5e-5 ]
+  logging_steps: 50
+  lr_scheduler: false
+  max_grad_norm: 1.0
+  num_epochs: 10
+  warmup_ratio: 0.06
+  warmup_steps: true
+  weight_decay: 0.01
+
+model:
+  _target_: bert_squeeze.models.lt_t5.SimpleT5Model
+  task:
+  pretrained_model: "t5-small"
+  training_config: ${train}
+  generate_kwargs:
+    do_sample: false
+
+data:
+  _target_: bert_squeeze.data.modules.transformer_module.Seq2SeqTransformerDataModule
+  dataset_config:
+    is_local: false
+    target_col:
+    path:
+    split:
+    source_col:
+    truncate_mode: head
+  max_target_length: 64
+  max_source_length: 256
+  tokenizer_name: ${model.pretrained_model}
+
