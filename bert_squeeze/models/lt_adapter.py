@@ -32,14 +32,14 @@ class LtAdapter(BaseSequenceClassificationTransformerModule):
     """
 
     def __init__(
-            self,
-            training_config: DictConfig,
-            num_labels: int,
-            pretrained_model: str,
-            task_name: str,
-            adapter_config_name: str,
-            labels: Union[List[str], List[int]],
-            **kwargs,
+        self,
+        training_config: DictConfig,
+        num_labels: int,
+        pretrained_model: str,
+        task_name: str,
+        adapter_config_name: str,
+        labels: Union[List[str], List[int]],
+        **kwargs,
     ):
         super().__init__(training_config, pretrained_model, num_labels, **kwargs)
 
@@ -53,11 +53,11 @@ class LtAdapter(BaseSequenceClassificationTransformerModule):
 
     @overrides
     def forward(
-            self,
-            input_ids: torch.Tensor = None,
-            attention_mask: torch.Tensor = None,
-            token_type_ids: torch.Tensor = None,
-            **kwargs,
+        self,
+        input_ids: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
+        token_type_ids: torch.Tensor = None,
+        **kwargs,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Args:

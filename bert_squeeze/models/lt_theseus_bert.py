@@ -28,12 +28,12 @@ class LtTheseusBert(BaseSequenceClassificationTransformerModule):
     """
 
     def __init__(
-            self,
-            training_config: DictConfig,
-            pretrained_model: str,
-            num_labels: int,
-            replacement_scheduler: DictConfig,
-            **kwargs,
+        self,
+        training_config: DictConfig,
+        pretrained_model: str,
+        num_labels: int,
+        replacement_scheduler: DictConfig,
+        **kwargs,
     ):
         super().__init__(training_config, pretrained_model, num_labels, **kwargs)
 
@@ -50,13 +50,13 @@ class LtTheseusBert(BaseSequenceClassificationTransformerModule):
 
     @overrides
     def forward(
-            self,
-            input_ids: torch.Tensor = None,
-            attention_mask: torch.Tensor = None,
-            token_type_ids: torch.Tensor = None,
-            position_ids: torch.Tensor = None,
-            head_mask: torch.Tensor = None,
-            **kwargs,
+        self,
+        input_ids: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
+        token_type_ids: torch.Tensor = None,
+        position_ids: torch.Tensor = None,
+        head_mask: torch.Tensor = None,
+        **kwargs,
     ) -> torch.Tensor:
         """
         Args:

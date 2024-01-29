@@ -15,7 +15,13 @@ from transformers import AdamW, AutoConfig
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.optimizers import BertAdam
-from ..utils.scorers import FastBertScorer, LooseScorer, Scorer
+from ..utils.scorers import (
+    BaseSequenceClassificationScorer,
+    FastBertSequenceClassificationScorer,
+    LMScorer,
+    LooseSequenceClassificationScorer,
+    SummarizationScorer,
+)
 from ..utils.types import Loss
 
 
@@ -242,10 +248,6 @@ class BaseTransformerModule(pl.LightningModule):
         """"""
         raise NotImplementedError()
 
-    def prune_heads(self, heads_to_prune: Dict[str, List[str]]) -> None:
-        """"""
-        raise NotImplementedError()
-
     def freeze_encoder(self) -> None:
         """Freeze encoder layers"""
         for param in self.encoder.parameters():
@@ -284,7 +286,7 @@ class BaseTransformerModule(pl.LightningModule):
 
 class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
     """
-    Base class to extend for all modules.
+    Base class to extend for transformer based classification tasks.
 
     Args:
         training_config (DictConfig):
@@ -371,36 +373,15 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
                 Possible values: ["regular", "loose", "fast"]
         """
         scorer = {
-            "loose": LooseScorer(self.config.get("loose_classes", [])),
-            "regular": Scorer(self.num_labels),
-            "fast": FastBertScorer(self.num_labels),
+            "loose": LooseSequenceClassificationScorer(
+                self.config.get("loose_classes", [])
+            ),
+            "regular": BaseSequenceClassificationScorer(self.num_labels),
+            "fast": FastBertSequenceClassificationScorer(self.num_labels),
         }[scorer_type]
         self.scorer = deepcopy(scorer)
         self.valid_scorer = deepcopy(scorer)
         self.test_scorer = deepcopy(scorer)
-
-    def prune_heads(self, heads_to_prune: Dict[str, List[int]]) -> None:
-        """
-        Prunes heads of the model.
-
-        Args:
-            heads_to_prune (Dict[str, List[int]]):
-                dict of {layer_num: list of heads to prune in this layer}
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.encoder.layer[layer].attention.prune_heads(heads)
-
-    def loss(self, labels: torch.Tensor, logits: torch.Tensor, *args, **kwargs) -> Loss:
-        """
-        Method called for loss computation
-
-        Args:
-            logits (torch.Tensor):
-                predicted logits
-            labels (torch.Tensor):
-                ground truth labels
-        """
-        return self.objective(logits.view(-1, self.num_labels), labels.view(-1).long())
 
     def loss(self, labels: torch.Tensor, logits: torch.Tensor, *args, **kwargs) -> Loss:
         """
@@ -433,3 +414,83 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
             plt.title("Probability boxplot for label {}".format(i))
             self.logger.experiment.add_figure("eval/dist_label_{}".format(i), fig)
             plt.close("all")
+
+
+class BaseSeq2SeqTransformerModule(BaseTransformerModule):
+    """
+    Base class to extend for transformer based seq2seq tasks.
+
+    Args:
+        training_config (DictConfig):
+            training configuration
+        pretrained_model (str):
+            name of the pretrained Transformer model to use
+        task (str):
+            name of the to perform
+    """
+
+    def __init__(
+        self,
+        training_config: DictConfig,
+        pretrained_model: str,
+        task: str,
+        **kwargs,
+    ):
+        super().__init__(training_config, pretrained_model, **kwargs)
+        self._sanity_checks(training_config)
+        self.task = task
+        self.model_config = AutoConfig.from_pretrained(
+            pretrained_model, task=task, output_hidden_states=False
+        )
+
+        self._set_scorers()
+        self._set_objective()
+
+    def on_validation_epoch_end(self):
+        """"""
+        if not self.trainer.sanity_checking:
+            self.log_eval_report()
+
+        self.valid_scorer.reset()
+        self.validation_step_outputs.clear()
+
+    def _set_objective(self) -> None:
+        """"""
+        self.objective = CrossEntropyLoss(ignore_index=-100)
+
+    def _set_scorers(self) -> None:
+        """
+        Method to set the scorers to use to evaluate the model.
+        """
+        scorers_class = {"summarization": SummarizationScorer, "lm": LMScorer}
+        scorer_class = scorers_class.get(self.task, LMScorer)
+
+        self.scorer = deepcopy(
+            scorer_class(tokenizer_name=self.pretrained_model, do_mismatch=False)
+        )
+        self.valid_scorer = scorer_class(
+            tokenizer_name=self.pretrained_model, do_mismatch=True
+        )
+        self.test_scorer = scorer_class(
+            tokenizer_name=self.pretrained_model, do_mismatch=True
+        )
+
+    def loss(self, labels: torch.Tensor, logits: torch.Tensor, *args, **kwargs) -> Loss:
+        """
+        Method called for loss computation
+
+        Args:
+            logits (torch.Tensor):
+                predicted logits
+            labels (torch.Tensor):
+                ground truth labels
+        """
+        return self.objective(logits.view(-1, logits.size(-1)), labels.view(-1))
+
+    def log_eval_report(self) -> None:
+        """
+        Method that logs an evaluation report.
+
+        It uses the evaluation scorer to log all the available losses
+        """
+        super().log_eval_report()

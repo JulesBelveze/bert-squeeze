@@ -8,7 +8,7 @@ from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers import CustomBertModel
 
 
-class LtCustomBert(BaseSequenceClassificationTransformerModule):
+class LtSequenceClassificationCustomBert(BaseSequenceClassificationTransformerModule):
     """
     Lightning module to fine-tune a BERT based model on a sequence classification task.
 

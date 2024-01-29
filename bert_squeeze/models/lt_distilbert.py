@@ -22,22 +22,22 @@ class LtCustomDistilBert(BaseSequenceClassificationTransformerModule):
     """
 
     def __init__(
-            self,
-            training_config: DictConfig,
-            pretrained_model: str,
-            num_labels: int,
-            **kwargs,
+        self,
+        training_config: DictConfig,
+        pretrained_model: str,
+        num_labels: int,
+        **kwargs,
     ):
         super().__init__(training_config, pretrained_model, num_labels, **kwargs)
         self._build_model()
 
     @overrides
     def forward(
-            self,
-            input_ids: torch.Tensor = None,
-            attention_mask: torch.Tensor = None,
-            output_attentions: bool = False,
-            **kwargs,
+        self,
+        input_ids: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
+        output_attentions: bool = False,
+        **kwargs,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Args:
