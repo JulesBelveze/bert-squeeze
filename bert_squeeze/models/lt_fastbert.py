@@ -217,12 +217,6 @@ class LtFastBert(BaseSequenceClassificationTransformerModule):
         pretrained_model_weights = torch.load(pretrained_model_path, map_location='cpu')
         self.load_state_dict(pretrained_model_weights, strict=False)
 
-    @overrides
-    def prune_heads(self, heads_to_prune):
-        """"""
-        raise NotImplementedError()
-
-    @overrides
     def freeze_encoder(self):
         """Freeze backbone and final classifier"""
         for name, p in self.named_parameters():
@@ -230,7 +224,6 @@ class LtFastBert(BaseSequenceClassificationTransformerModule):
                 p.requires_grad = False
         logging.info("Backbone and final classification layer successfully froze.")
 
-    @overrides
     def unfreeze_encoder(self):
         """Unfreeze backbone and final classifier"""
         for name, p in self.named_parameters():

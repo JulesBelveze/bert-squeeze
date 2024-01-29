@@ -17,7 +17,7 @@ from transformers.modeling_outputs import SequenceClassifierOutput
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.losses.distillation_losses import KLDivLoss
 from ..utils.optimizers import BertAdam
-from ..utils.scorers import Scorer
+from ..utils.scorers import BaseSequenceClassificationScorer
 from ..utils.types import DistillationLoss
 
 
@@ -104,9 +104,9 @@ class BaseDistiller(pl.LightningModule):
         """
         Method to set the scorers to use to evaluate the model.
         """
-        self.s_scorer = Scorer(self.params.num_labels)
-        self.s_valid_scorer = Scorer(self.params.num_labels)
-        self.s_test_scorer = Scorer(self.params.num_labels)
+        self.s_scorer = BaseSequenceClassificationScorer(self.params.num_labels)
+        self.s_valid_scorer = BaseSequenceClassificationScorer(self.params.num_labels)
+        self.s_test_scorer = BaseSequenceClassificationScorer(self.params.num_labels)
 
     def _get_student_parameters(self) -> List[Dict]:
         """

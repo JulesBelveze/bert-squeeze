@@ -29,7 +29,7 @@ train:
   weight_decay: 0.01
 
 model:
-  _target_: bert_squeeze.models.lt_bert.LtCustomBert
+  _target_: bert_squeeze.models.lt_bert.LtSequenceClassificationCustomBert
   num_labels: 2
   pretrained_model: "bert-base-cased"
   training_config: ${train}
