@@ -1,1 +1,2 @@
-from .distiller import Distiller
+from .sequence_classification_distiller import SequenceClassificationDistiller, SequenceClassificationParallelDistiller
+from .seq2seq_distiller import Seq2SeqDistiller

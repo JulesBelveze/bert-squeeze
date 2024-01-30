@@ -4,8 +4,7 @@ from torch.utils.data import DataLoader
 from transformers import BertForSequenceClassification
 
 from bert_squeeze.assistants.distil_assistant import DistilAssistant
-from bert_squeeze.models.lt_bert import LtCustomBert
-
+from bert_squeeze.models.lt_t5 import SimpleT5Model
 
 class TestDistilAssistant:
     """"""
@@ -521,3 +520,25 @@ class TestDistilAssistantParallel:
         assert isinstance(distil_assistant.data.train_dataloader(), DataLoader)
         assert len(distil_assistant.data.train_dataloader()) == 187
         assert len(distil_assistant.data.val_dataloader()) == 125
+
+
+class TestDistilSeq2SeqAssistant:
+
+    def test_distil_seq2seq(self, caplog):
+        distil_assistant = DistilAssistant(
+            "distil-seq2seq",
+            data_kwargs={
+                "path": "kmfoda/booksum",
+                "percent": 5,
+                "target_col": "summary",
+                "source_col": "chapter",
+            }
+        )
+
+        assert distil_assistant.teacher is None
+        assert distil_assistant.student is None
+        assert "The Distiller has not been instantiated" in caplog.text
+
+        _ = distil_assistant.model
+        assert isinstance(distil_assistant.teacher, SimpleT5Model)
+        assert isinstance(distil_assistant.student, SimpleT5Model)
