@@ -32,7 +32,7 @@ train:
 
 
 model:
-  _target_: bert_squeeze.distillation.distiller.Distiller
+  _target_: bert_squeeze.distillation.sequence_classification_distiller.SequenceClassificationDistiller
   teacher:
     _target_: transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
     pretrained_model_name_or_path: "bert-base-uncased"

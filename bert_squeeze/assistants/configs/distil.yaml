@@ -4,7 +4,7 @@ general:
   do_eval: false
   get_mismatched: true
   evaluate_during_training: true
-  labels: [0, 1]
+  labels: [ 0, 1 ]
   num_labels: 2
   output_dir: outputs
   save_steps: 500
@@ -18,7 +18,7 @@ train:
   discriminative_learning: true
   dropout: 0.2
   layer_lr_decay: 0.95
-  learning_rates: [2e-5]
+  learning_rates: [ 2e-5 ]
   logging_steps: 50
   lr_scheduler: true
   max_grad_norm: 1.0
@@ -32,7 +32,7 @@ train:
   weight_decay: 0.01
 
 model:
-  _target_: bert_squeeze.distillation.distiller.Distiller
+  _target_: bert_squeeze.distillation.sequence_classification_distiller.SequenceClassificationDistiller
   teacher:
     _target_: transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
     pretrained_model_name_or_path: "bert-base-uncased"
