@@ -25,7 +25,7 @@ class LMScorer(object):
         self.mismatches = []
 
     @property
-    def ppl(self):
+    def perplexity(self):
         """"""
         return np.mean(self.metrics["perplexity"])
 
@@ -35,18 +35,18 @@ class LMScorer(object):
         return tuple([item.strip() for item in lst] for lst in args)
 
     def add(
-        self,
-        loss: torch.Tensor = None,
-        predicted_tokens: torch.Tensor = None,
-        labels: torch.Tensor = None,
-        input_ids: torch.Tensor = None,
+            self,
+            loss: torch.Tensor = None,
+            predicted_tokens: torch.Tensor = None,
+            labels: torch.Tensor = None,
+            input_ids: torch.Tensor = None,
     ):
         """"""
         with torch.no_grad():
             self.losses["global"].append(loss.cpu().numpy())
 
-            ppl = torch.clip(torch.exp(loss), max=1e8)
-            self.metrics["perplexity"].append(ppl.cpu().numpy())
+            perplexity = torch.clip(torch.exp(loss), max=1e8)
+            self.metrics["perplexity"].append(perplexity.cpu().numpy())
 
             decoded_preds = self.tokenizer.batch_decode(
                 predicted_tokens, skip_special_tokens=True
@@ -63,7 +63,7 @@ class LMScorer(object):
 
     def result(self):
         """"""
-        return {"perplexity": self.ppl}
+        return {"perplexity": self.perplexity}
 
     def reset(self):
         """"""
@@ -79,7 +79,7 @@ class LMScorer(object):
         Returns:
             Dict[str, float]: dict of metrics
         """
-        return {"perplexity": self.ppl}
+        return self.result()
 
     def get_table(self) -> str:
         """
@@ -124,11 +124,11 @@ class SummarizationScorer(object):
         return tuple([item.strip() for item in lst] for lst in args)
 
     def add(
-        self,
-        loss: torch.Tensor = None,
-        predicted_tokens: torch.Tensor = None,
-        labels: torch.Tensor = None,
-        input_ids: torch.Tensor = None,
+            self,
+            loss: torch.Tensor = None,
+            predicted_tokens: torch.Tensor = None,
+            labels: torch.Tensor = None,
+            input_ids: torch.Tensor = None,
     ):
         """
         Updates the score with the new loss and the desired metrics.

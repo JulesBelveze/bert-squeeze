@@ -22,12 +22,12 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
     """
 
     def __init__(
-        self,
-        training_config: DictConfig,
-        pretrained_model: str,
-        task: str,
-        generate_kwargs: DictConfig = None,
-        **kwargs,
+            self,
+            training_config: DictConfig,
+            pretrained_model: str,
+            task: str,
+            generate_kwargs: DictConfig = None,
+            **kwargs,
     ):
         super().__init__(training_config, pretrained_model, task)
         self.generate_kwargs = generate_kwargs
@@ -35,7 +35,7 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
         self._build_model()
 
     def forward(
-        self, input_ids: torch.Tensor, attention_mask: torch.Tensor, labels: torch.Tensor
+            self, input_ids: torch.Tensor, attention_mask: torch.Tensor, labels: torch.Tensor
     ) -> Seq2SeqLMOutput:
         """
         Args:
@@ -69,8 +69,8 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
                 value=np.mean(self.scorer.losses), step=self.global_step
             )
 
-            self.logger.experiment["train/ppl"].log(
-                self.scorer.ppl, step=self.global_step
+            self.logger.experiment["train/perplexity"].log(
+                self.scorer.perplexity, step=self.global_step
             )
             self.scorer.reset()
 
