@@ -1,0 +1,20 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+      - id: black
+        language_version: python3
+        args: [ '--check' ]
+        files: ^bert_squeeze/|^tests/
+  - repo: https://github.com/pycqa/flake8
+    rev: '7.0.0'
+    hooks:
+      - id: flake8
+        args: [ '--max-line-length=90', '--ignore=E203,W503,E501,F401,E266' ]
+        files: bert_squeeze/
+  - repo: https://github.com/PyCQA/isort
+    rev: '5.13.2'
+    hooks:
+      - id: isort
+        args: [ '--check-only' ]
+        files: ^bert_squeeze/|^tests/

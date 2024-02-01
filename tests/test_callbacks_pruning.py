@@ -1,4 +1,5 @@
-from transformers import T5ForConditionalGeneration, T5Config
+from transformers import T5Config, T5ForConditionalGeneration
+
 from bert_squeeze.utils.callbacks.pruning import LayerPruning
 
 
