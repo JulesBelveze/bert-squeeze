@@ -22,12 +22,12 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
     """
 
     def __init__(
-            self,
-            training_config: DictConfig,
-            pretrained_model: str,
-            task: str,
-            generate_kwargs: DictConfig = None,
-            **kwargs,
+        self,
+        training_config: DictConfig,
+        pretrained_model: str,
+        task: str,
+        generate_kwargs: DictConfig = None,
+        **kwargs,
     ):
         super().__init__(training_config, pretrained_model, task)
         self.generate_kwargs = generate_kwargs
@@ -35,7 +35,7 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
         self._build_model()
 
     def forward(
-            self, input_ids: torch.Tensor, attention_mask: torch.Tensor, labels: torch.Tensor
+        self, input_ids: torch.Tensor, attention_mask: torch.Tensor, labels: torch.Tensor
     ) -> Seq2SeqLMOutput:
         """
         Args:

@@ -70,15 +70,16 @@ class TrainAssistant(object):
             )
         except KeyError:
             raise ValueError(
-                f"'{name}' is not a valid configuration name, please use one of the following: {CONFIG_MAPPER.keys()}"
+                f"'{name}' is not a valid configuration name, please use one of the"
+                f" following: {CONFIG_MAPPER.keys()}"
             )
         if (
             data_kwargs is not None
             and data_kwargs.get("dataset_config", {}).get("path") is not None
         ):
             logging.warning(
-                "Found value for `dataset_config.path` which conflicts with parameter `dataset_path`, using"
-                "value from the later."
+                "Found value for `dataset_config.path` which conflicts with parameter"
+                " `dataset_path`, usingvalue from the later."
             )
 
         conf["data"]["dataset_config"] = deep_update(

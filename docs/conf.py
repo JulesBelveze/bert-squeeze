@@ -28,7 +28,7 @@ extensions = [
     "sphinx.ext.githubpages",
     "sphinxcontrib.autodoc_pydantic",
     "nbsphinx",
-    "myst_parser"
+    "myst_parser",
 ]
 autoclass_content = 'both'
 templates_path = ['_templates']
@@ -72,7 +72,6 @@ html_theme_options: Dict[str, Any] = {
     "source_repository": "https://github.com/JulesBelveze/bert-squeeze/",
     "source_branch": "main",
     "source_directory": "docs/",
-
     "light_logo": "bert-squeeze.png",
     "dark_logo": "bert-squeeze.png",
     "light_css_variables": {

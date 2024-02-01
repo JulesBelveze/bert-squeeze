@@ -229,7 +229,7 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         tokenized_dataset = self.dataset.map(
             lambda x: self.tokenizer(
                 x[self.source_col],
-                padding="longest",
+                padding=False,
                 max_length=self.max_source_length,
                 truncation=True,
             )
@@ -239,7 +239,7 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
                 lambda x: {
                     "labels": self.tokenizer(
                         x[self.target_col],
-                        padding="longest",
+                        padding=False,
                         max_length=self.max_target_length,
                         truncation=True,
                     )["input_ids"]

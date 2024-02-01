@@ -7,6 +7,8 @@ import torch
 from tabulate import tabulate
 from transformers import AutoTokenizer
 
+MAX_CLIP_VALUE = 1e8
+
 
 class LMScorer(object):
     """
@@ -35,17 +37,17 @@ class LMScorer(object):
         return tuple([item.strip() for item in lst] for lst in args)
 
     def add(
-            self,
-            loss: torch.Tensor = None,
-            predicted_tokens: torch.Tensor = None,
-            labels: torch.Tensor = None,
-            input_ids: torch.Tensor = None,
+        self,
+        loss: torch.Tensor = None,
+        predicted_tokens: torch.Tensor = None,
+        labels: torch.Tensor = None,
+        input_ids: torch.Tensor = None,
     ):
         """"""
         with torch.no_grad():
             self.losses["global"].append(loss.cpu().numpy())
 
-            perplexity = torch.clip(torch.exp(loss), max=1e8)
+            perplexity = torch.clip(torch.exp(loss), max=MAX_CLIP_VALUE)
             self.metrics["perplexity"].append(perplexity.cpu().numpy())
 
             decoded_preds = self.tokenizer.batch_decode(
@@ -124,11 +126,11 @@ class SummarizationScorer(object):
         return tuple([item.strip() for item in lst] for lst in args)
 
     def add(
-            self,
-            loss: torch.Tensor = None,
-            predicted_tokens: torch.Tensor = None,
-            labels: torch.Tensor = None,
-            input_ids: torch.Tensor = None,
+        self,
+        loss: torch.Tensor = None,
+        predicted_tokens: torch.Tensor = None,
+        labels: torch.Tensor = None,
+        input_ids: torch.Tensor = None,
     ):
         """
         Updates the score with the new loss and the desired metrics.

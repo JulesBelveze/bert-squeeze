@@ -6,6 +6,7 @@ from transformers import BertForSequenceClassification
 from bert_squeeze.assistants.distil_assistant import DistilAssistant
 from bert_squeeze.models.lt_t5 import SimpleT5Model
 
+
 class TestDistilAssistant:
     """"""
 
@@ -523,7 +524,6 @@ class TestDistilAssistantParallel:
 
 
 class TestDistilSeq2SeqAssistant:
-
     def test_distil_seq2seq(self, caplog):
         distil_assistant = DistilAssistant(
             "distil-seq2seq",
@@ -532,7 +532,7 @@ class TestDistilSeq2SeqAssistant:
                 "percent": 5,
                 "target_col": "summary",
                 "source_col": "chapter",
-            }
+            },
         )
 
         assert distil_assistant.teacher is None

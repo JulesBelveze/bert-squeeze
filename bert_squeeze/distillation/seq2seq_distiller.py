@@ -28,24 +28,24 @@ class Seq2SeqDistiller(BaseDistiller):
     """
 
     def __init__(
-            self,
-            teacher: Union["pl.LightningModule", "torch.nn.Module"],
-            student: Union["pl.LightningModule", "torch.nn.Module"],
-            training_config: DictConfig,
-            teacher_checkpoint: str = None,
-            **kwargs,
+        self,
+        teacher: Union["pl.LightningModule", "torch.nn.Module"],
+        student: Union["pl.LightningModule", "torch.nn.Module"],
+        training_config: DictConfig,
+        teacher_checkpoint: str = None,
+        **kwargs,
     ):
         super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
 
     @overrides
     def loss(
-            self,
-            teacher_logits: torch.Tensor,
-            student_logits: torch.Tensor,
-            labels: torch.Tensor = None,
-            ignore_index: int = -100,
-            *args,
-            **kwargs,
+        self,
+        teacher_logits: torch.Tensor,
+        student_logits: torch.Tensor,
+        labels: torch.Tensor = None,
+        ignore_index: int = -100,
+        *args,
+        **kwargs,
     ) -> DistillationLoss:
         """
         Method called for loss computation
@@ -158,14 +158,11 @@ class Seq2SeqDistiller(BaseDistiller):
         Method to set the scorers to use to evaluate the model.
         """
         self.s_scorer = SummarizationScorer(
-            tokenizer_name=self.student.pretrained_model,
-            do_mismatch=False
+            tokenizer_name=self.student.pretrained_model, do_mismatch=False
         )
         self.s_valid_scorer = SummarizationScorer(
-            tokenizer_name=self.student.pretrained_model,
-            do_mismatch=True
+            tokenizer_name=self.student.pretrained_model, do_mismatch=True
         )
         self.s_test_scorer = SummarizationScorer(
-            tokenizer_name=self.student.pretrained_model,
-            do_mismatch=True
+            tokenizer_name=self.student.pretrained_model, do_mismatch=True
         )

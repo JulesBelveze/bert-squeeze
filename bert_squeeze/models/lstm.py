@@ -169,8 +169,7 @@ class LtLSTM(pl.LightningModule):
 
         if objective == "lsl" and self.smoothing == 0.0:
             logging.warning(
-                "You are using label smoothing and the smoothing parameter"
-                "is set to 0.0."
+                "You are using label smoothing and the smoothing parameteris set to 0.0."
             )
         elif objective == "weighted" and all([w == 1.0 for w in self.class_weights]):
             logging.warning(

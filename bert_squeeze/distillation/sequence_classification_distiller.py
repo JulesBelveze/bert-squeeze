@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Tuple, Union, Any, List
+from typing import Any, Dict, List, Tuple, Union
 
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
@@ -35,12 +35,12 @@ class BaseSequenceClassificationDistiller(BaseDistiller):
     """
 
     def __init__(
-            self,
-            teacher: Union["pl.LightningModule", "torch.nn.Module"],
-            student: Union["pl.LightningModule", "torch.nn.Module"],
-            training_config: DictConfig,
-            teacher_checkpoint: str = None,
-            **kwargs,
+        self,
+        teacher: Union["pl.LightningModule", "torch.nn.Module"],
+        student: Union["pl.LightningModule", "torch.nn.Module"],
+        training_config: DictConfig,
+        teacher_checkpoint: str = None,
+        **kwargs,
     ):
         super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
 
@@ -61,11 +61,10 @@ class BaseSequenceClassificationDistiller(BaseDistiller):
 
         if objective == "lsl" and self.params.smoothing == 0.0:
             logging.warning(
-                "You are using label smoothing and the smoothing parameter"
-                "is set to 0.0."
+                "You are using label smoothing and the smoothing parameteris set to 0.0."
             )
         elif objective == "weighted" and all(
-                [w == 1.0 for w in self.params.get("class_weights", None)]
+            [w == 1.0 for w in self.params.get("class_weights", None)]
         ):
             logging.warning(
                 "You are using a weighted CrossEntropy but the class"
@@ -77,9 +76,11 @@ class BaseSequenceClassificationDistiller(BaseDistiller):
                 nb_classes=self.params.num_labels, smoothing=self.params.smoothing
             ),
             "weighted": CrossEntropyLoss(
-                weight=torch.Tensor(self.params.class_weights)
-                if self.params.get("class_weights") is not None
-                else None
+                weight=(
+                    torch.Tensor(self.params.class_weights)
+                    if self.params.get("class_weights") is not None
+                    else None
+                )
             ),
         }[objective]
 
@@ -139,12 +140,12 @@ class SequenceClassificationDistiller(BaseSequenceClassificationDistiller):
     """
 
     def __init__(
-            self,
-            teacher: Union["pl.LightningModule", "torch.nn.Module"],
-            student: Union["pl.LightningModule", "torch.nn.Module"],
-            training_config: DictConfig,
-            teacher_checkpoint: str = None,
-            **kwargs,
+        self,
+        teacher: Union["pl.LightningModule", "torch.nn.Module"],
+        student: Union["pl.LightningModule", "torch.nn.Module"],
+        training_config: DictConfig,
+        teacher_checkpoint: str = None,
+        **kwargs,
     ):
         super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
 
@@ -200,13 +201,13 @@ class SequenceClassificationDistiller(BaseSequenceClassificationDistiller):
 
     @overrides
     def loss(
-            self,
-            teacher_logits: torch.Tensor,
-            student_logits: torch.Tensor,
-            labels: torch.Tensor = None,
-            ignore_index: int = -100,
-            *args,
-            **kwargs,
+        self,
+        teacher_logits: torch.Tensor,
+        student_logits: torch.Tensor,
+        labels: torch.Tensor = None,
+        ignore_index: int = -100,
+        *args,
+        **kwargs,
     ) -> DistillationLoss:
         """
         Method called for loss computation
@@ -326,12 +327,12 @@ class SequenceClassificationParallelDistiller(BaseSequenceClassificationDistille
     """
 
     def __init__(
-            self,
-            teacher: Union["pl.LightningModule", "torch.nn.Module"],
-            student: Union["pl.LightningModule", "torch.nn.Module"],
-            training_config: DictConfig,
-            teacher_checkpoint: str = None,
-            **kwargs,
+        self,
+        teacher: Union["pl.LightningModule", "torch.nn.Module"],
+        student: Union["pl.LightningModule", "torch.nn.Module"],
+        training_config: DictConfig,
+        teacher_checkpoint: str = None,
+        **kwargs,
     ):
         super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
 
@@ -362,7 +363,7 @@ class SequenceClassificationParallelDistiller(BaseSequenceClassificationDistille
 
     @overrides
     def get_student_logits(
-            self, batch: Dict[str, torch.Tensor]
+        self, batch: Dict[str, torch.Tensor]
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Get student's predictions.
@@ -404,12 +405,12 @@ class SequenceClassificationParallelDistiller(BaseSequenceClassificationDistille
 
     @overrides
     def loss(
-            self,
-            teacher_logits: torch.Tensor,
-            student_logits: torch.Tensor,
-            student_logits_translation: torch.Tensor,
-            *args,
-            **kwargs,
+        self,
+        teacher_logits: torch.Tensor,
+        student_logits: torch.Tensor,
+        student_logits_translation: torch.Tensor,
+        *args,
+        **kwargs,
     ) -> DistillationLoss:
         """
         Method called for loss computation, it computes the error between the teacher's and

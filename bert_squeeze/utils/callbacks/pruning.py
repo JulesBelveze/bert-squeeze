@@ -61,7 +61,8 @@ class ThresholdBasedPruning(Callback):
         """
         if pl_module.current_epoch >= self.start_pruning_epoch != -1:
             logging.info(
-                f"======== Pruning iteration {self.start_pruning_epoch - pl_module.current_epoch - 1} ========"
+                "======== Pruning iteration"
+                f" {self.start_pruning_epoch - pl_module.current_epoch - 1} ========"
             )
             self._prune_model(pl_module)
 

@@ -93,9 +93,11 @@ class BaseTransformerModule(pl.LightningModule):
         if optimizer_name == "adamw":
             optimizer = AdamW(
                 optimizer_parameters,
-                lr=self.config.learning_rates[0]
-                if isinstance(self.config.learning_rates, ListConfig)
-                else self.config.learning_rate,
+                lr=(
+                    self.config.learning_rates[0]
+                    if isinstance(self.config.learning_rates, ListConfig)
+                    else self.config.learning_rate
+                ),
                 eps=self.config.adam_eps,
             )
 
@@ -107,25 +109,31 @@ class BaseTransformerModule(pl.LightningModule):
         elif optimizer_name == "bertadam":
             optimizer = BertAdam(
                 optimizer_parameters,
-                lr=self.config.learning_rates[0]
-                if isinstance(self.config.learning_rates, ListConfig)
-                else self.config.learning_rate,
+                lr=(
+                    self.config.learning_rates[0]
+                    if isinstance(self.config.learning_rates, ListConfig)
+                    else self.config.learning_rate
+                ),
                 warmup=self.config.warmup_ratio,
             )
 
         elif optimizer_name == "adam":
             optimizer = torch.optim.Adam(
                 optimizer_parameters,
-                lr=self.config.learning_rates[0]
-                if isinstance(self.config.learning_rates, ListConfig)
-                else self.config.learning_rate,
+                lr=(
+                    self.config.learning_rates[0]
+                    if isinstance(self.config.learning_rates, ListConfig)
+                    else self.config.learning_rate
+                ),
             )
         elif optimizer_name == "sgd":
             optimizer = torch.optim.SGD(
                 optimizer_parameters,
-                lr=self.config.learning_rates[0]
-                if isinstance(self.config.learning_rates, ListConfig)
-                else self.config.learning_rate,
+                lr=(
+                    self.config.learning_rates[0]
+                    if isinstance(self.config.learning_rates, ListConfig)
+                    else self.config.learning_rate
+                ),
             )
         else:
             raise ValueError(f"Optimizer '{self.config.optimizer}' not supported.")
@@ -348,9 +356,10 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
         super()._sanity_checks(training_config)
 
         if training_config.get("scorer_type") == "loose":
-            assert (
-                "loose_classes" in training_config.keys()
-            ), "To use a 'LooseScorer' you need to set a 'loose_classes' parameter in your training config."
+            assert "loose_classes" in training_config.keys(), (
+                "To use a 'LooseScorer' you need to set a 'loose_classes' parameter in"
+                " your training config."
+            )
 
     def _set_objective(self) -> None:
         """"""
@@ -360,8 +369,7 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
 
         if objective == "lsl" and self.smoothing == 0.0:
             logging.warning(
-                "You are using label smoothing and the smoothing parameter"
-                "is set to 0.0."
+                "You are using label smoothing and the smoothing parameteris set to 0.0."
             )
         elif objective == "weighted" and all([w == 1.0 for w in self.class_weights]):
             logging.warning(

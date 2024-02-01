@@ -27,12 +27,12 @@ class BaseDistiller(pl.LightningModule):
     """
 
     def __init__(
-            self,
-            teacher: Union["pl.LightningModule", "torch.nn.Module"],
-            student: Union[pl.LightningModule, torch.nn.Module],
-            training_config: DictConfig,
-            teacher_checkpoint: str = None,
-            **kwargs,
+        self,
+        teacher: Union["pl.LightningModule", "torch.nn.Module"],
+        student: Union[pl.LightningModule, torch.nn.Module],
+        training_config: DictConfig,
+        teacher_checkpoint: str = None,
+        **kwargs,
     ):
         super().__init__()
         self.params = training_config
@@ -66,8 +66,8 @@ class BaseDistiller(pl.LightningModule):
 
         if self.params.discriminative_learning:
             if (
-                    isinstance(self.params.learning_rates, ListConfig)
-                    and len(self.params.learning_rates) > 1
+                isinstance(self.params.learning_rates, ListConfig)
+                and len(self.params.learning_rates) > 1
             ):
                 groups = [
                     (f'layer.{i}.', self.params.learning_rates[i]) for i in range(12)
@@ -92,7 +92,7 @@ class BaseDistiller(pl.LightningModule):
                             p
                             for n, p in self.student.named_parameters()
                             if not any(nd in n for nd in no_decay)
-                               and any(nd in n for nd in [g])
+                            and any(nd in n for nd in [g])
                         ],
                         'weight_decay_rate': self.params.weight_decay,
                         'lr': l,
@@ -104,7 +104,7 @@ class BaseDistiller(pl.LightningModule):
                             p
                             for n, p in self.student.named_parameters()
                             if any(nd in n for nd in no_decay)
-                               and any(nd in n for nd in [g])
+                            and any(nd in n for nd in [g])
                         ],
                         'weight_decay_rate': 0.0,
                         'lr': l,
@@ -117,7 +117,7 @@ class BaseDistiller(pl.LightningModule):
                         p
                         for n, p in self.student.named_parameters()
                         if not any(nd in n for nd in no_decay)
-                           and not any(nd in n for nd in group_all)
+                        and not any(nd in n for nd in group_all)
                     ],
                     'weight_decay_rate': self.params.weight_decay,
                 },
@@ -126,15 +126,15 @@ class BaseDistiller(pl.LightningModule):
                         p
                         for n, p in self.student.named_parameters()
                         if any(nd in n for nd in no_decay)
-                           and not any(nd in n for nd in group_all)
+                        and not any(nd in n for nd in group_all)
                     ],
                     'weight_decay_rate': 0.0,
                 },
             ]
             optimizer_grouped_parameters = (
-                    no_decay_optimizer_parameters
-                    + decay_optimizer_parameters
-                    + group_all_parameters
+                no_decay_optimizer_parameters
+                + decay_optimizer_parameters
+                + group_all_parameters
             )
         else:
             optimizer_grouped_parameters = [
@@ -220,7 +220,7 @@ class BaseDistiller(pl.LightningModule):
         raise NotImplementedError()
 
     def loss(
-            self, teacher_logits: torch.Tensor, student_logits: torch.Tensor, *args, **kwargs
+        self, teacher_logits: torch.Tensor, student_logits: torch.Tensor, *args, **kwargs
     ) -> DistillationLoss:
         raise NotImplementedError()
 
@@ -247,5 +247,3 @@ class BaseDistiller(pl.LightningModule):
                 self.log_dict(
                     {f"eval/loss_{key}": val for key, val in logging_loss.items()}
                 )
-
-

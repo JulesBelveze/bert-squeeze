@@ -241,7 +241,8 @@ class LotteryTicket(Callback):
         preds = np.argmax(preds, axis=1)
         original_score = self.metric(preds, labels)
         logging.info(
-            f"Pruning: original score: {original_score}, threshold: {original_score * self.masking_threshold}"
+            f"Pruning: original score: {original_score}, threshold:"
+            f" {original_score * self.masking_threshold}"
         )
 
         new_head_mask = torch.ones_like(head_importance)
@@ -275,7 +276,8 @@ class LotteryTicket(Callback):
             preds = np.argmax(preds, axis=1)
             current_score = self.metric(preds, labels)
             logging.info(
-                f"Masking: current score: {current_score}, remaining heads {new_head_mask.sum()} "
+                f"Masking: current score: {current_score}, remaining heads"
+                f" {new_head_mask.sum()} "
                 f"({new_head_mask.sum() / new_head_mask.numel() * 100} percents)"
             )
 
@@ -344,14 +346,17 @@ class LotteryTicket(Callback):
         new_time = datetime.now() - before_time
 
         logging.info(
-            f"Pruning: original num of params: {original_num_params}, after pruning {pruned_num_params} "
+            f"Pruning: original num of params: {original_num_params}, after pruning"
+            f" {pruned_num_params} "
             f"({pruned_num_params / original_num_params * 100} percents)"
         )
         logging.info(
-            f"Pruning: score with masking: {score_masking} score with pruning: {score_pruning}"
+            f"Pruning: score with masking: {score_masking} score with pruning:"
+            f" {score_pruning}"
         )
         logging.info(
-            f"Pruning: speed ratio (new timing / original timing): {original_time / new_time * 100} percents"
+            "Pruning: speed ratio (new timing / original timing):"
+            f" {original_time / new_time * 100} percents"
         )
 
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
