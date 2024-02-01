@@ -49,9 +49,10 @@ class TheseusBertEncoder(nn.Module):
 
         self.nb_predecessor_layer = config.num_hidden_layers
         self.nb_successor_layers = nb_successor_layers
-        assert (
-            self.nb_predecessor_layer % self.nb_successor_layers == 0
-        ), "The number of predecessor layers must be a multiple of the number of sucessor layers."
+        assert self.nb_predecessor_layer % self.nb_successor_layers == 0, (
+            "The number of predecessor layers must be a multiple of the number of"
+            " sucessor layers."
+        )
         self.compress_ratio = self.nb_predecessor_layer // self.nb_successor_layers
 
         self.bernoulli = None
@@ -273,7 +274,8 @@ class TheseusBertModel(BertPreTrainedModel, ABC):
                 encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
             else:
                 raise ValueError(
-                    "Wrong shape for encoder_hidden_shape (shape {}) or encoder_attention_mask (shape {})".format(
+                    "Wrong shape for encoder_hidden_shape (shape {}) or"
+                    " encoder_attention_mask (shape {})".format(
                         encoder_hidden_shape, encoder_attention_mask.shape
                     )
                 )

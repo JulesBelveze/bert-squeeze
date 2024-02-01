@@ -4,44 +4,44 @@ general:
   do_eval: false
   get_mismatched: true
   evaluate_during_training: true
-  labels: [ 0, 1 ]
   output_dir: outputs
   save_steps: 500
   validation_every_n_epoch: 1
 
 train:
-  adam_eps: 1e-8
   accumulation_steps: 1
+  adam_eps: 1e-8
   auto_lr: false
-  discriminative_learning: true
+  discriminative_learning: false
   dropout: 0.2
   layer_lr_decay: 0.95
-  learning_rates: [ 2e-5 ]
+  learning_rates: [ 5e-5 ]
   logging_steps: 50
-  lr_scheduler: true
+  lr_scheduler: false
   max_grad_norm: 1.0
   num_epochs: 10
-  optimizer: bertadam
-  objective: lsl
-  smoothing: 0.1
   warmup_ratio: 0.06
   warmup_steps: true
   weight_decay: 0.01
 
 model:
-  _target_: bert_squeeze.models.lt_bert.LtSequenceClassificationCustomBert
-  num_labels: 2
-  pretrained_model: "bert-base-cased"
+  _target_: bert_squeeze.models.lt_t5.SimpleT5Model
+  task:
+  pretrained_model: "t5-small"
   training_config: ${train}
+  generate_kwargs:
+    do_sample: false
 
 data:
-  _target_: bert_squeeze.data.modules.transformer_module.TransformerDataModule
+  _target_: bert_squeeze.data.modules.transformer_module.Seq2SeqTransformerDataModule
   dataset_config:
     is_local: false
-    label_col: label
+    target_col:
     path:
     split:
-    text_col: text
+    source_col:
     truncate_mode: head
-  max_length: 256
+  max_target_length: 64
+  max_source_length: 256
   tokenizer_name: ${model.pretrained_model}
+

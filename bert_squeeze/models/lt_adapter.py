@@ -6,10 +6,10 @@ from omegaconf import DictConfig
 from overrides import overrides
 from transformers import AutoConfig
 
-from .base_lt_module import BaseTransformerModule
+from .base_lt_module import BaseSequenceClassificationTransformerModule
 
 
-class LtAdapter(BaseTransformerModule):
+class LtAdapter(BaseSequenceClassificationTransformerModule):
     """
     Lightning module to fine-tune adapters for Transformer-based language models on sequence classification task.
 
@@ -41,7 +41,7 @@ class LtAdapter(BaseTransformerModule):
         labels: Union[List[str], List[int]],
         **kwargs,
     ):
-        super().__init__(training_config, num_labels, pretrained_model, **kwargs)
+        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
 
         assert len(labels) == self.model_config.num_labels
 

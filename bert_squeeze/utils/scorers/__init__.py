@@ -1,2 +1,6 @@
-from .scorer import LooseScorer, Scorer
-from .scorer_fast import FastBertScorer
+from .lm_scorer import LMScorer, SummarizationScorer
+from .sequence_classification_scorer import (
+    BaseSequenceClassificationScorer,
+    FastBertSequenceClassificationScorer,
+    LooseSequenceClassificationScorer,
+)

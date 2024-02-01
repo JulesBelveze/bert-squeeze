@@ -33,7 +33,7 @@ train:
 
 
 model:
-  _target_: bert_squeeze.distillation.distiller.ParallelDistiller
+  _target_: bert_squeeze.distillation.sequence_classification_distiller.SequenceClassificationParallelDistiller
   teacher:
     _target_: transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
     pretrained_model_name_or_path: "bert-base-uncased"

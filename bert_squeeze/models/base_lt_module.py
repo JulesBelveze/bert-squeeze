@@ -15,7 +15,13 @@ from transformers import AdamW, AutoConfig
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.optimizers import BertAdam
-from ..utils.scorers import FastBertScorer, LooseScorer, Scorer
+from ..utils.scorers import (
+    BaseSequenceClassificationScorer,
+    FastBertSequenceClassificationScorer,
+    LMScorer,
+    LooseSequenceClassificationScorer,
+    SummarizationScorer,
+)
 from ..utils.types import Loss
 
 
@@ -26,36 +32,21 @@ class BaseTransformerModule(pl.LightningModule):
     Args:
         training_config (DictConfig):
             training configuration
-        num_labels (int):
-            number of labels
         pretrained_model (str):
             name of the pretrained Transformer model to use
     """
 
-    def __init__(
-        self,
-        training_config: DictConfig,
-        num_labels: int,
-        pretrained_model: str = None,
-        **kwargs,
-    ):
-        super(BaseTransformerModule, self).__init__()
-        self._sanity_checks(training_config)
+    def __init__(self, training_config: DictConfig, pretrained_model: str, **kwargs):
+        super().__init__()
 
         self.config = training_config
-        self.num_labels = num_labels
 
         self.pretrained_model = pretrained_model
-        self.model_config = AutoConfig.from_pretrained(
-            pretrained_model, num_labels=num_labels
-        )
+        self.model_config = None
 
         self.training_step_outputs = []
         self.test_step_outputs = []
         self.validation_step_outputs = []
-
-        self._set_scorers(kwargs.get("scorer_type", "regular"))
-        self._set_objective()
 
     def forward(self, **kwargs):
         """"""
@@ -76,16 +67,7 @@ class BaseTransformerModule(pl.LightningModule):
 
     def on_validation_epoch_end(self):
         """"""
-        if not self.trainer.sanity_checking:
-            all_logits = torch.cat(
-                [pred["logits"] for pred in self.validation_step_outputs]
-            )
-            all_probs = F.softmax(all_logits, dim=-1)
-            labels_probs = all_probs.numpy()
-            self.log_eval_report(labels_probs)
-
-        self.valid_scorer.reset()
-        self.validation_step_outputs.clear()
+        raise NotImplementedError()
 
     def test_step(self, batch, batch_idx, *args, **kwargs):
         """"""
@@ -106,10 +88,16 @@ class BaseTransformerModule(pl.LightningModule):
                                a list of schedulers to use during training
         """
         optimizer_parameters = self._get_optimizer_parameters()
-        if self.config.optimizer == "adamw":
+
+        optimizer_name = self.config.get("optimizer", "adamw")
+        if optimizer_name == "adamw":
             optimizer = AdamW(
                 optimizer_parameters,
-                lr=self.config.learning_rates[0],
+                lr=(
+                    self.config.learning_rates[0]
+                    if isinstance(self.config.learning_rates, ListConfig)
+                    else self.config.learning_rate
+                ),
                 eps=self.config.adam_eps,
             )
 
@@ -118,20 +106,34 @@ class BaseTransformerModule(pl.LightningModule):
                 lr_scheduler = {"scheduler": scheduler, "name": "NeptuneLogger"}
                 return [optimizer], [lr_scheduler]
 
-        elif self.config.optimizer == "bertadam":
+        elif optimizer_name == "bertadam":
             optimizer = BertAdam(
                 optimizer_parameters,
-                lr=self.config.learning_rates[0],
+                lr=(
+                    self.config.learning_rates[0]
+                    if isinstance(self.config.learning_rates, ListConfig)
+                    else self.config.learning_rate
+                ),
                 warmup=self.config.warmup_ratio,
             )
 
-        elif self.config.optimizer == "adam":
+        elif optimizer_name == "adam":
             optimizer = torch.optim.Adam(
-                optimizer_parameters, lr=self.config.learning_rates[0]
+                optimizer_parameters,
+                lr=(
+                    self.config.learning_rates[0]
+                    if isinstance(self.config.learning_rates, ListConfig)
+                    else self.config.learning_rate
+                ),
             )
-        elif self.config.optimizer == "sgd":
+        elif optimizer_name == "sgd":
             optimizer = torch.optim.SGD(
-                optimizer_parameters, lr=self.config.learning_rates[0]
+                optimizer_parameters,
+                lr=(
+                    self.config.learning_rates[0]
+                    if isinstance(self.config.learning_rates, ListConfig)
+                    else self.config.learning_rate
+                ),
             )
         else:
             raise ValueError(f"Optimizer '{self.config.optimizer}' not supported.")
@@ -144,27 +146,7 @@ class BaseTransformerModule(pl.LightningModule):
 
     def _set_objective(self) -> None:
         """"""
-        objective = self.config.get("objective", "ce")
-        self.smoothing = self.config.get("smoothing", 0.0)
-        self.class_weights = self.config.get("class_weights", [1.0] * self.num_labels)
-
-        if objective == "lsl" and self.smoothing == 0.0:
-            logging.warning(
-                "You are using label smoothing and the smoothing parameter"
-                "is set to 0.0."
-            )
-        elif objective == "weighted" and all([w == 1.0 for w in self.class_weights]):
-            logging.warning(
-                "You are using a weighted CrossEntropy but the class"
-                "weights are all equal to 1.0."
-            )
-        self.objective = {
-            "ce": CrossEntropyLoss(),
-            "lsl": LabelSmoothingLoss(
-                nb_classes=self.num_labels, smoothing=self.smoothing
-            ),
-            "weighted": CrossEntropyLoss(weight=torch.Tensor(self.class_weights)),
-        }[objective]
+        raise NotImplementedError()
 
     @staticmethod
     def _sanity_checks(training_config: DictConfig) -> None:
@@ -179,11 +161,6 @@ class BaseTransformerModule(pl.LightningModule):
         assert (
             training_config.logging_steps > training_config.accumulation_steps
         ), "'logging_steps' should be greater than 'accumulation_steps'"
-
-        if training_config.get("scorer_type") == "loose":
-            assert (
-                "loose_classes" in training_config.keys()
-            ), "To use a 'LooseScorer' you need to set a 'loose_classes' parameter in your training config."
 
     def _get_optimizer_parameters(self) -> List[Dict]:
         """
@@ -287,33 +264,9 @@ class BaseTransformerModule(pl.LightningModule):
             ]
         return optimizer_grouped_parameters
 
-    def _set_scorers(self, scorer_type: str) -> None:
-        """
-        Method to set the scorers to use to evaluate the model.
-
-        Args:
-            scorer_type (str):
-                Possible values: ["regular", "loose", "fast"]
-        """
-        scorer = {
-            "loose": LooseScorer(self.config.get("loose_classes", [])),
-            "regular": Scorer(self.num_labels),
-            "fast": FastBertScorer(self.num_labels),
-        }[scorer_type]
-        self.scorer = deepcopy(scorer)
-        self.valid_scorer = deepcopy(scorer)
-        self.test_scorer = deepcopy(scorer)
-
-    def prune_heads(self, heads_to_prune: Dict[str, List[int]]) -> None:
-        """
-        Prunes heads of the model.
-
-        Args:
-            heads_to_prune (Dict[str, List[int]]):
-                dict of {layer_num: list of heads to prune in this layer}
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.encoder.layer[layer].attention.prune_heads(heads)
+    def _set_scorers(self, *args, **kwargs) -> None:
+        """"""
+        raise NotImplementedError()
 
     def freeze_encoder(self) -> None:
         """Freeze encoder layers"""
@@ -324,6 +277,131 @@ class BaseTransformerModule(pl.LightningModule):
         """Unfreeze encoder layers"""
         for param in self.encoder.parameters():
             param.requires_grad = True
+
+    def loss(self, *args, **kwargs) -> Loss:
+        """"""
+        raise NotImplementedError()
+
+    def log_eval_report(self, *args) -> None:
+        """
+        Method that logs an evaluation report.
+
+        It uses the evaluation scorer to log all the available losses and metrics
+        """
+        table = self.valid_scorer.get_table()
+        self.logger.experiment.add_text("eval/report", table)
+
+        logging_loss = {
+            key: torch.stack(val).mean() for key, val in self.valid_scorer.losses.items()
+        }
+        self.log_dict({f"eval/loss_{key}": val for key, val in logging_loss.items()})
+
+        eval_report = self.valid_scorer.to_dict()
+        for metric, value in eval_report.items():
+            if isinstance(value, dict):
+                self.log_dict({f"eval/{metric}/{key}": v for key, v in value.items()})
+            elif not isinstance(value, list) and not isinstance(value, np.ndarray):
+                self.log("eval/{}".format(metric), value)
+
+
+class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
+    """
+    Base class to extend for transformer based classification tasks.
+
+    Args:
+        training_config (DictConfig):
+            training configuration
+        num_labels (int):
+            number of labels
+        pretrained_model (str):
+            name of the pretrained Transformer model to use
+    """
+
+    def __init__(
+        self,
+        training_config: DictConfig,
+        pretrained_model: str,
+        num_labels: int,
+        **kwargs,
+    ):
+        super().__init__(training_config, pretrained_model, **kwargs)
+        self._sanity_checks(training_config)
+        self.num_labels = num_labels
+        self.model_config = AutoConfig.from_pretrained(
+            pretrained_model, num_labels=num_labels
+        )
+
+        self._set_scorers(kwargs.get("scorer_type", "regular"))
+        self._set_objective()
+
+    def on_validation_epoch_end(self):
+        """"""
+        if not self.trainer.sanity_checking:
+            all_logits = torch.cat(
+                [pred["logits"] for pred in self.validation_step_outputs]
+            )
+            all_probs = F.softmax(all_logits, dim=-1)
+            labels_probs = all_probs.numpy()
+            self.log_eval_report(labels_probs)
+
+        self.valid_scorer.reset()
+        self.validation_step_outputs.clear()
+
+    def _sanity_checks(self, training_config: DictConfig) -> None:
+        """
+        Args:
+            training_config (DictConfig):
+                training configuration
+        """
+        super()._sanity_checks(training_config)
+
+        if training_config.get("scorer_type") == "loose":
+            assert "loose_classes" in training_config.keys(), (
+                "To use a 'LooseScorer' you need to set a 'loose_classes' parameter in"
+                " your training config."
+            )
+
+    def _set_objective(self) -> None:
+        """"""
+        objective = self.config.get("objective", "ce")
+        self.smoothing = self.config.get("smoothing", 0.0)
+        self.class_weights = self.config.get("class_weights", [1.0] * self.num_labels)
+
+        if objective == "lsl" and self.smoothing == 0.0:
+            logging.warning(
+                "You are using label smoothing and the smoothing parameteris set to 0.0."
+            )
+        elif objective == "weighted" and all([w == 1.0 for w in self.class_weights]):
+            logging.warning(
+                "You are using a weighted CrossEntropy but the class"
+                "weights are all equal to 1.0."
+            )
+        self.objective = {
+            "ce": CrossEntropyLoss(),
+            "lsl": LabelSmoothingLoss(
+                nb_classes=self.num_labels, smoothing=self.smoothing
+            ),
+            "weighted": CrossEntropyLoss(weight=torch.Tensor(self.class_weights)),
+        }[objective]
+
+    def _set_scorers(self, scorer_type: str) -> None:
+        """
+        Method to set the scorers to use to evaluate the model.
+
+        Args:
+            scorer_type (str):
+                Possible values: ["regular", "loose", "fast"]
+        """
+        scorer = {
+            "loose": LooseSequenceClassificationScorer(
+                self.config.get("loose_classes", [])
+            ),
+            "regular": BaseSequenceClassificationScorer(self.num_labels),
+            "fast": FastBertSequenceClassificationScorer(self.num_labels),
+        }[scorer_type]
+        self.scorer = deepcopy(scorer)
+        self.valid_scorer = deepcopy(scorer)
+        self.test_scorer = deepcopy(scorer)
 
     def loss(self, labels: torch.Tensor, logits: torch.Tensor, *args, **kwargs) -> Loss:
         """
@@ -348,20 +426,7 @@ class BaseTransformerModule(pl.LightningModule):
             probs (np.array):
                 predicted probabilities
         """
-        table = self.valid_scorer.get_table()
-        self.logger.experiment.add_text("eval/report", table)
-
-        logging_loss = {
-            key: torch.stack(val).mean() for key, val in self.valid_scorer.losses.items()
-        }
-        self.log_dict({f"eval/loss_{key}": val for key, val in logging_loss.items()})
-
-        eval_report = self.valid_scorer.to_dict()
-        for metric, value in eval_report.items():
-            if isinstance(value, dict):
-                self.log_dict({f"eval/{metric}/{key}": v for key, v in value.items()})
-            elif not isinstance(value, list) and not isinstance(value, np.ndarray):
-                self.log("eval/{}".format(metric), value)
+        super().log_eval_report()
 
         for i in range(probs.shape[1]):
             fig = plt.figure(figsize=(15, 15))
@@ -369,3 +434,83 @@ class BaseTransformerModule(pl.LightningModule):
             plt.title("Probability boxplot for label {}".format(i))
             self.logger.experiment.add_figure("eval/dist_label_{}".format(i), fig)
             plt.close("all")
+
+
+class BaseSeq2SeqTransformerModule(BaseTransformerModule):
+    """
+    Base class to extend for transformer based seq2seq tasks.
+
+    Args:
+        training_config (DictConfig):
+            training configuration
+        pretrained_model (str):
+            name of the pretrained Transformer model to use
+        task (str):
+            name of the to perform
+    """
+
+    def __init__(
+        self,
+        training_config: DictConfig,
+        pretrained_model: str,
+        task: str,
+        **kwargs,
+    ):
+        super().__init__(training_config, pretrained_model, **kwargs)
+        self._sanity_checks(training_config)
+        self.task = task
+        self.model_config = AutoConfig.from_pretrained(
+            pretrained_model, task=task, output_hidden_states=False
+        )
+
+        self._set_scorers()
+        self._set_objective()
+
+    def on_validation_epoch_end(self):
+        """"""
+        if not self.trainer.sanity_checking:
+            self.log_eval_report()
+
+        self.valid_scorer.reset()
+        self.validation_step_outputs.clear()
+
+    def _set_objective(self) -> None:
+        """"""
+        self.objective = CrossEntropyLoss(ignore_index=-100)
+
+    def _set_scorers(self) -> None:
+        """
+        Method to set the scorers to use to evaluate the model.
+        """
+        scorers_class = {"summarization": SummarizationScorer, "lm": LMScorer}
+        scorer_class = scorers_class.get(self.task, LMScorer)
+
+        self.scorer = deepcopy(
+            scorer_class(tokenizer_name=self.pretrained_model, do_mismatch=False)
+        )
+        self.valid_scorer = scorer_class(
+            tokenizer_name=self.pretrained_model, do_mismatch=True
+        )
+        self.test_scorer = scorer_class(
+            tokenizer_name=self.pretrained_model, do_mismatch=True
+        )
+
+    def loss(self, labels: torch.Tensor, logits: torch.Tensor, *args, **kwargs) -> Loss:
+        """
+        Method called for loss computation
+
+        Args:
+            logits (torch.Tensor):
+                predicted logits
+            labels (torch.Tensor):
+                ground truth labels
+        """
+        return self.objective(logits.view(-1, logits.size(-1)), labels.view(-1))
+
+    def log_eval_report(self) -> None:
+        """
+        Method that logs an evaluation report.
+
+        It uses the evaluation scorer to log all the available losses
+        """
+        super().log_eval_report()

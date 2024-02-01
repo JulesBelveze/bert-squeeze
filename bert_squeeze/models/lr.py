@@ -11,7 +11,7 @@ from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 
 from ..utils.losses import LabelSmoothingLoss
-from ..utils.scorers import Scorer
+from ..utils.scorers import BaseSequenceClassificationScorer
 
 
 class BowLogisticRegression(pl.LightningModule):
@@ -142,9 +142,9 @@ class BowLogisticRegression(pl.LightningModule):
         """
         Method to set the scorers to use to evaluate the model.
         """
-        self.scorer = Scorer(self.num_labels)
-        self.valid_scorer = Scorer(self.num_labels)
-        self.test_scorer = Scorer(self.num_labels)
+        self.scorer = BaseSequenceClassificationScorer(self.num_labels)
+        self.valid_scorer = BaseSequenceClassificationScorer(self.num_labels)
+        self.test_scorer = BaseSequenceClassificationScorer(self.num_labels)
 
     def _set_objective(self) -> None:
         """
@@ -156,8 +156,7 @@ class BowLogisticRegression(pl.LightningModule):
 
         if objective == "lsl" and self.smoothing == 0.0:
             logging.warning(
-                "You are using label smoothing and the smoothing parameter"
-                "is set to 0.0."
+                "You are using label smoothing and the smoothing parameteris set to 0.0."
             )
         elif objective == "weighted" and all([w == 1.0 for w in self.class_weights]):
             logging.warning(

@@ -5,10 +5,10 @@ from omegaconf import DictConfig
 from overrides import overrides
 from transformers import AutoModel
 
-from .base_lt_module import BaseTransformerModule
+from .base_lt_module import BaseSequenceClassificationTransformerModule
 
 
-class LtCustomDistilBert(BaseTransformerModule):
+class LtCustomDistilBert(BaseSequenceClassificationTransformerModule):
     """
     Lightning module to fine-tune a DistilBERT based model on a sequence classification task.
 
@@ -28,7 +28,7 @@ class LtCustomDistilBert(BaseTransformerModule):
         num_labels: int,
         **kwargs,
     ):
-        super().__init__(training_config, num_labels, pretrained_model, **kwargs)
+        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
         self._build_model()
 
     @overrides

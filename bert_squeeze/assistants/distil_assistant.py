@@ -17,6 +17,7 @@ CONFIG_MAPPER = {
     "distil-parallel": "distil_parallel.yaml",
     "distil-soft": "distil_soft.yaml",
     "distil-hard": "distil_hard.yaml",
+    "distil-seq2seq": "distil_seq2seq.yaml",
 }
 
 

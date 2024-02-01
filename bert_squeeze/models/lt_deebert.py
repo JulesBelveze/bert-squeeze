@@ -9,11 +9,11 @@ from overrides import overrides
 from torch.nn import CrossEntropyLoss
 
 from ..utils.errors import RampException
-from .base_lt_module import BaseTransformerModule
+from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers.deebert import DeeBertModel
 
 
-class LtDeeBert(BaseTransformerModule):
+class LtDeeBert(BaseSequenceClassificationTransformerModule):
     """
     Lightning module to fine-tune a DeeBert based model on a sequence classification
     task (see `models.custom_transformers.deebert.py`) for detailed explanation.
@@ -34,7 +34,7 @@ class LtDeeBert(BaseTransformerModule):
         num_labels: int,
         **kwargs,
     ):
-        super().__init__(training_config, num_labels, pretrained_model, **kwargs)
+        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
         self.train_highway = training_config.train_highway
         self._build_model()
 

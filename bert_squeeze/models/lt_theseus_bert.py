@@ -7,11 +7,11 @@ from ..utils.schedulers.theseus_schedulers import (
     ConstantReplacementScheduler,
     LinearReplacementScheduler,
 )
-from .base_lt_module import BaseTransformerModule
+from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers import TheseusBertModel
 
 
-class LtTheseusBert(BaseTransformerModule):
+class LtTheseusBert(BaseSequenceClassificationTransformerModule):
     """
     Lightning module to fine-tune a TheseusBert based model on a sequence classification
     task (see `models.custom_transformers.theseus_bert.py`) for detailed explanation.
@@ -35,7 +35,7 @@ class LtTheseusBert(BaseTransformerModule):
         replacement_scheduler: DictConfig,
         **kwargs,
     ):
-        super().__init__(training_config, num_labels, pretrained_model, **kwargs)
+        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
 
         self._build_model()
         scheduler = {
