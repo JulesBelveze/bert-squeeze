@@ -1,13 +1,16 @@
 from typing import Union
 
+import torch
 import torch.nn as nn
-from transformers import AutoModel
+from transformers import AutoModel, VisionEncoderDecoderModel
 
 
 class BaseEncoderDecoderModel(nn.Module):
     """
     A model that contains an encoder and a decoder, with support for loading from pre-trained transformer checkpoints.
     """
+
+    BASE_MODEL_CLASS = AutoModel
 
     def __init__(
         self,
@@ -34,7 +37,7 @@ class BaseEncoderDecoderModel(nn.Module):
 
         if model is not None:
             if isinstance(model, str):
-                model = AutoModel.from_pretrained(model)
+                model = self.BASE_MODEL_CLASS.from_pretrained(model)
 
             assert hasattr(model, "encoder") and hasattr(
                 model, "decoder"
@@ -42,9 +45,9 @@ class BaseEncoderDecoderModel(nn.Module):
             self.model = model
         else:
             if isinstance(encoder, str):
-                encoder = AutoModel.from_pretrained(encoder)
+                encoder = self.BASE_MODEL_CLASS.from_pretrained(encoder)
             if isinstance(decoder, str):
-                decoder = AutoModel.from_pretrained(decoder)
+                decoder = self.BASE_MODEL_CLASS.from_pretrained(decoder)
 
             self.model = nn.ModuleDict({"encoder": encoder, "decoder": decoder})
 
@@ -111,3 +114,23 @@ class BaseEncoderDecoderModel(nn.Module):
     def forward(self, *args, **kwargs):
         """"""
         raise NotImplementedError()
+
+
+class VisionEncoderDecoder(BaseEncoderDecoderModel):
+    """"""
+
+    BASE_MODEL_CLASS = VisionEncoderDecoderModel
+
+    def __init__(
+        self,
+        model: Union[str, nn.Module] = None,
+        encoder: Union[str, nn.Module] = None,
+        decoder: Union[str, nn.Module] = None,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(model, encoder, decoder, *args, **kwargs)
+
+    def forward(self, pixel_values: torch.Tensor, *args, **kwargs):
+        """"""
+        return self.model(pixel_values)
