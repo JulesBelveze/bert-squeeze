@@ -1,6 +1,6 @@
 import logging
 from copy import deepcopy
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
@@ -42,7 +42,6 @@ class BaseTransformerModule(pl.LightningModule):
         self.config = training_config
 
         self.pretrained_model = pretrained_model
-        self.model_config = None
 
         self.training_step_outputs = []
         self.test_step_outputs = []
@@ -459,9 +458,6 @@ class BaseSeq2SeqTransformerModule(BaseTransformerModule):
         super().__init__(training_config, pretrained_model, **kwargs)
         self._sanity_checks(training_config)
         self.task = task
-        self.model_config = AutoConfig.from_pretrained(
-            pretrained_model, task=task, output_hidden_states=False
-        )
 
         self._set_scorers()
         self._set_objective()

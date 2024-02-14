@@ -1,4 +1,4 @@
-bert_squeeze/assistants/configs/distil_hard.yaml general:
+general:
   debug: false
   do_train: true
   do_eval: false
@@ -31,7 +31,7 @@ train:
   weight_decay: 0.01
 
 model:
-  _target_: bert_squeeze.sequence_classification_distiller.SequenceClassificationDistiller
+  _target_: bert_squeeze.distillation.sequence_classification_distiller.SequenceClassificationDistiller
   teacher:
     _target_: transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
     pretrained_model_name_or_path: "bert-base-uncased"

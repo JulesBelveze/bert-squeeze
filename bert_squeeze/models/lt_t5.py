@@ -1,6 +1,11 @@
+from typing import Union
+
+import lightning.pytorch as pl
 import numpy as np
 import torch
+from hydra.utils import instantiate
 from omegaconf import DictConfig
+from overrides import overrides
 from transformers import AutoModelForSeq2SeqLM
 from transformers.modeling_outputs import Seq2SeqLMOutput
 
@@ -16,7 +21,8 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
             training configuration
         pretrained_model (str):
             name of the pretrained model to use a backbone
-        tas
+        task (str):
+            name of the task to perform
         generate_kws (DictConfig):
              additional keywords to feed to the `.generate` method
     """
@@ -26,13 +32,17 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
         training_config: DictConfig,
         pretrained_model: str,
         task: str,
+        model: pl.LightningModule = None,
         generate_kwargs: DictConfig = None,
         **kwargs,
     ):
         super().__init__(training_config, pretrained_model, task)
         self.generate_kwargs = generate_kwargs
 
-        self._build_model()
+        if model is None:
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(pretrained_model)
+        else:
+            self.model = model
 
     def forward(
         self, input_ids: torch.Tensor, attention_mask: torch.Tensor, labels: torch.Tensor
@@ -94,7 +104,3 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
         )
 
         return {"loss": outputs.loss}
-
-    def _build_model(self):
-        """"""
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(self.pretrained_model)

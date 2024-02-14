@@ -113,7 +113,11 @@ class BaseEncoderDecoderModel(nn.Module):
 
     def forward(self, *args, **kwargs):
         """"""
-        raise NotImplementedError()
+        return self.model(*args, **kwargs)
+
+    def generate(self, *args, **kwargs):
+        """"""
+        return self.model.generate(*args, **kwargs)
 
 
 class VisionEncoderDecoder(BaseEncoderDecoderModel):
