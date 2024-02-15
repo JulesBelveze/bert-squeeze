@@ -142,7 +142,6 @@ class LtTheseusBert(BaseSequenceClassificationTransformerModule):
             {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
         )
 
-    @overrides
     def _build_model(self):
         """"""
         encoder = TheseusBertModel(AutoConfig.from_pretrained(self.pretrained_model))

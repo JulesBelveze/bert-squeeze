@@ -1,17 +1,23 @@
 import logging
 from copy import deepcopy
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from omegaconf import DictConfig, ListConfig
 from torch.nn import CrossEntropyLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from transformers import AdamW, AutoConfig
+from transformers import (
+    AdamW,
+    AutoConfig,
+    AutoModelForSeq2SeqLM,
+    AutoModelForSequenceClassification,
+)
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.optimizers import BertAdam
@@ -27,21 +33,35 @@ from ..utils.types import Loss
 
 class BaseTransformerModule(pl.LightningModule):
     """
-    Base class to extend for all modules.
+    Base class to extend for all Transformer-based modules.
 
     Args:
         training_config (DictConfig):
             training configuration
         pretrained_model (str):
             name of the pretrained Transformer model to use
+        model (Optional[Union[pl.LightningModule, nn.Module]]):
+            optional instantiated model
     """
 
-    def __init__(self, training_config: DictConfig, pretrained_model: str, **kwargs):
+    BASE_CLASS_MODEL = None
+
+    def __init__(
+        self,
+        training_config: DictConfig,
+        pretrained_model: str,
+        model: Optional[Union[pl.LightningModule, nn.Module]] = None,
+        **kwargs,
+    ):
         super().__init__()
 
         self.config = training_config
 
         self.pretrained_model = pretrained_model
+        if model is not None:
+            self.model = model
+        else:
+            self.model = self.BASE_CLASS_MODEL.from_pretrained(self.pretrained_model)
 
         self.training_step_outputs = []
         self.test_step_outputs = []
@@ -138,10 +158,6 @@ class BaseTransformerModule(pl.LightningModule):
             raise ValueError(f"Optimizer '{self.config.optimizer}' not supported.")
 
         return [optimizer], []
-
-    def _build_model(self):
-        """Method that constructs the model to train."""
-        raise NotImplementedError()
 
     def _set_objective(self) -> None:
         """"""
@@ -305,7 +321,7 @@ class BaseTransformerModule(pl.LightningModule):
 
 class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
     """
-    Base class to extend for transformer based classification tasks.
+    Base class to extend for Transformer based sequence classification tasks.
 
     Args:
         training_config (DictConfig):
@@ -314,17 +330,23 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
             number of labels
         pretrained_model (str):
             name of the pretrained Transformer model to use
+        model (Optional[Union[pl.LightningModule, nn.Module]]):
+            optional instantiated model
     """
+
+    BASE_CLASS_MODEL = AutoModelForSequenceClassification
 
     def __init__(
         self,
         training_config: DictConfig,
         pretrained_model: str,
         num_labels: int,
+        model: Optional[Union[pl.LightningModule, nn.Module]] = None,
         **kwargs,
     ):
-        super().__init__(training_config, pretrained_model, **kwargs)
+        super().__init__(training_config, pretrained_model, model, **kwargs)
         self._sanity_checks(training_config)
+
         self.num_labels = num_labels
         self.model_config = AutoConfig.from_pretrained(
             pretrained_model, num_labels=num_labels
@@ -437,7 +459,7 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
 
 class BaseSeq2SeqTransformerModule(BaseTransformerModule):
     """
-    Base class to extend for transformer based seq2seq tasks.
+    Base class to extend for Transformer based seq2seq tasks.
 
     Args:
         training_config (DictConfig):
@@ -445,17 +467,22 @@ class BaseSeq2SeqTransformerModule(BaseTransformerModule):
         pretrained_model (str):
             name of the pretrained Transformer model to use
         task (str):
-            name of the to perform
+            name of the sequence to sequence task to perform
+        model (Optional[Union[pl.LightningModule, nn.Module]]):
+            optional instantiated model
     """
+
+    BASE_CLASS_MODEL = AutoModelForSeq2SeqLM
 
     def __init__(
         self,
         training_config: DictConfig,
         pretrained_model: str,
         task: str,
+        model: Optional[Union[pl.LightningModule, nn.Module]] = None,
         **kwargs,
     ):
-        super().__init__(training_config, pretrained_model, **kwargs)
+        super().__init__(training_config, pretrained_model, model, **kwargs)
         self._sanity_checks(training_config)
         self.task = task
 
@@ -500,6 +527,9 @@ class BaseSeq2SeqTransformerModule(BaseTransformerModule):
                 predicted logits
             labels (torch.Tensor):
                 ground truth labels
+
+        Returns:
+            Loss: computed loss value
         """
         return self.objective(logits.view(-1, logits.size(-1)), labels.view(-1))
 

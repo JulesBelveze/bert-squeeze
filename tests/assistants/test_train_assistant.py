@@ -49,7 +49,7 @@ class TestTrainAssistant:
         )
         assert bert_assistant.general.num_labels == 6
         assert isinstance(bert_assistant.model, LtSequenceClassificationCustomBert)
-        assert bert_assistant.model.encoder.config._name_or_path == "bert-base-uncased"
+        assert bert_assistant.model.model.config._name_or_path == "bert-base-uncased"
         assert isinstance(bert_assistant.data, TransformerDataModule)
 
     def test_lstm_assistant(self):

@@ -32,7 +32,6 @@ class LtSequenceClassificationCustomBert(BaseSequenceClassificationTransformerMo
         **kwargs,
     ):
         super().__init__(training_config, pretrained_model, num_labels, **kwargs)
-        self._build_model()
 
     @overrides
     def forward(
@@ -129,7 +128,6 @@ class LtSequenceClassificationCustomBert(BaseSequenceClassificationTransformerMo
         )
         return loss
 
-    @overrides
     def _build_model(self):
         """"""
         self.encoder = CustomBertModel.from_pretrained(self.pretrained_model)

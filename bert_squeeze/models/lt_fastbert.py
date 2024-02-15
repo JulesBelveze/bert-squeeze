@@ -1,7 +1,7 @@
 import logging
 import os
 from collections import defaultdict
-from typing import Dict, List, Tuple, Union
+from typing import List, Union
 
 import torch
 import torch.nn.functional as F
@@ -190,7 +190,6 @@ class LtFastBert(BaseSequenceClassificationTransformerModule):
         self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), losses)
         self.test_step_outputs.append({"loss": losses.full_loss, "logits": logits.cpu()})
 
-    @overrides
     def _build_model(self):
         """"""
         self.embeddings = BertEmbeddings(self.model_config)
