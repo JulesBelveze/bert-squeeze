@@ -14,6 +14,7 @@ from bert_squeeze.models import (
     LtSequenceClassificationCustomBert,
     LtTheseusBert,
 )
+from bert_squeeze.models.custom_transformers import BaseEncoderDecoderModel
 
 
 @pytest.fixture
@@ -48,7 +49,7 @@ class TestTrainAssistant:
         )
         assert bert_assistant.general.num_labels == 6
         assert isinstance(bert_assistant.model, LtSequenceClassificationCustomBert)
-        assert bert_assistant.model.encoder.config._name_or_path == "bert-base-uncased"
+        assert bert_assistant.model.model.config._name_or_path == "bert-base-uncased"
         assert isinstance(bert_assistant.data, TransformerDataModule)
 
     def test_lstm_assistant(self):
@@ -175,6 +176,41 @@ class TestSeq2SeqTraining:
         basic_trainer = Trainer(max_steps=4)
         basic_trainer.fit(
             model=model,
+            train_dataloaders=train_dataloader,
+            val_dataloaders=test_dataloader,
+        )
+
+    def test_t5_summarization_2(self):
+        """"""
+        adapter_assistant = TrainAssistant(
+            "t5",
+            data_kwargs={
+                "dataset_config": {
+                    "path": "kmfoda/booksum",
+                    "percent": 5,
+                    "target_col": "summary",
+                    "source_col": "chapter",
+                }
+            },
+            model_kwargs={
+                "model": {
+                    "_target_": "bert_squeeze.models.custom_transformers.BaseEncoderDecoderModel",
+                    "model": {
+                        "_target_": "transformers.models.t5.T5ForConditionalGeneration.from_pretrained",
+                        "pretrained_model_name_or_path": "t5-small",
+                    },
+                },
+                "pretrained_model": "t5-small",
+                "task": "summarization",
+            },
+        )
+
+        train_dataloader = adapter_assistant.data.train_dataloader()
+        test_dataloader = adapter_assistant.data.test_dataloader()
+
+        basic_trainer = Trainer(max_steps=4)
+        basic_trainer.fit(
+            model=adapter_assistant.model,
             train_dataloaders=train_dataloader,
             val_dataloaders=test_dataloader,
         )

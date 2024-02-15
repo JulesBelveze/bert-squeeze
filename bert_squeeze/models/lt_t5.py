@@ -1,7 +1,11 @@
+from typing import Optional, Union
+
+import lightning.pytorch as pl
 import numpy as np
 import torch
+import torch.nn as nn
 from omegaconf import DictConfig
-from transformers import AutoModelForSeq2SeqLM
+from transformers import T5ForConditionalGeneration
 from transformers.modeling_outputs import Seq2SeqLMOutput
 
 from bert_squeeze.models.base_lt_module import BaseSeq2SeqTransformerModule
@@ -16,23 +20,27 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
             training configuration
         pretrained_model (str):
             name of the pretrained model to use a backbone
-        tas
+        task (str):
+            name of the task to perform
+        model (Optional[Union[pl.LightningModule, nn.Module]]):
+            optional instantiated model
         generate_kws (DictConfig):
              additional keywords to feed to the `.generate` method
     """
+
+    BASE_CLASS_MODEL = T5ForConditionalGeneration
 
     def __init__(
         self,
         training_config: DictConfig,
         pretrained_model: str,
         task: str,
+        model: Optional[Union[pl.LightningModule, nn.Module]] = None,
         generate_kwargs: DictConfig = None,
         **kwargs,
     ):
-        super().__init__(training_config, pretrained_model, task)
+        super().__init__(training_config, pretrained_model, task, model)
         self.generate_kwargs = generate_kwargs
-
-        self._build_model()
 
     def forward(
         self, input_ids: torch.Tensor, attention_mask: torch.Tensor, labels: torch.Tensor
@@ -94,7 +102,3 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
         )
 
         return {"loss": outputs.loss}
-
-    def _build_model(self):
-        """"""
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(self.pretrained_model)

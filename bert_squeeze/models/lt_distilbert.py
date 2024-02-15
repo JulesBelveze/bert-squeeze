@@ -119,7 +119,6 @@ class LtCustomDistilBert(BaseSequenceClassificationTransformerModule):
         )
         return loss
 
-    @overrides
     def _build_model(self):
         """"""
         self.encoder = AutoModel.from_pretrained(self.pretrained_model)

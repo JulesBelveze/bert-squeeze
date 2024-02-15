@@ -134,7 +134,6 @@ class LtAdapter(BaseSequenceClassificationTransformerModule):
         )
         return loss
 
-    @overrides
     def _build_model(self):
         """"""
         config = AutoConfig.from_pretrained(

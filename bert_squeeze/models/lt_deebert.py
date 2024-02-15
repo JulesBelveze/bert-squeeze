@@ -8,7 +8,6 @@ from omegaconf import DictConfig, ListConfig
 from overrides import overrides
 from torch.nn import CrossEntropyLoss
 
-from ..utils.errors import RampException
 from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers.deebert import DeeBertModel
 
@@ -372,7 +371,6 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
             )
         return loss
 
-    @overrides
     def _build_model(self):
         """"""
         self.bert = DeeBertModel(self.model_config)
