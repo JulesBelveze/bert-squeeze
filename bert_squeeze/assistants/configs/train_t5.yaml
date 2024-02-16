@@ -31,6 +31,9 @@ model:
   training_config: ${train}
   generate_kwargs:
     do_sample: false
+  scorer:
+    _target_: bert_squeeze.utils.scorers.lm_scorer.LMScorer
+    tokenizer_name: ${model.pretrained_model}
 
 data:
   _target_: bert_squeeze.data.modules.transformer_module.Seq2SeqTransformerDataModule

@@ -33,6 +33,9 @@ model:
   num_labels: 2
   pretrained_model: "bert-base-cased"
   training_config: ${train}
+  scorer:
+    _target_: bert_squeeze.utils.scorers.sequence_classification_scorer.BaseSequenceClassificationScorer
+    labels: ${general.labels}
 
 data:
   _target_: bert_squeeze.data.modules.transformer_module.TransformerDataModule

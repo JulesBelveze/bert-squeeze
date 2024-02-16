@@ -42,6 +42,7 @@ model:
     pretrained_model_name_or_path: "bert-base-cased"
     num_labels: ${general.num_labels}
   training_config: ${train}
+  labels: ${general.labels}
 
 data:
   _target_: bert_squeeze.data.modules.distillation_module.DistillationDataModule

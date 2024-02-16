@@ -37,6 +37,9 @@ model:
     type: "linear"
     base_replacing_rate: 0.3
     coefficient: 0.0006
+  scorer:
+    _target_: bert_squeeze.utils.scorers.sequence_classification_scorer.BaseSequenceClassificationScorer
+    labels: ${general.labels}
 
 data:
   _target_: bert_squeeze.data.modules.transformer_module.TransformerDataModule

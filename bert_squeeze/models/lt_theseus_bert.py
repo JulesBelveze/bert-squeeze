@@ -47,7 +47,9 @@ class LtTheseusBert(BaseSequenceClassificationTransformerModule):
         scorer: Scorer = None,
         **kwargs,
     ):
-        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
+        super().__init__(
+            training_config, pretrained_model, num_labels, model, scorer, **kwargs
+        )
 
         self._build_model()
         scheduler = {

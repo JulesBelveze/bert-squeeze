@@ -28,7 +28,7 @@ model:
   training_config: ${train}
   vocab_size: 5000
   embed_dim: 256
-  num_labels: ${general.num_labels}
+  labels: ${general.labels}
   name: "bow_lr"
 
 data:

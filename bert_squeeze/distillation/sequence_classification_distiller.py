@@ -32,6 +32,8 @@ class BaseSequenceClassificationDistiller(BaseDistiller):
             configuration to use for training and to distil the teacher model
         teacher_checkpoint (str):
             path to checkpoints to load to the teacher model
+        labels (Union[List[str], List[int]]):
+            list of labels to use for sequence classification
     """
 
     def __init__(
@@ -39,10 +41,15 @@ class BaseSequenceClassificationDistiller(BaseDistiller):
         teacher: Union["pl.LightningModule", "torch.nn.Module"],
         student: Union["pl.LightningModule", "torch.nn.Module"],
         training_config: DictConfig,
+        labels: Union[List[str], List[int]],
         teacher_checkpoint: str = None,
         **kwargs,
     ):
         super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
+        self.labels = labels
+
+        self._set_objectives()
+        self._set_scorers()
 
     def _set_objectives(self) -> None:
         """
@@ -92,9 +99,9 @@ class BaseSequenceClassificationDistiller(BaseDistiller):
         """
         Method to set the scorers to use to evaluate the model.
         """
-        self.s_scorer = BaseSequenceClassificationScorer(self.params.num_labels)
-        self.s_valid_scorer = BaseSequenceClassificationScorer(self.params.num_labels)
-        self.s_test_scorer = BaseSequenceClassificationScorer(self.params.num_labels)
+        self.s_scorer = BaseSequenceClassificationScorer(self.labels)
+        self.s_valid_scorer = BaseSequenceClassificationScorer(self.labels)
+        self.s_test_scorer = BaseSequenceClassificationScorer(self.labels)
 
     def get_teacher_logits(self, batch: Dict[str, torch.Tensor]) -> Any:
         raise NotImplementedError()
@@ -137,6 +144,8 @@ class SequenceClassificationDistiller(BaseSequenceClassificationDistiller):
             configuration to use for training and to distil the teacher model
         teacher_checkpoint (str):
             path to checkpoints to load to the teacher model
+        labels (Union[List[str], List[int]]):
+            list of labels to use for sequence classification
     """
 
     def __init__(
@@ -144,10 +153,13 @@ class SequenceClassificationDistiller(BaseSequenceClassificationDistiller):
         teacher: Union["pl.LightningModule", "torch.nn.Module"],
         student: Union["pl.LightningModule", "torch.nn.Module"],
         training_config: DictConfig,
+        labels: Union[List[str], List[int]],
         teacher_checkpoint: str = None,
         **kwargs,
     ):
-        super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
+        super().__init__(
+            teacher, student, training_config, labels, teacher_checkpoint, **kwargs
+        )
 
     @overrides
     def get_teacher_logits(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
@@ -324,6 +336,8 @@ class SequenceClassificationParallelDistiller(BaseSequenceClassificationDistille
             configuration to use for training and to distil the teacher model
         teacher_checkpoint (str):
             path to checkpoints to load to the teacher model
+        labels (Union[List[str], List[int]]):
+            list of labels to use for sequence classification
     """
 
     def __init__(
@@ -331,10 +345,13 @@ class SequenceClassificationParallelDistiller(BaseSequenceClassificationDistille
         teacher: Union["pl.LightningModule", "torch.nn.Module"],
         student: Union["pl.LightningModule", "torch.nn.Module"],
         training_config: DictConfig,
+        labels: Union[List[str], List[int]],
         teacher_checkpoint: str = None,
         **kwargs,
     ):
-        super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
+        super().__init__(
+            teacher, student, training_config, labels, teacher_checkpoint, **kwargs
+        )
 
     @overrides
     def get_teacher_logits(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
