@@ -1,14 +1,18 @@
 import logging
 import os
 from collections import defaultdict
-from typing import List, Union
+from typing import List, Optional, Union
 
+import lightning.pytorch as pl
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from omegaconf import DictConfig
 from overrides import overrides
 from transformers import AutoModel
 from transformers.models.bert.modeling_bert import BertEmbeddings
+
+from bert_squeeze.utils.scorers import Scorer
 
 from ..utils.types import FastBertLoss
 from .base_lt_module import BaseSequenceClassificationTransformerModule
@@ -34,9 +38,13 @@ class LtFastBert(BaseSequenceClassificationTransformerModule):
         training_config: DictConfig,
         num_labels: int,
         pretrained_model: str,
+        model: Optional[Union[pl.LightningModule, nn.Module]] = None,
+        scorer: Scorer = None,
         **kwargs,
     ):
-        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
+        super().__init__(
+            training_config, pretrained_model, num_labels, model, scorer, **kwargs
+        )
         self.training_stage = getattr(kwargs, "training_stage", 0)
 
         self._build_model()

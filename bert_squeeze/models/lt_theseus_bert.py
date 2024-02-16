@@ -1,7 +1,13 @@
+from typing import Optional, Union
+
+import lightning.pytorch as pl
 import torch
+import torch.nn as nn
 from omegaconf import DictConfig
 from overrides import overrides
 from transformers import AutoConfig
+
+from bert_squeeze.utils.scorers import Scorer
 
 from ..utils.schedulers.theseus_schedulers import (
     ConstantReplacementScheduler,
@@ -25,6 +31,10 @@ class LtTheseusBert(BaseSequenceClassificationTransformerModule):
             name of the pretrained Transformer model to use
         replacement_scheduler (DictConfig):
             configuration for the replacement scheduler
+        model (Optional[Union[pl.LightningModule, nn.Module]]):
+            optional instantiated model
+        scorer (Scorer):
+            helper object to compute performance metrics during training
     """
 
     def __init__(
@@ -33,9 +43,13 @@ class LtTheseusBert(BaseSequenceClassificationTransformerModule):
         pretrained_model: str,
         num_labels: int,
         replacement_scheduler: DictConfig,
+        model: Optional[Union[pl.LightningModule, nn.Module]] = None,
+        scorer: Scorer = None,
         **kwargs,
     ):
-        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
+        super().__init__(
+            training_config, pretrained_model, num_labels, model, scorer, **kwargs
+        )
 
         self._build_model()
         scheduler = {

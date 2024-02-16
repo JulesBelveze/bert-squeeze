@@ -37,6 +37,9 @@ model:
   pretrained_model: "bert-base-cased"
   num_labels: 2
   scorer_type: "fast"
+  scorer:
+    _target_: bert_squeeze.utils.scorers.sequence_classification_scorer.FastBertSequenceClassificationScorer
+    labels: ${general.labels}
 
 data:
   _target_: bert_squeeze.data.modules.transformer_module.TransformerDataModule

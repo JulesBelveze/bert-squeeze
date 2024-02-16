@@ -9,6 +9,7 @@ from transformers import T5ForConditionalGeneration
 from transformers.modeling_outputs import Seq2SeqLMOutput
 
 from bert_squeeze.models.base_lt_module import BaseSeq2SeqTransformerModule
+from bert_squeeze.utils.scorers import Scorer
 
 
 class SimpleT5Model(BaseSeq2SeqTransformerModule):
@@ -36,10 +37,11 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
         pretrained_model: str,
         task: str,
         model: Optional[Union[pl.LightningModule, nn.Module]] = None,
+        scorer: Scorer = None,
         generate_kwargs: DictConfig = None,
         **kwargs,
     ):
-        super().__init__(training_config, pretrained_model, task, model)
+        super().__init__(training_config, pretrained_model, task, model, scorer, **kwargs)
         self.generate_kwargs = generate_kwargs
 
     def forward(

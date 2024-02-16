@@ -19,12 +19,15 @@ class BaseSequenceClassificationScorer:
     This is achieved by updating a confusion matrix after every batch.
     """
 
-    def __init__(self, n_labels: int):
+    def __init__(self, labels: Union[List[str], List[int]]):
         """
         Args:
-            n_labels (int):
-                number of available labels
+            labels (List):
+                list of possible labels
         """
+        n_labels = len(labels)
+
+        self.labels = labels
         self.n_labels = n_labels
         self.confusion_matrix = np.zeros((n_labels, n_labels))
         self.batch_counter = 0
@@ -43,13 +46,13 @@ class BaseSequenceClassificationScorer:
         return self.confusion_matrix.trace() / (self.confusion_matrix.sum() + self.eps)
 
     @property
-    def precision(self) -> np.array:
+    def precision(self) -> np.ndarray:
         """
         Computes the precision score for each class using the following formula:
             tp / (tp + fp)
 
         Returns:
-            np.array: precision score for every class. precision[i] is the precision score
+            np.ndarray: precision score for every class. precision[i] is the precision score
                       of class i
         """
         return self.confusion_matrix.diagonal() / (
@@ -89,13 +92,13 @@ class BaseSequenceClassificationScorer:
         )
 
     @property
-    def recall(self) -> np.array:
+    def recall(self) -> np.ndarray:
         """
         Computes the recall score for each class using the following formula:
             tp / (tp + fn)
 
         Returns:
-            np.array: recall score for every class. recall[i] is the recall score
+            np.ndarray: recall score for every class. recall[i] is the recall score
                       of class i
         """
         return self.confusion_matrix.diagonal() / (
@@ -135,20 +138,20 @@ class BaseSequenceClassificationScorer:
         )
 
     @property
-    def f1(self) -> np.array:
+    def f1(self) -> np.ndarray:
         """
         Computes the f1 score for each class using the following formula:
             F1 = 2 * (precision * recall) / (precision + recall)
 
         Returns:
-            np.array: f1 score for every class. f1[i] is the f1 score of class i
+            np.ndarray: f1 score for every class. f1[i] is the f1 score of class i
         """
         return (
             2 * (self.precision * self.recall) / (self.precision + self.recall + self.eps)
         )
 
     @property
-    def macro_f1(self) -> ndarray:
+    def macro_f1(self) -> np.ndarray:
         """
         Computes the unweighted mean of the f1s
 
@@ -300,7 +303,7 @@ class LooseSequenceClassificationScorer(BaseSequenceClassificationScorer):
             loose_classes (List[List[Union[str, int]]]):
                 list of classes to aggregate together during metrics computation
         """
-        super().__init__(n_labels=2)
+        super().__init__([0, 1])
         self.loose_classes = loose_classes
 
     @overrides
@@ -358,12 +361,15 @@ class FastBertSequenceClassificationScorer:
     We store metrics in a dict fashion where the key is the layer and the value are the different metrics.
     """
 
-    def __init__(self, n_labels: int):
+    def __init__(self, labels: Union[List[str], List[int]]):
         """
         Args:
-            n_labels (int):
-                number of available labels
+            labels (List):
+                list of available labels
         """
+        n_labels = len(labels)
+
+        self.labels = labels
         self.n_labels = n_labels
         self.confusion_matrix = defaultdict(partial(np.zeros, (n_labels, n_labels)))
         self.batch_counter = 0
@@ -385,13 +391,13 @@ class FastBertSequenceClassificationScorer:
         return accuracies
 
     @property
-    def precision(self) -> Dict[str, np.array]:
+    def precision(self) -> Dict[str, np.ndarray]:
         """
         Computes the precision scores for every layer for each class using the following formula:
             tp / (tp + fp)
 
         Returns:
-            Dict[str, np.array]: precision scores for the different layers
+            Dict[str, np.ndarray]: precision scores for the different layers
         """
         precisions = {}
         for layer, cfm in self.confusion_matrix.items():
@@ -399,13 +405,13 @@ class FastBertSequenceClassificationScorer:
         return precisions
 
     @property
-    def recall(self) -> Dict[str, np.array]:
+    def recall(self) -> Dict[str, np.ndarray]:
         """
         Computes the recall scores for every layer for each class using the following formula:
             tp / (tp + fn)
 
         Returns:
-            Dict[str, np.array]: recall score for the different layers
+            Dict[str, np.ndarray]: recall score for the different layers
         """
         recalls = {}
         for layer, cfm in self.confusion_matrix.items():
@@ -413,13 +419,13 @@ class FastBertSequenceClassificationScorer:
         return recalls
 
     @property
-    def f1(self) -> Dict[str, np.array]:
+    def f1(self) -> Dict[str, np.ndarray]:
         """
         Computes the f1 scores for every layer for each class using the following formula:
             F1 = 2 * (precision * recall) / (precision + recall)
 
         Returns:
-            Dict[str, np.array]: f1 scores for the different layers
+            Dict[str, np.ndarray]: f1 scores for the different layers
         """
         accuracies = {}
         for layer, cfm in self.confusion_matrix.items():

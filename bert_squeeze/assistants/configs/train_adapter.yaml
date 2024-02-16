@@ -30,12 +30,14 @@ train:
 
 model:
   _target_: bert_squeeze.models.lt_adapter.LtAdapter
-  num_labels: 2
   pretrained_model: "bert-base-cased"
   training_config: ${train}
   task_name:
   adapter_config_name: "seq_bn"
   labels: [ "0", "1" ]
+  scorer:
+    _target_: bert_squeeze.utils.scorers.sequence_classification_scorer.BaseSequenceClassificationScorer
+    labels: ${general.labels}
 
 data:
   _target_: bert_squeeze.data.modules.transformer_module.TransformerDataModule

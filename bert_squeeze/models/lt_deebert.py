@@ -1,12 +1,15 @@
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
+import lightning.pytorch as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from omegaconf import DictConfig, ListConfig
 from overrides import overrides
 from torch.nn import CrossEntropyLoss
+
+from bert_squeeze.utils.scorers import Scorer
 
 from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers.deebert import DeeBertModel
@@ -24,6 +27,10 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
             number of labels
         pretrained_model (str):
             name of the pretrained Transformer model to use
+        model (Optional[Union[pl.LightningModule, nn.Module]]):
+            optional instantiated model
+        scorer (Scorer):
+            helper object to compute performance metrics during training
     """
 
     def __init__(
@@ -31,9 +38,13 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
         training_config: DictConfig,
         pretrained_model: str,
         num_labels: int,
+        model: Optional[Union[pl.LightningModule, nn.Module]] = None,
+        scorer: Scorer = None,
         **kwargs,
     ):
-        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
+        super().__init__(
+            training_config, pretrained_model, num_labels, model, scorer, **kwargs
+        )
         self.train_highway = training_config.train_highway
         self._build_model()
 

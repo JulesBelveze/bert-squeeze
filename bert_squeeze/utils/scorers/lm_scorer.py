@@ -16,6 +16,7 @@ class LMScorer(object):
     """
 
     def __init__(self, tokenizer_name: str = None, do_mismatch: bool = True):
+        """"""
         if tokenizer_name is not None:
             self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         else:
@@ -110,6 +111,7 @@ class SummarizationScorer(object):
     """
 
     def __init__(self, tokenizer_name: str = None, do_mismatch: bool = True):
+        """"""
         if tokenizer_name is not None:
             self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         else:
@@ -148,7 +150,7 @@ class SummarizationScorer(object):
         with torch.no_grad():
             self.losses["global"].append(loss.cpu().numpy())
 
-            if self.do_mismatch:
+            if self.do_mismatch and predicted_tokens is not None:
                 decoded_preds = self.tokenizer.batch_decode(
                     predicted_tokens, skip_special_tokens=True
                 )

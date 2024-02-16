@@ -44,9 +44,6 @@ class BaseDistiller(pl.LightningModule):
         self.test_step_outputs = []
         self.validation_step_outputs = []
 
-        self._set_objectives()
-        self._set_scorers()
-
     def _set_objectives(self) -> None:
         """"""
         raise NotImplementedError()

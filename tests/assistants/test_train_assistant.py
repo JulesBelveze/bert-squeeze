@@ -117,7 +117,6 @@ class TestTrainAssistant:
                 "pretrained_model": "bert-base-uncased",
                 "task_name": "setfit",
                 "labels": [0, 1, 2, 3, 4, 5],
-                "num_labels": 6,
             },
         )
         assert adapter_assistant.general.num_labels == 6
@@ -134,7 +133,6 @@ class TestTrainAssistant:
                 "pretrained_model": "bert-base-uncased",
                 "task_name": "setfit",
                 "labels": [0, 1, 2, 3, 4, 5],
-                "num_labels": 6,
             },
         )
         model = adapter_assistant.model
@@ -166,13 +164,16 @@ class TestSeq2SeqTraining:
             model_kwargs={
                 "pretrained_model": "t5-small",
                 "task": "summarization",
+                "scorer": {
+                    "_target_": "bert_squeeze.utils.scorers.lm_scorer.SummarizationScorer",
+                    "tokenizer_name": "t5-small",
+                },
             },
         )
         model = adapter_assistant.model
 
         train_dataloader = adapter_assistant.data.train_dataloader()
         test_dataloader = adapter_assistant.data.test_dataloader()
-
         basic_trainer = Trainer(max_steps=4)
         basic_trainer.fit(
             model=model,
@@ -202,6 +203,10 @@ class TestSeq2SeqTraining:
                 },
                 "pretrained_model": "t5-small",
                 "task": "summarization",
+                "scorer": {
+                    "_target_": "bert_squeeze.utils.scorers.lm_scorer.SummarizationScorer",
+                    "tokenizer_name": "t5-small",
+                },
             },
         )
 

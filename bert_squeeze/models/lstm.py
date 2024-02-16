@@ -1,4 +1,5 @@
 import logging
+from typing import List, Union
 
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
@@ -26,8 +27,8 @@ class LtLSTM(pl.LightningModule):
             size of the vocabulary used for the bag of n-grams representation
         hidden_dim (int):
             number of features in the hidden states
-        num_labels (int):
-            number of labels for the classification task
+        labels (Union[List[str], List[int]]):
+            list of labels for the classification task
     """
 
     def __init__(
@@ -35,7 +36,7 @@ class LtLSTM(pl.LightningModule):
         training_config: DictConfig,
         vocab_size: int,
         hidden_dim: int,
-        num_labels: int,
+        labels: Union[List[str], List[int]],
         *args,
         **kwargs,
     ):
@@ -45,7 +46,8 @@ class LtLSTM(pl.LightningModule):
         self.config = training_config
         self.vocab_size = vocab_size
         self.hidden_dim = hidden_dim
-        self.num_labels = num_labels
+        self.num_labels = len(labels)
+        self.labels = labels
 
         self.training_step_outputs = []
         self.test_step_outputs = []
@@ -188,9 +190,9 @@ class LtLSTM(pl.LightningModule):
         """
         Method to set the scorers to use to evaluate the model.
         """
-        self.scorer = BaseSequenceClassificationScorer(self.num_labels)
-        self.valid_scorer = BaseSequenceClassificationScorer(self.num_labels)
-        self.test_scorer = BaseSequenceClassificationScorer(self.num_labels)
+        self.scorer = BaseSequenceClassificationScorer(self.labels)
+        self.valid_scorer = BaseSequenceClassificationScorer(self.labels)
+        self.test_scorer = BaseSequenceClassificationScorer(self.labels)
 
     def loss(
         self, logits: torch.Tensor, labels: torch.Tensor, *args, **kwargs

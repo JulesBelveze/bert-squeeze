@@ -1,10 +1,14 @@
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
+import lightning.pytorch as pl
 import torch
+import torch.nn as nn
 from adapters import AutoAdapterModel
 from omegaconf import DictConfig
 from overrides import overrides
 from transformers import AutoConfig
+
+from bert_squeeze.utils.scorers import Scorer
 
 from .base_lt_module import BaseSequenceClassificationTransformerModule
 
@@ -19,8 +23,6 @@ class LtAdapter(BaseSequenceClassificationTransformerModule):
     Args:
         training_config (DictConfig):
             training configuration
-        num_labels (int):
-            number of labels for the classification tasks
         pretrained_model (str):
             name of the pretrained Transformer model to use
         task_name (str):
@@ -29,19 +31,26 @@ class LtAdapter(BaseSequenceClassificationTransformerModule):
             nam of the adapter config to use
         labels (Union[List[str], List[int]]):
             list of labels used for the classification head
+        model (Optional[Union[pl.LightningModule, nn.Module]]):
+            optional instantiated model
+        scorer (Scorer):
+            helper object to compute performance metrics during training
     """
 
     def __init__(
         self,
         training_config: DictConfig,
-        num_labels: int,
         pretrained_model: str,
         task_name: str,
         adapter_config_name: str,
         labels: Union[List[str], List[int]],
+        model: Optional[Union[pl.LightningModule, nn.Module]] = None,
+        scorer: Scorer = None,
         **kwargs,
     ):
-        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
+        super().__init__(
+            training_config, pretrained_model, len(labels), model, scorer, **kwargs
+        )
 
         assert len(labels) == self.model_config.num_labels
 

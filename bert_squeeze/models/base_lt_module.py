@@ -21,13 +21,7 @@ from transformers import (
 
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.optimizers import BertAdam
-from ..utils.scorers import (
-    BaseSequenceClassificationScorer,
-    FastBertSequenceClassificationScorer,
-    LMScorer,
-    LooseSequenceClassificationScorer,
-    SummarizationScorer,
-)
+from ..utils.scorers import BaseSequenceClassificationScorer, LMScorer, Scorer
 from ..utils.types import Loss
 
 
@@ -42,6 +36,8 @@ class BaseTransformerModule(pl.LightningModule):
             name of the pretrained Transformer model to use
         model (Optional[Union[pl.LightningModule, nn.Module]]):
             optional instantiated model
+        scorer (Scorer):
+            helper object to compute performance metrics during training
     """
 
     BASE_CLASS_MODEL = None
@@ -51,6 +47,7 @@ class BaseTransformerModule(pl.LightningModule):
         training_config: DictConfig,
         pretrained_model: str,
         model: Optional[Union[pl.LightningModule, nn.Module]] = None,
+        scorer: Scorer = None,
         **kwargs,
     ):
         super().__init__()
@@ -58,14 +55,16 @@ class BaseTransformerModule(pl.LightningModule):
         self.config = training_config
 
         self.pretrained_model = pretrained_model
-        if model is not None:
-            self.model = model
-        else:
-            self.model = self.BASE_CLASS_MODEL.from_pretrained(self.pretrained_model)
-
+        self.model = (
+            self.BASE_CLASS_MODEL.from_pretrained(self.pretrained_model)
+            if model is None
+            else model
+        )
         self.training_step_outputs = []
         self.test_step_outputs = []
         self.validation_step_outputs = []
+
+        self._set_scorers(scorer)
 
     def forward(self, **kwargs):
         """"""
@@ -332,6 +331,8 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
             name of the pretrained Transformer model to use
         model (Optional[Union[pl.LightningModule, nn.Module]]):
             optional instantiated model
+        scorer (Scorer):
+            helper object to compute performance metrics during training
     """
 
     BASE_CLASS_MODEL = AutoModelForSequenceClassification
@@ -342,9 +343,10 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
         pretrained_model: str,
         num_labels: int,
         model: Optional[Union[pl.LightningModule, nn.Module]] = None,
+        scorer: Scorer = None,
         **kwargs,
     ):
-        super().__init__(training_config, pretrained_model, model, **kwargs)
+        super().__init__(training_config, pretrained_model, model, scorer, **kwargs)
         self._sanity_checks(training_config)
 
         self.num_labels = num_labels
@@ -352,7 +354,6 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
             pretrained_model, num_labels=num_labels
         )
 
-        self._set_scorers(kwargs.get("scorer_type", "regular"))
         self._set_objective()
 
     def on_validation_epoch_end(self):
@@ -405,21 +406,17 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
             "weighted": CrossEntropyLoss(weight=torch.Tensor(self.class_weights)),
         }[objective]
 
-    def _set_scorers(self, scorer_type: str) -> None:
+    def _set_scorers(self, scorer: Optional[Scorer]) -> None:
         """
         Method to set the scorers to use to evaluate the model.
 
         Args:
-            scorer_type (str):
-                Possible values: ["regular", "loose", "fast"]
+            scorer (Optional[Scorer]):
+                helper object to compute performance metrics during training
         """
-        scorer = {
-            "loose": LooseSequenceClassificationScorer(
-                self.config.get("loose_classes", [])
-            ),
-            "regular": BaseSequenceClassificationScorer(self.num_labels),
-            "fast": FastBertSequenceClassificationScorer(self.num_labels),
-        }[scorer_type]
+        if scorer is None:
+            scorer = BaseSequenceClassificationScorer(self.num_labels)
+
         self.scorer = deepcopy(scorer)
         self.valid_scorer = deepcopy(scorer)
         self.test_scorer = deepcopy(scorer)
@@ -470,6 +467,8 @@ class BaseSeq2SeqTransformerModule(BaseTransformerModule):
             name of the sequence to sequence task to perform
         model (Optional[Union[pl.LightningModule, nn.Module]]):
             optional instantiated model
+        scorer (Scorer):
+            helper object to compute performance metrics during training
     """
 
     BASE_CLASS_MODEL = AutoModelForSeq2SeqLM
@@ -480,13 +479,13 @@ class BaseSeq2SeqTransformerModule(BaseTransformerModule):
         pretrained_model: str,
         task: str,
         model: Optional[Union[pl.LightningModule, nn.Module]] = None,
+        scorer: Scorer = None,
         **kwargs,
     ):
-        super().__init__(training_config, pretrained_model, model, **kwargs)
+        super().__init__(training_config, pretrained_model, model, scorer, **kwargs)
         self._sanity_checks(training_config)
         self.task = task
 
-        self._set_scorers()
         self._set_objective()
 
     def on_validation_epoch_end(self):
@@ -501,22 +500,16 @@ class BaseSeq2SeqTransformerModule(BaseTransformerModule):
         """"""
         self.objective = CrossEntropyLoss(ignore_index=-100)
 
-    def _set_scorers(self) -> None:
+    def _set_scorers(self, scorer: Optional[Scorer]) -> None:
         """
         Method to set the scorers to use to evaluate the model.
         """
-        scorers_class = {"summarization": SummarizationScorer, "lm": LMScorer}
-        scorer_class = scorers_class.get(self.task, LMScorer)
+        if scorer is None:
+            scorer = LMScorer(tokenizer_name=self.pretrained_model, do_mismatch=False)
 
-        self.scorer = deepcopy(
-            scorer_class(tokenizer_name=self.pretrained_model, do_mismatch=False)
-        )
-        self.valid_scorer = scorer_class(
-            tokenizer_name=self.pretrained_model, do_mismatch=True
-        )
-        self.test_scorer = scorer_class(
-            tokenizer_name=self.pretrained_model, do_mismatch=True
-        )
+        self.scorer = scorer
+        self.valid_scorer = deepcopy(scorer)
+        self.test_scorer = deepcopy(scorer)
 
     def loss(self, labels: torch.Tensor, logits: torch.Tensor, *args, **kwargs) -> Loss:
         """

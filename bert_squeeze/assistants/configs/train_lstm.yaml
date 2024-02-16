@@ -25,7 +25,7 @@ model:
   _target_: bert_squeeze.models.lstm.LtLSTM
   hidden_dim: 128
   name: lstm
-  num_labels: ${general.num_labels}
+  labels: ${general.labels}
   training_config: ${train}
   vocab_size: 20000
 

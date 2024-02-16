@@ -1,4 +1,5 @@
 import logging
+from typing import List, Union
 
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
@@ -21,19 +22,24 @@ class BowLogisticRegression(pl.LightningModule):
     Args:
         vocab_size (int):
             size of the vocabulary used for the bag of n-grams representation
-        num_labels (int):
-            number of labels for the classification task
+        labels (Union[List[str], List[int]]):
+            list of labels for the classification task
         training_config (DictConfig):
             training configuration to use
     """
 
     def __init__(
-        self, vocab_size: int, num_labels: int, training_config: DictConfig, **kwargs
+        self,
+        vocab_size: int,
+        labels: Union[List[str], List[int]],
+        training_config: DictConfig,
+        **kwargs,
     ):
         super().__init__()
         self._sanity_checks(training_config)
         self.config = training_config
-        self.num_labels = num_labels
+        self.num_labels = len(labels)
+        self.labels = labels
         self.vocab_size = vocab_size
 
         self.training_step_outputs = []
@@ -142,9 +148,9 @@ class BowLogisticRegression(pl.LightningModule):
         """
         Method to set the scorers to use to evaluate the model.
         """
-        self.scorer = BaseSequenceClassificationScorer(self.num_labels)
-        self.valid_scorer = BaseSequenceClassificationScorer(self.num_labels)
-        self.test_scorer = BaseSequenceClassificationScorer(self.num_labels)
+        self.scorer = BaseSequenceClassificationScorer(self.labels)
+        self.valid_scorer = BaseSequenceClassificationScorer(self.labels)
+        self.test_scorer = BaseSequenceClassificationScorer(self.labels)
 
     def _set_objective(self) -> None:
         """

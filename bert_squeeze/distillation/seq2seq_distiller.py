@@ -36,6 +36,8 @@ class Seq2SeqDistiller(BaseDistiller):
         **kwargs,
     ):
         super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
+        self._set_objectives()
+        self._set_scorers()
 
     @overrides
     def loss(
