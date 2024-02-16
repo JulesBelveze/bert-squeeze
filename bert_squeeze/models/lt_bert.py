@@ -1,8 +1,12 @@
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
+import lightning.pytorch as pl
 import torch
+import torch.nn as nn
 from omegaconf import DictConfig
 from overrides import overrides
+
+from bert_squeeze.utils.scorers import Scorer
 
 from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers import CustomBertModel
@@ -22,6 +26,10 @@ class LtSequenceClassificationCustomBert(BaseSequenceClassificationTransformerMo
             number of labels for the classification tasks
         pretrained_model (str):
             name of the pretrained Transformer model to use
+        model (Optional[Union[pl.LightningModule, nn.Module]]):
+            optional instantiated model
+        scorer (Scorer):
+            helper object to compute performance metrics during training
     """
 
     def __init__(
@@ -29,9 +37,13 @@ class LtSequenceClassificationCustomBert(BaseSequenceClassificationTransformerMo
         training_config: DictConfig,
         pretrained_model: str,
         num_labels: int,
+        model: Optional[Union[pl.LightningModule, nn.Module]] = None,
+        scorer: Scorer = None,
         **kwargs,
     ):
-        super().__init__(training_config, pretrained_model, num_labels, **kwargs)
+        super().__init__(
+            training_config, pretrained_model, num_labels, model, scorer, **kwargs
+        )
 
     @overrides
     def forward(
