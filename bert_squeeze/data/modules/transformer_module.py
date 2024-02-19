@@ -254,6 +254,10 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         ):
             columns += ["token_type_ids"]
 
+        columns_to_keep = [self.target_col, self.source_col] + columns
+        for split, split_dataset in tokenized_dataset.items():
+            columns_to_del = set(split_dataset.column_names) - set(columns_to_keep)
+            tokenized_dataset[split] = split_dataset.remove_columns(list(columns_to_del))
         tokenized_dataset.set_format(type='torch', columns=columns)
         return tokenized_dataset
 

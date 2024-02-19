@@ -1,11 +1,11 @@
-from typing import Dict, Union, Any
+from typing import Any, Dict, Union
 
 import lightning.pytorch as pl
 import torch
 import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss
 from omegaconf import DictConfig
 from overrides import overrides
+from torch.nn import CrossEntropyLoss
 
 from bert_squeeze.distillation.base_distiller import BaseDistiller
 from bert_squeeze.utils.losses.distillation_losses import KLDivLoss
