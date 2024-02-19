@@ -1,8 +1,9 @@
-from typing import Dict, Union
+from typing import Dict, Union, Any
 
 import lightning.pytorch as pl
 import torch
 import torch.nn.functional as F
+from torch.nn import CrossEntropyLoss
 from omegaconf import DictConfig
 from overrides import overrides
 
@@ -38,6 +39,20 @@ class Seq2SeqDistiller(BaseDistiller):
         super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
         self._set_objectives()
         self._set_scorers()
+
+    def get_teacher_logits(self, batch: Dict[str, torch.Tensor]) -> Any:
+        return self.teacher(
+            labels=batch['t_labels'],
+            input_ids=batch['t_input_ids'],
+            attention_mask=batch['t_attention_mask'],
+        )
+
+    def get_student_logits(self, batch: Dict[str, torch.Tensor]) -> Any:
+        return self.student(
+            labels=batch['s_labels'],
+            input_ids=batch['s_input_ids'],
+            attention_mask=batch['s_attention_mask'],
+        )
 
     @overrides
     def loss(
@@ -149,6 +164,7 @@ class Seq2SeqDistiller(BaseDistiller):
 
     def _set_objectives(self) -> None:
         """"""
+        self.loss_ce = CrossEntropyLoss()
         distillation_loss = self.params.get("distillation_loss", "kl")
 
         self.loss_distill = {"mse": torch.nn.MSELoss(), "kl": KLDivLoss()}[
