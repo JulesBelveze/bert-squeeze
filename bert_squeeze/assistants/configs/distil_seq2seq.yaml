@@ -54,17 +54,17 @@ data:
       source_col:
     max_target_length: 32
     max_source_length: 256
-    tokenizer_name: ${model.pretrained_model}
+    tokenizer_name: ${model.teacher.pretrained_model}
   student_module:
-    _target_: bert_squeeze.data.modules.transformer_module.TransformerDataModule
+    _target_: bert_squeeze.data.modules.transformer_module.Seq2SeqTransformerDataModule
     dataset_config:
       is_local: ${data.teacher_module.dataset_config.is_local}
       path: ${data.teacher_module.dataset_config.path}
       split: ${data.teacher_module.dataset_config.split}
-      source_col: ${data.teacher_module.dataset_config.text_col}
-      target_col: ${data.teacher_module.dataset_config.label_col}
-    tokenizer_name: ${model.student.pretrained_model_name_or_path}
-    max_target_length: ${model.teacher_module.data_config.max_target_length}
-    max_source_length: ${model.teacher_module.data_config.max_source_length}
+      source_col: ${data.teacher_module.dataset_config.source_col}
+      target_col: ${data.teacher_module.dataset_config.target_col}
+    tokenizer_name: ${model.student.pretrained_model}
+    max_target_length: ${data.teacher_module.max_target_length}
+    max_source_length: ${data.teacher_module.max_source_length}
 
 callbacks:
