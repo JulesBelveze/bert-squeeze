@@ -82,12 +82,7 @@ class Seq2SeqDistiller(BaseDistiller):
         # Ignore soft labeled indices (where label is `ignore_index`)
         active_idx = labels != ignore_index
         if active_idx.sum().item() > 0:
-            # XXX this fails for me, trying a common approach
-            # objective = self.loss_ce(student_logits[active_idx], labels[active_idx])
-            vocab_size = student_logits.size(-1)
-            ce_logits = student_logits.view(-1, vocab_size)
-            ce_labels = labels.view(-1)
-            objective = self.loss_ce(ce_logits, ce_labels)
+            objective = self.loss_ce(student_logits[active_idx], labels[active_idx])
         else:
             objective = torch.tensor(0.0).to(labels.device)
 
