@@ -1,4 +1,4 @@
-from typing import Any, Dict, Union, TypeVar
+from typing import Any, Dict, TypeVar, Union
 
 import lightning.pytorch as pl
 import torch
@@ -6,8 +6,8 @@ import torch.nn.functional as F
 from omegaconf import DictConfig
 from overrides import overrides
 from torch.nn import CrossEntropyLoss
-
 from transformers.modeling_outputs import Seq2SeqLMOutput
+
 from bert_squeeze.distillation.base_distiller import BaseDistiller
 from bert_squeeze.utils.losses.distillation_losses import KLDivLoss
 from bert_squeeze.utils.scorers import SummarizationScorer
@@ -30,12 +30,12 @@ class Seq2SeqDistiller(BaseDistiller):
     """
 
     def __init__(
-            self,
-            teacher: Union["pl.LightningModule", "torch.nn.Module"],
-            student: Union["pl.LightningModule", "torch.nn.Module"],
-            training_config: DictConfig,
-            teacher_checkpoint: str = None,
-            **kwargs,
+        self,
+        teacher: Union["pl.LightningModule", "torch.nn.Module"],
+        student: Union["pl.LightningModule", "torch.nn.Module"],
+        training_config: DictConfig,
+        teacher_checkpoint: str = None,
+        **kwargs,
     ):
         super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
         self._set_objectives()
@@ -65,13 +65,13 @@ class Seq2SeqDistiller(BaseDistiller):
 
     @overrides
     def loss(
-            self,
-            teacher_logits: torch.Tensor,
-            student_logits: torch.Tensor,
-            labels: torch.Tensor = None,
-            ignore_index: int = -100,
-            *args,
-            **kwargs,
+        self,
+        teacher_logits: torch.Tensor,
+        student_logits: torch.Tensor,
+        labels: torch.Tensor = None,
+        ignore_index: int = -100,
+        *args,
+        **kwargs,
     ) -> DistillationLoss:
         """
         Method called for loss computation
@@ -113,7 +113,7 @@ class Seq2SeqDistiller(BaseDistiller):
             predicted_tokens=s_predicted_tokens,
             labels=batch["s_labels"].detach().cpu(),
             loss=loss,
-            input_ids=batch["s_input_ids"]
+            input_ids=batch["s_input_ids"],
         )
         if self.global_step > 0 and self.global_step % self.params.logging_steps == 0:
             logging_loss = {
@@ -137,7 +137,7 @@ class Seq2SeqDistiller(BaseDistiller):
             predicted_tokens=s_predicted_tokens,
             labels=batch["s_labels"].detach().cpu(),
             loss=loss,
-            input_ids=batch["s_input_ids"]
+            input_ids=batch["s_input_ids"],
         )
         self.test_step_outputs.append(
             {"loss": loss.full_loss, "logits": s_logits.detach().cpu()}
@@ -156,7 +156,7 @@ class Seq2SeqDistiller(BaseDistiller):
             predicted_tokens=s_predicted_tokens.detach().cpu(),
             labels=batch["s_labels"].detach().cpu(),
             loss=loss,
-            input_ids=batch["s_input_ids"]
+            input_ids=batch["s_input_ids"],
         )
         self.validation_step_outputs.append(
             {"loss": loss.full_loss, "logits": s_logits.detach().cpu()}

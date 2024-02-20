@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from tabulate import tabulate
 from transformers import AutoTokenizer
+
 from bert_squeeze.utils.types import DistillationLoss
 
 MAX_CLIP_VALUE = 1e8
