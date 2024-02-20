@@ -1,5 +1,5 @@
 from typing import Any, Dict, TypeVar, Union
-
+import numpy as np
 import lightning.pytorch as pl
 import torch
 import torch.nn.functional as F
@@ -115,9 +115,10 @@ class Seq2SeqDistiller(BaseDistiller):
             loss=loss,
             input_ids=batch["s_input_ids"],
         )
+
         if self.global_step > 0 and self.global_step % self.params.logging_steps == 0:
             logging_loss = {
-                f"train/{key}": torch.stack(val).mean()
+                f"train/{key}": np.array(val).mean()
                 for key, val in self.s_scorer.losses.items()
             }
             self.log_dict(logging_loss)
