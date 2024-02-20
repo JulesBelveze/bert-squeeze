@@ -165,6 +165,9 @@ class SummarizationScorer(object):
                 decoded_labels = self.tokenizer.batch_decode(
                     labels, skip_special_tokens=True
                 )
+                input_ids = np.where(
+                    input_ids.cpu() != -100, input_ids.cpu(), self.tokenizer.pad_token_id
+                )
                 input_texts = self.tokenizer.batch_decode(
                     input_ids, skip_special_tokens=True
                 )
