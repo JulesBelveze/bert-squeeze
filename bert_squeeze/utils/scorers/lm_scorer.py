@@ -1,11 +1,12 @@
 from collections import defaultdict
-from typing import Dict, List
+from typing import Dict, List, Union
 
 import evaluate
 import numpy as np
 import torch
 from tabulate import tabulate
 from transformers import AutoTokenizer
+from bert_squeeze.utils.types import DistillationLoss
 
 MAX_CLIP_VALUE = 1e8
 
@@ -39,14 +40,17 @@ class LMScorer(object):
 
     def add(
         self,
-        loss: torch.Tensor = None,
+        loss: Union[torch.Tensor, DistillationLoss] = None,
         predicted_tokens: torch.Tensor = None,
         labels: torch.Tensor = None,
         input_ids: torch.Tensor = None,
     ):
         """"""
         with torch.no_grad():
-            self.losses["global"].append(loss.cpu().numpy())
+            if isinstance(loss, torch.Tensor):
+                self.losses["global"].append(loss.cpu().numpy())
+            else:
+                self.losses["global"].append(loss.full_loss.cpu().numpy())
 
             perplexity = torch.clip(torch.exp(loss), max=MAX_CLIP_VALUE)
             self.metrics["perplexity"].append(perplexity.cpu().numpy())
@@ -129,7 +133,7 @@ class SummarizationScorer(object):
 
     def add(
         self,
-        loss: torch.Tensor = None,
+        loss: Union[torch.Tensor, DistillationLoss] = None,
         predicted_tokens: torch.Tensor = None,
         labels: torch.Tensor = None,
         input_ids: torch.Tensor = None,
@@ -148,7 +152,10 @@ class SummarizationScorer(object):
                 token ids of the input sentences
         """
         with torch.no_grad():
-            self.losses["global"].append(loss.cpu().numpy())
+            if isinstance(loss, torch.Tensor):
+                self.losses["global"].append(loss.cpu().numpy())
+            else:
+                self.losses["global"].append(loss.full_loss.cpu().numpy())
 
             if self.do_mismatch and predicted_tokens is not None:
                 decoded_preds = self.tokenizer.batch_decode(

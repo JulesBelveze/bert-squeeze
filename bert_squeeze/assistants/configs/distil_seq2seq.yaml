@@ -12,6 +12,7 @@ train:
   accumulation_steps: 1
   adam_eps: 1e-8
   auto_lr: false
+  alpha: 0.5
   discriminative_learning: true
   dropout: 0.2
   layer_lr_decay: 0.95
