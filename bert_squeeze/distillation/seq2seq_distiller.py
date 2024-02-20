@@ -1,6 +1,7 @@
 from typing import Any, Dict, TypeVar, Union
-import numpy as np
+
 import lightning.pytorch as pl
+import numpy as np
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig

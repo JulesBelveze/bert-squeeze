@@ -238,7 +238,11 @@ class LayerPruning(Callback):
             stage: A string specifying the stage ('fit' or 'test') to trigger different behavior.
         """
         if stage == 'fit':
-            model = pl_module.student
+            model = (
+                pl_module.student.model
+                if isinstance(pl_module.student, pl.LightningModule)
+                else pl_module.student
+            )
 
             if model.config.num_decoder_layers != self.num_decoder_layers:
                 for i in reversed(self._layers_to_remove(self.num_decoder_layers)):
