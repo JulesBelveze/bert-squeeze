@@ -123,8 +123,6 @@ class Seq2SeqDistiller(BaseDistiller):
                 for key, val in self.s_scorer.losses.items()
             }
             self.log_dict(logging_loss)
-
-            self.log("train/acc", self.scorer.acc)
         return loss.full_loss
 
     @overrides
