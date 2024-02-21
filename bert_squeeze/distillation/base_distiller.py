@@ -227,7 +227,8 @@ class BaseDistiller(pl.LightningModule):
 
         It uses the evaluation scorer to log all the available losses and metrics.
         """
-        table = self.s_valid_scorer.get_table()
+        results = self.s_valid_scorer.to_dict()
+        table = self.s_valid_scorer.get_table(results)
         self.logger.experiment.add_text("eval/report", table)
 
         # logging losses to neptune
@@ -238,9 +239,6 @@ class BaseDistiller(pl.LightningModule):
         self.log_dict({f"eval/loss_{key}": val for key, val in logging_loss.items()})
 
         # logging other metrics
-        eval_report = self.s_valid_scorer.to_dict()
-        for key, value in eval_report.items():
+        for key, value in results.items():
             if not isinstance(value, list) and not isinstance(value, np.ndarray):
-                self.log_dict(
-                    {f"eval/loss_{key}": val for key, val in logging_loss.items()}
-                )
+                self.log_dict({f"eval/{key}": value})

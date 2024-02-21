@@ -154,9 +154,9 @@ class SummarizationScorer(object):
         """
         with torch.no_grad():
             if isinstance(loss, torch.Tensor):
-                self.losses["global"].append(loss.cpu().numpy())
+                self.losses["global"].append(loss.cpu())
             else:
-                self.losses["global"].append(loss.full_loss.cpu().numpy())
+                self.losses["global"].append(loss.full_loss.cpu())
 
             if self.do_mismatch and predicted_tokens is not None:
                 decoded_preds = self.tokenizer.batch_decode(
@@ -202,7 +202,6 @@ class SummarizationScorer(object):
     def reset(self):
         """"""
         self.losses = defaultdict(list)
-        self.metrics = evaluate.load("rouge")
         self.mismatches = []
 
     def to_dict(self) -> Dict[str, float]:
@@ -215,15 +214,17 @@ class SummarizationScorer(object):
         """
         return self.result()
 
-    def get_table(self) -> str:
+    @staticmethod
+    def get_table(results: Dict[str, float]) -> str:
         """
         Method to format all the metrics into a pretty table.
 
+        Args:
+            results (Dict[str, float]): dictionary of metrics
         Returns:
             str: prettyfied table summarizing all the metrics
         """
         table = []
-        results = self.to_dict()
         for k, v in results.items():
             if isinstance(v, np.ndarray):
                 v = v.tolist()

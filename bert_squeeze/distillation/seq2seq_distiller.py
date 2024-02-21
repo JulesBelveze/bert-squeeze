@@ -119,7 +119,7 @@ class Seq2SeqDistiller(BaseDistiller):
 
         if self.global_step > 0 and self.global_step % self.params.logging_steps == 0:
             logging_loss = {
-                f"train/{key}": np.array(val).mean()
+                f"train/{key}": torch.stack(val).mean()
                 for key, val in self.s_scorer.losses.items()
             }
             self.log_dict(logging_loss)
@@ -153,7 +153,7 @@ class Seq2SeqDistiller(BaseDistiller):
 
         loss = self.loss(t_logits, s_logits, batch["s_labels"])
         self.s_valid_scorer.add(
-            predicted_tokens=s_predicted_tokens.detach().cpu(),
+            predicted_tokens=s_predicted_tokens,
             labels=batch["s_labels"].detach().cpu(),
             loss=loss,
             input_ids=batch["s_input_ids"],
@@ -166,24 +166,15 @@ class Seq2SeqDistiller(BaseDistiller):
     @overrides
     def on_validation_epoch_end(self) -> None:
         """"""
-        if not self.trainer.sanity_checking:
-            all_logits = torch.cat(
-                [pred["logits"] for pred in self.validation_step_outputs]
-            )
-            all_probs = F.softmax(all_logits, dim=-1)
-            labels_probs = [all_probs[:, i] for i in range(all_probs.shape[-1])]
-            self.log_eval_report(labels_probs)
+        # if not self.trainer.sanity_checking:
+        self.log_eval_report()
 
         self.s_valid_scorer.reset()
 
     @overrides
     def on_test_epoch_end(self) -> None:
         """"""
-        all_logits = torch.cat([pred["logits"] for pred in self.test_step_outputs])
-        all_probs = F.softmax(all_logits, dim=-1)
-        labels_probs = [all_probs[:, i] for i in range(all_probs.shape[-1])]
-
-        self.log_eval_report(labels_probs)
+        self.log_eval_report()
         self.s_test_scorer.reset()
 
     def _set_objectives(self) -> None:
