@@ -1,5 +1,6 @@
 from collections import defaultdict
 from typing import Dict, List, Union
+import copy
 
 import evaluate
 import numpy as np
@@ -126,6 +127,19 @@ class SummarizationScorer(object):
         self.losses = defaultdict(list)
         self.mismatches = []
         self.metrics = evaluate.load("rouge")
+
+    def __deepcopy__(self, memo=None):
+        # `metrics` is a whole module that can't be deep-copied
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo = memo or {}
+        memo[id(self)] = result
+
+        for k, v in self.__dict__.items():
+            if k != 'metrics':
+                setattr(result, k, copy.deepcopy(v, memo))
+
+        return result
 
     @staticmethod
     def postprocess_text(*args: List[str]):
