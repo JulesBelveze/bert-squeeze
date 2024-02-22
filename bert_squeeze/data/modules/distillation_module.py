@@ -17,6 +17,9 @@ TeacherDataModule = Union[LrDataModule, TransformerDataModule, LSTMDataModule]
 StudentDataModule = Union[LrDataModule, TransformerDataModule, LSTMDataModule]
 
 
+NUM_WORKERS = 0
+
+
 class DistillationDataModule(pl.LightningDataModule):
     """
     LightningDataModule for Distillation procedures.
@@ -228,6 +231,7 @@ class DistillationDataModule(pl.LightningDataModule):
             collate_fn=self._collate_fn(),
             batch_size=self.train_batch_size,
             drop_last=True,
+            num_workers=NUM_WORKERS,
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -240,6 +244,7 @@ class DistillationDataModule(pl.LightningDataModule):
             collate_fn=self._collate_fn(),
             batch_size=self.eval_batch_size,
             drop_last=True,
+            num_workers=NUM_WORKERS,
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -252,6 +257,7 @@ class DistillationDataModule(pl.LightningDataModule):
             collate_fn=self._collate_fn(),
             batch_size=self.eval_batch_size,
             drop_last=True,
+            num_workers=NUM_WORKERS,
         )
 
     def _collate_fn(self):
