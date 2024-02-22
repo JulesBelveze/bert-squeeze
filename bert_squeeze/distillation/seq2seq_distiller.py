@@ -90,7 +90,6 @@ class Seq2SeqDistiller(BaseDistiller):
 
         """
         # Ignore soft labeled indices (where label is `ignore_index`)
-        print(type(teacher_logits), type(student_logits))
         active_idx = labels != ignore_index
         if active_idx.sum().item() > 0:
             objective = self.loss_ce(student_logits[active_idx], labels[active_idx])
