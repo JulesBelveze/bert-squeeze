@@ -78,9 +78,9 @@ class Seq2SeqDistiller(BaseDistiller):
         Method called for loss computation
 
         Args:
-            teacher_logits (Seq2SeqOutput):
+            teacher_logits (torch.Tensor):
                 teacher's predictions
-            student_logits (Seq2SeqOutput):
+            student_logits (torch.Tensor):
                 student's predictions
             labels (torch.Tensor):
                 ground truth labels
@@ -90,7 +90,7 @@ class Seq2SeqDistiller(BaseDistiller):
 
         """
         # Ignore soft labeled indices (where label is `ignore_index`)
-
+        print(type(teacher_logits), type(student_logits))
         active_idx = labels != ignore_index
         if active_idx.sum().item() > 0:
             objective = self.loss_ce(student_logits[active_idx], labels[active_idx])
@@ -166,8 +166,8 @@ class Seq2SeqDistiller(BaseDistiller):
     @overrides
     def on_validation_epoch_end(self) -> None:
         """"""
-        # if not self.trainer.sanity_checking:
-        self.log_eval_report()
+        if not self.trainer.sanity_checking:
+            self.log_eval_report()
 
         self.s_valid_scorer.reset()
 
