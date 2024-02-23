@@ -139,6 +139,7 @@ class SummarizationScorer(object):
             if k != 'metrics':
                 setattr(result, k, copy.deepcopy(v, memo))
 
+        result.metrics = evaluate.load("rouge")
         return result
 
     @staticmethod

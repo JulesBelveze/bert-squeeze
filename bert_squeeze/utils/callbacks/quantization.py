@@ -34,6 +34,6 @@ class DynamicQuantization(Callback):
 
         torch.save(quantized_module.state_dict(), "quantized_model.ckpt")
         logging.info(
-            'Model quantized and saved - size (MB):'
+            'Model quantized and saved in quantized_model.ckpt - size (MB):'
             f' {os.path.getsize("quantized_model.ckpt") / 1e6}'
         )
