@@ -12,10 +12,11 @@ train:
   accumulation_steps: 1
   adam_eps: 1e-8
   auto_lr: false
+  alpha: 0.5
   discriminative_learning: true
   dropout: 0.2
   layer_lr_decay: 0.95
-  learning_rates: [ 5e-5 ]
+  learning_rates: [5e-5]
   logging_steps: 50
   lr_scheduler: false
   max_grad_norm: 1.0
@@ -23,6 +24,7 @@ train:
   warmup_ratio: 0.06
   warmup_steps: true
   weight_decay: 0.01
+  optimizer: adamw
 
 model:
   _target_: bert_squeeze.distillation.seq2seq_distiller.Seq2SeqDistiller

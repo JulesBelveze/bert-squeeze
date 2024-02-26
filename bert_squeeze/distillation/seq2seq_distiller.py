@@ -1,10 +1,13 @@
-from typing import Dict, Union
+from typing import Any, Dict, TypeVar, Union
 
 import lightning.pytorch as pl
+import numpy as np
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
 from overrides import overrides
+from torch.nn import CrossEntropyLoss
+from transformers.modeling_outputs import Seq2SeqLMOutput
 
 from bert_squeeze.distillation.base_distiller import BaseDistiller
 from bert_squeeze.utils.losses.distillation_losses import KLDivLoss
@@ -38,6 +41,28 @@ class Seq2SeqDistiller(BaseDistiller):
         super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
         self._set_objectives()
         self._set_scorers()
+
+    def get_teacher_logits(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+        """"""
+        output = self.teacher(
+            labels=batch['t_labels'],
+            input_ids=batch['t_input_ids'],
+            attention_mask=batch['t_attention_mask'],
+        )
+        if isinstance(output, Seq2SeqLMOutput):
+            return output.logits
+        return output
+
+    def get_student_logits(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+        """"""
+        output = self.student(
+            labels=batch['s_labels'],
+            input_ids=batch['s_input_ids'],
+            attention_mask=batch['s_attention_mask'],
+        )
+        if isinstance(output, Seq2SeqLMOutput):
+            return output.logits
+        return output
 
     @overrides
     def loss(
@@ -80,18 +105,23 @@ class Seq2SeqDistiller(BaseDistiller):
         """"""
         t_logits = self.get_teacher_logits(batch)
         s_logits = self.get_student_logits(batch)
+        s_predicted_tokens = s_logits.argmax(dim=-1)
 
         loss = self.loss(t_logits, s_logits, batch["s_labels"])
 
-        self.s_scorer.add(s_logits.detach().cpu(), batch["s_labels"].cpu(), loss)
+        self.s_scorer.add(
+            predicted_tokens=s_predicted_tokens,
+            labels=batch["s_labels"].detach().cpu(),
+            loss=loss,
+            input_ids=batch["s_input_ids"],
+        )
+
         if self.global_step > 0 and self.global_step % self.params.logging_steps == 0:
             logging_loss = {
                 f"train/{key}": torch.stack(val).mean()
                 for key, val in self.s_scorer.losses.items()
             }
             self.log_dict(logging_loss)
-
-            self.log("train/acc", self.scorer.acc)
         return loss.full_loss
 
     @overrides
@@ -99,10 +129,14 @@ class Seq2SeqDistiller(BaseDistiller):
         """"""
         t_logits = self.get_teacher_logits(batch)
         s_logits = self.get_student_logits(batch)
+        s_predicted_tokens = s_logits.argmax(dim=-1)
 
         loss = self.loss(t_logits, s_logits, batch["s_labels"])
         self.s_test_scorer.add(
-            s_logits.detach().cpu(), batch["labels"].detach().cpu(), loss
+            predicted_tokens=s_predicted_tokens,
+            labels=batch["s_labels"].detach().cpu(),
+            loss=loss,
+            input_ids=batch["s_input_ids"],
         )
         self.test_step_outputs.append(
             {"loss": loss.full_loss, "logits": s_logits.detach().cpu()}
@@ -114,10 +148,14 @@ class Seq2SeqDistiller(BaseDistiller):
         """"""
         t_logits = self.get_teacher_logits(batch)
         s_logits = self.get_student_logits(batch)
+        s_predicted_tokens = s_logits.argmax(dim=-1)
 
         loss = self.loss(t_logits, s_logits, batch["s_labels"])
         self.s_valid_scorer.add(
-            s_logits.detach().cpu(), batch["s_labels"].detach().cpu(), loss
+            predicted_tokens=s_predicted_tokens,
+            labels=batch["s_labels"].detach().cpu(),
+            loss=loss,
+            input_ids=batch["s_input_ids"],
         )
         self.validation_step_outputs.append(
             {"loss": loss.full_loss, "logits": s_logits.detach().cpu()}
@@ -128,27 +166,19 @@ class Seq2SeqDistiller(BaseDistiller):
     def on_validation_epoch_end(self) -> None:
         """"""
         if not self.trainer.sanity_checking:
-            all_logits = torch.cat(
-                [pred["logits"] for pred in self.validation_step_outputs]
-            )
-            all_probs = F.softmax(all_logits, dim=-1)
-            labels_probs = [all_probs[:, i] for i in range(all_probs.shape[-1])]
-            self.log_eval_report(labels_probs)
+            self.log_eval_report()
 
         self.s_valid_scorer.reset()
 
     @overrides
     def on_test_epoch_end(self) -> None:
         """"""
-        all_logits = torch.cat([pred["logits"] for pred in self.test_step_outputs])
-        all_probs = F.softmax(all_logits, dim=-1)
-        labels_probs = [all_probs[:, i] for i in range(all_probs.shape[-1])]
-
-        self.log_eval_report(labels_probs)
+        self.log_eval_report()
         self.s_test_scorer.reset()
 
     def _set_objectives(self) -> None:
         """"""
+        self.loss_ce = CrossEntropyLoss()
         distillation_loss = self.params.get("distillation_loss", "kl")
 
         self.loss_distill = {"mse": torch.nn.MSELoss(), "kl": KLDivLoss()}[

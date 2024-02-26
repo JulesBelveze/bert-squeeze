@@ -9,6 +9,9 @@ from torch.utils.data import DataLoader
 from .base import BaseDataModule
 
 
+NUM_WORKERS = 0
+
+
 class LrDataModule(BaseDataModule):
     """
     DataModule for Logistic Regression which can be seen as a bag of n-grams.
@@ -102,7 +105,10 @@ class LrDataModule(BaseDataModule):
             DataLoader: training dataloader
         """
         return DataLoader(
-            self.train, batch_size=self.train_batch_size, drop_last=True, num_workers=0
+            self.train,
+            batch_size=self.train_batch_size,
+            drop_last=True,
+            num_workers=NUM_WORKERS,
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -111,7 +117,10 @@ class LrDataModule(BaseDataModule):
             DataLoader: test dataloader
         """
         return DataLoader(
-            self.test, batch_size=self.eval_batch_size, drop_last=True, num_workers=0
+            self.test,
+            batch_size=self.eval_batch_size,
+            drop_last=True,
+            num_workers=NUM_WORKERS,
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -120,5 +129,8 @@ class LrDataModule(BaseDataModule):
             DataLoader: Validation dataloader
         """
         return DataLoader(
-            self.val, batch_size=self.eval_batch_size, drop_last=True, num_workers=0
+            self.val,
+            batch_size=self.eval_batch_size,
+            drop_last=True,
+            num_workers=NUM_WORKERS,
         )

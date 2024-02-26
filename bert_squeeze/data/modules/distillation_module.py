@@ -1,7 +1,9 @@
+from collections import defaultdict
 from typing import Optional, Union
 
 import datasets
 import lightning.pytorch as pl
+import torch
 from datasets import Features
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
@@ -13,6 +15,9 @@ from .transformer_module import TransformerDataModule
 
 TeacherDataModule = Union[LrDataModule, TransformerDataModule, LSTMDataModule]
 StudentDataModule = Union[LrDataModule, TransformerDataModule, LSTMDataModule]
+
+
+NUM_WORKERS = 0
 
 
 class DistillationDataModule(pl.LightningDataModule):
@@ -195,7 +200,6 @@ class DistillationDataModule(pl.LightningDataModule):
         # Merging the student and teacher datasets into a single one
         concat_dataset = self._concat_dataset(teacher_data, student_data)
         concat_dataset = concat_dataset.shuffle()
-        concat_dataset.set_format(type="torch")
         return concat_dataset
 
     def prepare_data(self) -> None:
@@ -222,18 +226,73 @@ class DistillationDataModule(pl.LightningDataModule):
         Returns:
             DataLoader: Train dataloader
         """
-        return DataLoader(self.train, batch_size=self.train_batch_size, drop_last=True)
+        return DataLoader(
+            self.train,
+            collate_fn=self._collate_fn(),
+            batch_size=self.train_batch_size,
+            drop_last=True,
+            num_workers=NUM_WORKERS,
+        )
 
     def test_dataloader(self) -> DataLoader:
         """
         Returns:
             DataLoader: Test dataloader
         """
-        return DataLoader(self.test, batch_size=self.eval_batch_size, drop_last=True)
+        return DataLoader(
+            self.test,
+            collate_fn=self._collate_fn(),
+            batch_size=self.eval_batch_size,
+            drop_last=True,
+            num_workers=NUM_WORKERS,
+        )
 
     def val_dataloader(self) -> DataLoader:
         """
         Returns:
             DataLoader: Validation dataloader
         """
-        return DataLoader(self.val, batch_size=self.eval_batch_size, drop_last=True)
+        return DataLoader(
+            self.val,
+            collate_fn=self._collate_fn(),
+            batch_size=self.eval_batch_size,
+            drop_last=True,
+            num_workers=NUM_WORKERS,
+        )
+
+    def _collate_fn(self):
+        """Helper function to merge a list of samples into a batch of Tensors"""
+
+        def _collate(examples):
+            return self.pad_sequences(examples)
+
+        return _collate
+
+    @staticmethod
+    def pad_sequences(batch, padding_value=-100, padding_strategy='end'):
+        """"""
+        dict_of_list = defaultdict(list)
+        for sample in batch:
+            for k, v in sample.items():
+                dict_of_list[k].append(v)
+
+        padded_batch = {}
+        for key, values in dict_of_list.items():
+            if isinstance(values[0], str):
+                padded_batch[key] = values
+                continue
+
+            max_length = max(len(sequence) for sequence in values)
+            if padding_strategy == 'end':
+                padded_values = [
+                    sequence + [padding_value] * (max_length - len(sequence))
+                    for sequence in values
+                ]
+            elif padding_strategy == 'start':
+                padded_values = [
+                    [padding_value] * (max_length - len(sequence)) + sequence
+                    for sequence in values
+                ]
+
+            padded_batch[key] = torch.LongTensor(padded_values)
+        return padded_batch

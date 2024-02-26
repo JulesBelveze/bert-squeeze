@@ -1,11 +1,14 @@
 from collections import defaultdict
-from typing import Dict, List
+from typing import Dict, List, Union
+import copy
 
 import evaluate
 import numpy as np
 import torch
 from tabulate import tabulate
 from transformers import AutoTokenizer
+
+from bert_squeeze.utils.types import DistillationLoss
 
 MAX_CLIP_VALUE = 1e8
 
@@ -39,14 +42,17 @@ class LMScorer(object):
 
     def add(
         self,
-        loss: torch.Tensor = None,
+        loss: Union[torch.Tensor, DistillationLoss] = None,
         predicted_tokens: torch.Tensor = None,
         labels: torch.Tensor = None,
         input_ids: torch.Tensor = None,
     ):
         """"""
         with torch.no_grad():
-            self.losses["global"].append(loss.cpu().numpy())
+            if isinstance(loss, torch.Tensor):
+                self.losses["global"].append(loss.cpu().numpy())
+            else:
+                self.losses["global"].append(loss.full_loss.cpu().numpy())
 
             perplexity = torch.clip(torch.exp(loss), max=MAX_CLIP_VALUE)
             self.metrics["perplexity"].append(perplexity.cpu().numpy())
@@ -122,6 +128,20 @@ class SummarizationScorer(object):
         self.mismatches = []
         self.metrics = evaluate.load("rouge")
 
+    def __deepcopy__(self, memo=None):
+        # `metrics` is a whole module that can't be deep-copied
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo = memo or {}
+        memo[id(self)] = result
+
+        for k, v in self.__dict__.items():
+            if k != 'metrics':
+                setattr(result, k, copy.deepcopy(v, memo))
+
+        result.metrics = evaluate.load("rouge")
+        return result
+
     @staticmethod
     def postprocess_text(*args: List[str]):
         """"""
@@ -129,7 +149,7 @@ class SummarizationScorer(object):
 
     def add(
         self,
-        loss: torch.Tensor = None,
+        loss: Union[torch.Tensor, DistillationLoss] = None,
         predicted_tokens: torch.Tensor = None,
         labels: torch.Tensor = None,
         input_ids: torch.Tensor = None,
@@ -148,7 +168,10 @@ class SummarizationScorer(object):
                 token ids of the input sentences
         """
         with torch.no_grad():
-            self.losses["global"].append(loss.cpu().numpy())
+            if isinstance(loss, torch.Tensor):
+                self.losses["global"].append(loss.cpu())
+            else:
+                self.losses["global"].append(loss.full_loss.cpu())
 
             if self.do_mismatch and predicted_tokens is not None:
                 decoded_preds = self.tokenizer.batch_decode(
@@ -156,6 +179,9 @@ class SummarizationScorer(object):
                 )
                 decoded_labels = self.tokenizer.batch_decode(
                     labels, skip_special_tokens=True
+                )
+                input_ids = np.where(
+                    input_ids.cpu() != -100, input_ids.cpu(), self.tokenizer.pad_token_id
                 )
                 input_texts = self.tokenizer.batch_decode(
                     input_ids, skip_special_tokens=True
@@ -191,7 +217,6 @@ class SummarizationScorer(object):
     def reset(self):
         """"""
         self.losses = defaultdict(list)
-        self.metrics = evaluate.load("rouge")
         self.mismatches = []
 
     def to_dict(self) -> Dict[str, float]:
@@ -204,15 +229,17 @@ class SummarizationScorer(object):
         """
         return self.result()
 
-    def get_table(self) -> str:
+    @staticmethod
+    def get_table(results: Dict[str, float]) -> str:
         """
         Method to format all the metrics into a pretty table.
 
+        Args:
+            results (Dict[str, float]): dictionary of metrics
         Returns:
             str: prettyfied table summarizing all the metrics
         """
         table = []
-        results = self.to_dict()
         for k, v in results.items():
             if isinstance(v, np.ndarray):
                 v = v.tolist()

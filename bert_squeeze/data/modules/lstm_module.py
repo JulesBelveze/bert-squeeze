@@ -14,6 +14,9 @@ from ...utils.vocabulary import Vocabulary
 from .base import BaseDataModule
 
 
+NUM_WORKERS = 0
+
+
 def collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
     """
     Helper function to merge a list of samples into a batch of Tensors
@@ -155,7 +158,7 @@ class LSTMDataModule(BaseDataModule):
             collate_fn=collate_fn,
             batch_size=self.train_batch_size,
             drop_last=True,
-            num_workers=0,
+            num_workers=NUM_WORKERS,
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -168,7 +171,7 @@ class LSTMDataModule(BaseDataModule):
             collate_fn=collate_fn,
             batch_size=self.eval_batch_size,
             drop_last=True,
-            num_workers=0,
+            num_workers=NUM_WORKERS,
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -181,5 +184,5 @@ class LSTMDataModule(BaseDataModule):
             collate_fn=collate_fn,
             batch_size=self.eval_batch_size,
             drop_last=True,
-            num_workers=0,
+            num_workers=NUM_WORKERS,
         )
