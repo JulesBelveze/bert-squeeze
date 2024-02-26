@@ -524,16 +524,19 @@ class TestDistilAssistantParallel:
 
 
 class TestDistilSeq2SeqAssistant:
-    def test_distil_seq2seq(self, caplog):
-        distil_assistant = DistilAssistant(
+    def _get_assistant(self):
+        return DistilAssistant(
             "distil-seq2seq",
             data_kwargs={
                 "path": "kmfoda/booksum",
                 "percent": 5,
-                "target_col": "summary",
+                "target_col": "summary_text",
                 "source_col": "chapter",
             },
         )
+
+    def test_distil_seq2seq(self, caplog):
+        distil_assistant = self._get_assistant()
 
         assert distil_assistant.teacher is None
         assert distil_assistant.student is None
@@ -542,3 +545,10 @@ class TestDistilSeq2SeqAssistant:
         _ = distil_assistant.model
         assert isinstance(distil_assistant.teacher, SimpleT5Model)
         assert isinstance(distil_assistant.student, SimpleT5Model)
+
+    def test_data(self, caplog):
+        distil_assistant = self._get_assistant()
+
+        assert isinstance(distil_assistant.data.train_dataloader(), DataLoader)
+        assert len(distil_assistant.data.train_dataloader()) == 15
+        assert len(distil_assistant.data.val_dataloader()) == 2
