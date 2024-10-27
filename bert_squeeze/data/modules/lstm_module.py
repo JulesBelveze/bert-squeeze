@@ -13,7 +13,6 @@ from torch.utils.data import DataLoader
 from ...utils.vocabulary import Vocabulary
 from .base import BaseDataModule
 
-
 NUM_WORKERS = 0
 
 

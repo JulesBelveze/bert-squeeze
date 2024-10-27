@@ -8,7 +8,6 @@ from torch.utils.data import DataLoader
 
 from .base import BaseDataModule
 
-
 NUM_WORKERS = 0
 
 

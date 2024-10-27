@@ -1,6 +1,6 @@
+import copy
 from collections import defaultdict
 from typing import Dict, List, Union
-import copy
 
 import evaluate
 import numpy as np
