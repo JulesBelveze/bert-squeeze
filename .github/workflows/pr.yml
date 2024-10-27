@@ -1,0 +1,29 @@
+name: Lint
+on: [pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+
+      - name: Install dependencies
+        run: poetry install --with dev
+
+      - name: Check formatting
+        run: poetry run task check-formatting
+
+      - name: Run lint
+        run: poetry run task lint
+
+      - name: Run type checking
+        run: poetry run mypy bert_squeeze
