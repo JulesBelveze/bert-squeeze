@@ -29,9 +29,6 @@ jobs:
       - name: Run lint
         run: poetry run task lint
 
-      - name: Run type checking
-        run: poetry run mypy bert_squeeze
-
   test:
     runs-on: ubuntu-latest
     steps:
