@@ -256,6 +256,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "neptune-client", extra = ["pytorch-lightning"] },
     { name = "omegaconf" },
+    { name = "overrides" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "scikit-learn" },
@@ -315,6 +316,7 @@ requires-dist = [
     { name = "nltk", marker = "extra == 'seq2seq'", specifier = ">=3.8.1" },
     { name = "omegaconf", specifier = ">=2.0.0" },
     { name = "onnxruntime", marker = "extra == 'inference'", specifier = ">=1.16.3" },
+    { name = "overrides", specifier = ">=7.7.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.6.0" },
     { name = "pydantic", specifier = ">=2.9.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.3.1" },
@@ -1219,7 +1221,7 @@ name = "importlib-metadata"
 version = "8.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "python_full_version < '3.11'" },
+    { name = "zipp", marker = "python_full_version < '3.10'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cd/12/33e59336dca5be0c398a7482335911a33aa0e20776128f038019f1a95f1b/importlib_metadata-8.5.0.tar.gz", hash = "sha256:71522656f0abace1d072b9e5481a48f07c138e00f079c38c8f883823f9c26bd7", size = 55304 }
 wheels = [
@@ -2411,6 +2413,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/96/00/1740c6d5a6fed87dfb69388ec88b77ff5e453b745be0e65db0371e10bc50/onnxruntime-1.20.0-cp313-cp313-win_amd64.whl", hash = "sha256:25514cec4ea251d492aa1e38a7395d8801e64a4c940a154aef84cfad97ae4628", size = 11322362 },
     { url = "https://files.pythonhosted.org/packages/11/15/099b97c6ecbd4aeb66fb5b18b379d67b4162698c0c286cc5d2928984fd59/onnxruntime-1.20.0-cp313-cp313t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:640ad9ea72d322f0325a51544eddb54f4fa843c4348573c88a9cb44f46678f3f", size = 11942537 },
     { url = "https://files.pythonhosted.org/packages/ca/4f/d1d7642706ddce8c253255b52cf8a6fdb6d4aca171a7a476188039816b79/onnxruntime-1.20.0-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:dc4e7c10c98c1f407835448c26a7e14ebff3234f131e1fbc53bd9500c828df89", size = 13319499 },
+]
+
+[[package]]
+name = "overrides"
+version = "7.7.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/36/86/b585f53236dec60aba864e050778b25045f857e17f6e5ea0ae95fe80edd2/overrides-7.7.0.tar.gz", hash = "sha256:55158fa3d93b98cc75299b1e67078ad9003ca27945c76162c1c0766d6f91820a", size = 22812 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2c/ab/fc8290c6a4c722e5514d80f62b2dc4c4df1a68a41d1364e625c35990fcf3/overrides-7.7.0-py3-none-any.whl", hash = "sha256:c7ed9d062f78b8e4c1a7b70bd8796b35ead4d9f510227ef9c5dc7626c60d7e49", size = 17832 },
 ]
 
 [[package]]
