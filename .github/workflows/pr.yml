@@ -1,4 +1,4 @@
-name: Lint
+name: CI
 on: [pull_request]
 
 jobs:
@@ -7,20 +7,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v1
         with:
           python-version: "3.9"
+          cache: true # enable caching
 
-      - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-
-      - name: Install dependencies
-        run: poetry install --only dev
+      - name: Install dev dependencies
+        run: uv sync --extra dev
 
       - name: Check formatting
-        run: poetry run task check-formatting
+        run: uv run task check-formatting
 
       - name: Run lint
-        run: poetry run task lint
+        run: uv run task lint
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          python-version: "3.9"
+          cache: true # enable caching
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run tests
+        run: uv run task test
