@@ -7,48 +7,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Poetry
-        run: pipx install poetry
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v1
         with:
           python-version: "3.9"
-          cache: "poetry"
-          cache-dependency-path: poetry.lock
-
-      - name: Set Poetry environment
-        run: poetry env use 3.9
+          cache: true # enable caching
 
       - name: Install dev dependencies
-        run: poetry install --only dev --no-root
+        run: uv sync --extras dev
 
       - name: Check formatting
-        run: poetry run task check-formatting
+        run: uv run task check-formatting
 
       - name: Run lint
-        run: poetry run task lint
+        run: uv run task lint
 
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Poetry
-        run: pipx install poetry
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v1
         with:
           python-version: "3.9"
-          cache: "poetry"
-          cache-dependency-path: poetry.lock
-
-      - name: Set Poetry environment
-        run: poetry env use 3.9
+          cache: true # enable caching
 
       - name: Install dependencies
-        run: poetry install --with dev --no-root
+        run: uv sync --extras dev
 
       - name: Run tests
-        run: poetry run task test
+        run: uv run task test
