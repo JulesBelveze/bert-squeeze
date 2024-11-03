@@ -36,10 +36,12 @@ First download the repository:
 git clone https://github.com/JulesBelveze/bert-squeeze.git
 ```
 
-and then install dependencies using [poetry](https://python-poetry.org/docs/):
+and then install dependencies using [uv](https://docs.astral.sh/uv/):
 
 ```commandline
-poetry install
+uv venv
+source .venv/bin/active
+uv sync
 ```
 
 You are all set!
