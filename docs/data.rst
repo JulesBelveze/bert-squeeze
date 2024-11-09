@@ -1,17 +1,6 @@
 Data
 ======================
 
-bert_squeeze.data.local_datasets
-----------------------------------
-
-.. automodule:: bert_squeeze.data.local_datasets.parallel_dataset
-    :members:
-    :exclude-members: ParallelConfig
-
-.. automodule:: bert_squeeze.data.local_datasets.unlabeled_dataset
-    :members:
-    :exclude-members: UnlabeledConfig
-
 bert_squeeze.data.modules
 ----------------------------
 
