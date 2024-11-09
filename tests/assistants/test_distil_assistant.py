@@ -410,10 +410,12 @@ class TestDistilAssistantParallel:
         distil_assistant = DistilAssistant(
             "distil-parallel",
             data_kwargs={
-                "path": resource_filename(
-                    "bert_squeeze", "data/local_datasets/parallel_dataset.py"
-                ),
-                "is_local": True,
+                "path": "kmfoda/booksum",
+                "percent": 5,
+                "target_col": "summary_text",
+                "source_col": "chapter",
+                "train_batch_size": 16,
+                "eval_batch_size": 4,
             },
         )
         assert distil_assistant.teacher is None
@@ -430,10 +432,10 @@ class TestDistilAssistantParallel:
         distil_assistant = DistilAssistant(
             "distil-parallel",
             data_kwargs={
-                "path": resource_filename(
-                    "bert_squeeze", "data/local_datasets/parallel_dataset.py"
-                ),
-                "is_local": True,
+                "path": "kmfoda/booksum",
+                "percent": 5,
+                "target_col": "summary_text",
+                "source_col": "chapter",
             },
             student_kwargs={
                 "_target_": "tests.fixtures.dummy_models.Lr",
@@ -453,10 +455,10 @@ class TestDistilAssistantParallel:
         distil_assistant = DistilAssistant(
             "distil-parallel",
             data_kwargs={
-                "path": resource_filename(
-                    "bert_squeeze", "data/local_datasets/parallel_dataset.py"
-                ),
-                "is_local": True,
+                "path": "kmfoda/booksum",
+                "percent": 5,
+                "target_col": "summary_text",
+                "source_col": "chapter",
             },
             teacher_kwargs={
                 "_target_": "tests.fixtures.dummy_models.Lr",
@@ -476,10 +478,12 @@ class TestDistilAssistantParallel:
         distil_assistant = DistilAssistant(
             "distil-parallel",
             data_kwargs={
-                "path": resource_filename(
-                    "bert_squeeze", "data/local_datasets/parallel_dataset.py"
-                ),
-                "is_local": True,
+                "path": "kmfoda/booksum",
+                "percent": 5,
+                "target_col": "summary_text",
+                "source_col": "chapter",
+                "train_batch_size": 16,
+                "eval_batch_size": 4,
             },
             teacher_kwargs={
                 "_target_": "tests.fixtures.dummy_models.Lr",
@@ -510,17 +514,17 @@ class TestDistilAssistantParallel:
                 "_target_": "tests.fixtures.dummy_models.Lr",
             },
             data_kwargs={
-                "path": resource_filename(
-                    "bert_squeeze", "data/local_datasets/parallel_dataset.py"
-                ),
-                "is_local": True,
+                "path": "kmfoda/booksum",
+                "percent": 5,
+                "text_col": "summary_text",
+                "translation_col": "summary_analysis",
                 "train_batch_size": 16,
                 "eval_batch_size": 4,
             },
         )
         assert isinstance(distil_assistant.data.train_dataloader(), DataLoader)
-        assert len(distil_assistant.data.train_dataloader()) == 187
-        assert len(distil_assistant.data.val_dataloader()) == 125
+        assert len(distil_assistant.data.train_dataloader()) == 22
+        assert len(distil_assistant.data.val_dataloader()) == 5
 
 
 class TestDistilSeq2SeqAssistant:
