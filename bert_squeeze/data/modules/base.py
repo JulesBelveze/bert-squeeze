@@ -27,7 +27,9 @@ class BaseDataModule(pl.LightningDataModule):
         Returns:
             None
         """
-        self.dataset = datasets.load_dataset(self.dataset_config.path, trust_remote_code=True)
+        self.dataset = datasets.load_dataset(
+            self.dataset_config.path, trust_remote_code=True
+        )
 
         if "percent" not in self.dataset_config:
             return
