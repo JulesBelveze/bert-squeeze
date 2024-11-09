@@ -4,10 +4,6 @@ Data
 bert_squeeze.data.local_datasets
 ----------------------------------
 
-.. automodule:: bert_squeeze.data.local_datasets.conference_dataset
-    :members:
-    :exclude-members: ConferenceConfig
-
 .. automodule:: bert_squeeze.data.local_datasets.parallel_dataset
     :members:
     :exclude-members: ParallelConfig
