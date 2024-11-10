@@ -134,8 +134,8 @@ class TransformerParallelDataModule(TransformerDataModule):
     def __init__(
         self, dataset_config: DictConfig, tokenizer_name: str, max_length: int, **kwargs
     ):
-        dataset_config.text_col = "text"
         dataset_config.label_col = None
+        self.translation_col = dataset_config.get("translation_col", "translation")
         super().__init__(dataset_config, tokenizer_name, max_length, **kwargs)
 
     @overrides
@@ -144,6 +144,7 @@ class TransformerParallelDataModule(TransformerDataModule):
         Returns:
             DatasetDict: featurized dataset
         """
+        self.dataset = self.dataset.filter(lambda x: x[self.translation_col] is not None)
         tokenized_dataset = self.dataset.map(
             lambda x: self.tokenizer(
                 x[self.text_col],
@@ -156,7 +157,7 @@ class TransformerParallelDataModule(TransformerDataModule):
             lambda x: {
                 "translation_" + name: value
                 for name, value in self.tokenizer(
-                    x["translation"],
+                    x[self.translation_col],
                     padding="max_length",
                     max_length=self.max_length,
                     truncation=True,
@@ -164,14 +165,14 @@ class TransformerParallelDataModule(TransformerDataModule):
             }
         )
         tokenized_dataset = tokenized_dataset.remove_columns(
-            [self.text_col, "translation"]
+            [self.text_col, self.translation_col]
         )
 
         columns = [
             "input_ids",
             "attention_mask",
             "translation_input_ids",
-            "translation_input_ids",
+            "translation_attention_mask",
         ]
         if "distilbert" not in self.tokenizer.name_or_path:
             columns += ["token_type_ids", "translation_token_type_ids"]

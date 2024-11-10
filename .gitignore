@@ -10,10 +10,6 @@
 # docs
 docs/_build
 
-# data
-bert-squeeze/data/classification
-bert-squeeze/data/unlabeled
-
 # various
 .neptune/
 outputs/
