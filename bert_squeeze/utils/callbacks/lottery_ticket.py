@@ -8,7 +8,7 @@ from typing import Tuple
 import lightning.pytorch as pl
 import numpy as np
 import torch
-from pytorch_lightning.callbacks.base import Callback
+from lightning.pytorch.callbacks import Callback
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch.utils.data import DataLoader
 from tqdm import tqdm

@@ -3,7 +3,7 @@ import os
 from typing import Any, Dict, List
 
 from hydra.utils import instantiate
-from lightning.pytorch.callbacks.callback import Callback
+from lightning.pytorch.callbacks import Callback
 from lightning.pytorch.loggers import Logger, TensorBoardLogger
 from omegaconf import OmegaConf
 from pkg_resources import resource_filename
