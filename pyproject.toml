@@ -62,7 +62,7 @@ seq2seq = [
 [tool.black]
 line-length = 90
 skip-string-normalization = true
-target-version = ["py38"]
+target-version = ["py39"]
 
 [tool.isort]
 profile = "black"

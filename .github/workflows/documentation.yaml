@@ -15,8 +15,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install sphinx furo sphinx-copybutton sphinxext-opengraph myst-parser autodoc_pydantic nbsphinx
-          sudo apt-get install pandoc
+          pip install sphinx furo sphinx-copybutton sphinxext-opengraph myst-parser autodoc-pydantic nbsphinx
+          sudo apt-get install -y pandoc
       - name: Build and Commit
         uses: sphinx-notes/pages@master
         with:
