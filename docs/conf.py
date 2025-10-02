@@ -26,7 +26,7 @@ extensions = [
     "sphinxext.opengraph",
     "sphinx_copybutton",
     "sphinx.ext.githubpages",
-    "sphinxcontrib.autodoc_pydantic",
+    "autodoc_pydantic",
     "nbsphinx",
     "myst_parser",
 ]
