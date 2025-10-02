@@ -4,13 +4,16 @@ on: [pull_request]
 jobs:
   lint:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v1
         with:
-          python-version: "3.9"
+          python-version: ${{ matrix.python-version }}
           cache: true # enable caching
 
       - name: Install dev dependencies
@@ -22,15 +25,21 @@ jobs:
       - name: Run lint
         run: uv run task lint
 
+      - name: Type check (mypy)
+        run: uv run mypy --ignore-missing-imports bert_squeeze
+
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v1
         with:
-          python-version: "3.9"
+          python-version: ${{ matrix.python-version }}
           cache: true # enable caching
 
       - name: Install dependencies
@@ -38,3 +47,22 @@ jobs:
 
       - name: Run tests
         run: uv run task test
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          python-version: "3.11"
+          cache: true
+
+      - name: Export requirements
+        run: uv export --all-extras --no-hashes -o requirements.txt
+
+      - name: Run pip-audit
+        run: uvx pip-audit -r requirements.txt
+        # You can initially allow failures to avoid blocking PRs
+        continue-on-error: true
