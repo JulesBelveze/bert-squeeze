@@ -60,7 +60,7 @@ jobs:
           cache: true
 
       - name: Export requirements
-        run: uv export --all-extras --no-hashes -o requirements.txt
+        run: uv export --all-extras --no-hashes > requirements.txt
 
       - name: Run pip-audit
         run: uvx pip-audit -r requirements.txt
