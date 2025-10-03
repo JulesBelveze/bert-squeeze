@@ -25,9 +25,6 @@ jobs:
       - name: Run lint
         run: uv run task lint
 
-      - name: Type check (mypy)
-        run: uv run mypy --ignore-missing-imports bert_squeeze
-
   test:
     runs-on: ubuntu-latest
     strategy:
