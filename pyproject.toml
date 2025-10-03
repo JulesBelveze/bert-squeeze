@@ -10,7 +10,9 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Text Processing"
 ]
-requires-python = ">=3.9,<4.0"
+# PyTorch wheels are not yet available for Python 3.13 on all platforms
+# Keep upper bound to <3.13 until upstream support lands
+requires-python = ">=3.9,<3.13"
 dependencies = [
     "torch>=2.2.0",
     "transformers>=4.40.0",
@@ -62,11 +64,14 @@ seq2seq = [
 [tool.black]
 line-length = 90
 skip-string-normalization = true
-target-version = ["py38"]
+target-version = ["py39"]
 
 [tool.isort]
 profile = "black"
 line_length = 90
+
+[tool.mypy]
+python_version = "3.9"
 
 [tool.taskipy.tasks]
 check-formatting = "uv run black --check bert_squeeze tests && uv run isort --check bert_squeeze tests"

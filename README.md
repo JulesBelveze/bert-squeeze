@@ -40,7 +40,7 @@ and then install dependencies using [uv](https://docs.astral.sh/uv/):
 
 ```commandline
 uv venv
-source .venv/bin/active
+source .venv/bin/activate
 uv sync
 ```
 
