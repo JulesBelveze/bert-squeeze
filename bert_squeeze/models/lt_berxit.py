@@ -36,6 +36,7 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
             training_config, pretrained_model, num_labels, model, scorer, **kwargs
         )
         self.train_highway = training_config.train_highway
+        self.train_gates = getattr(training_config, "train_gates", False)
         self._build_model()
 
     @overrides
@@ -47,7 +48,7 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
         position_ids: torch.Tensor = None,
         head_mask: torch.Tensor = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor], int]:
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor], int, Optional[Tuple[torch.Tensor]]]:
         outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
@@ -62,12 +63,14 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
             pooled_output = self.dropout(pooled_output)
             logits = self.classifier(pooled_output)
             ramps_exits = outputs.ramps_exits
+            gates_logits = outputs.gates_logits
         else:
             ramps_exits = outputs.ramps_exits
             exit_layer = outputs.exit_layer
             logits = outputs.logits
+            gates_logits = None
 
-        return logits, ramps_exits, exit_layer
+        return logits, ramps_exits, exit_layer, gates_logits
 
     @overrides
     def training_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
@@ -76,12 +79,14 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
             "attention_mask": batch["attention_mask"],
             "token_type_ids": batch["token_type_ids"],
         }
-        logits, ramps_exits, _ = self.forward(**inputs)
+        logits, ramps_exits, _, gates_logits = self.forward(**inputs)
         loss = self.loss(
             logits=logits,
             labels=batch["labels"],
             train_ramps=self.train_highway,
             ramps_exits=ramps_exits,
+            train_gates=self.train_gates,
+            gates_logits=gates_logits,
         )
 
         self.scorer.add(logits.detach().cpu(), batch["labels"], loss.detach().cpu())
@@ -105,12 +110,14 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
             "attention_mask": batch["attention_mask"],
             "token_type_ids": batch["token_type_ids"],
         }
-        logits, ramps_exits, _ = self.forward(**inputs)
+        logits, ramps_exits, _, gates_logits = self.forward(**inputs)
         loss = self.loss(
             logits=logits,
             labels=batch["labels"],
             ramps_exits=ramps_exits,
             train_ramps=self.train_highway,
+            train_gates=self.train_gates,
+            gates_logits=gates_logits,
         )
         self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
         self.validation_step_outputs.append(
@@ -278,10 +285,12 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
         logits: torch.Tensor = None,
         ramps_exits: Tuple[torch.Tensor] = None,
         train_ramps: bool = False,
+        train_gates: bool = False,
+        gates_logits: Optional[Tuple[torch.Tensor]] = None,
         *args,
         **kwargs,
     ) -> torch.Tensor:
-        # Same loss mechanics as LtDeeBert for consistency
+        # Same ramp loss mechanics as LtDeeBert for consistency
         if train_ramps:
             ramps_losses = []
             for ramps_exit in ramps_exits[:-1]:
@@ -297,9 +306,25 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
             loss = loss_fct(
                 logits.view(-1, self.model_config.num_labels), labels.view(-1)
             )
+        # Optional: add gate loss using pseudo-labels from final ramp
+        if train_gates and gates_logits is not None:
+            with torch.no_grad():
+                final_logits = ramps_exits[-1].logits  # [B, C]
+                final_pred = final_logits.argmax(dim=-1)  # [B]
+            bce = torch.nn.BCEWithLogitsLoss()
+            gate_losses = []
+            for i, gate_logit in enumerate(gates_logits[:-1]):
+                layer_pred = ramps_exits[i].logits.argmax(dim=-1)  # [B]
+                target = (layer_pred == final_pred).float().unsqueeze(-1)  # [B,1]
+                gate_losses.append(bce(gate_logit, target))
+            if gate_losses:
+                loss = loss + sum(gate_losses)
         return loss
 
     def _build_model(self):
+        # Pass BERxiT-specific hyperparams via HF config attributes
+        if not hasattr(self.model_config, "gate_hidden_dim"):
+            self.model_config.gate_hidden_dim = getattr(self.config, "gate_hidden_dim", 32)
         self.bert = BerxitModel(self.model_config)
         self.num_layers = len(self.bert.encoder.layer)
         self.dropout = nn.Dropout(self.model_config.hidden_dropout_prob)
@@ -313,5 +338,7 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
 
         self.bert.init_weights()
         self.bert.encoder.set_early_exit_entropy(self.config.early_exit_entropy)
+        # Optional: set gate thresholds for early exit
+        if hasattr(self.config, "gate_thresholds"):
+            self.bert.set_exit_gate_thresholds(self.config.gate_thresholds)
         self.bert.init_highway_pooler()
-
