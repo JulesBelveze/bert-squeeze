@@ -1,0 +1,6 @@
+# @package data
+_target_: bert_squeeze.data.modules.transformer_module.TransformerDataModule
+dataset_config: ${data.dataset_config}
+max_length: 256
+tokenizer_name: ${model.pretrained_model}
+

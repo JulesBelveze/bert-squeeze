@@ -1,0 +1,14 @@
+defaults:
+  - task: train
+  - train: default
+  - model: bert
+  - data: transformer
+  - data/dataset_config: generic_tc
+  - logger: tensorboard
+  - callbacks: none
+  - _self_
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
