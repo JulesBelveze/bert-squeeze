@@ -42,7 +42,7 @@ class DeeBertModelOutput:
     attentions: Optional[torch.FloatTensor] = None
     ramps_exits: Optional[torch.FloatTensor] = None
     # Optional per-layer gate logits/probs for BERxiT
-    gates_logits: Optional[torch.FloatTensor] = None
+    gates_logits: Optional[Tuple[torch.FloatTensor]] = None
 
     @property
     def logits(self) -> torch.Tensor:
