@@ -31,6 +31,11 @@ train:
 
   train_highway: true
   early_exit_entropy: -1
+  # BERxiT-specific options
+  train_gates: true
+  gate_hidden_dim: 32
+  # Either a single float applied to all layers or a list of floats per layer
+  gate_thresholds: 0.5
 
 model:
   _target_: bert_squeeze.models.lt_berxit.LtBerxit
@@ -52,4 +57,3 @@ data:
     truncate_mode: head
   tokenizer_name: ${model.pretrained_model}
   max_length: 256
-
