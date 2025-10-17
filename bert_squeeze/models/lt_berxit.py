@@ -140,7 +140,7 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
             "attention_mask": batch["attention_mask"],
             "token_type_ids": batch["token_type_ids"],
         }
-        logits, _, _ = self.forward(**inputs)
+        logits, _, _, _ = self.forward(**inputs)
         loss = self.loss(logits=logits, labels=batch["labels"], train_ramps=self.train_highway)
         self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
         self.test_step_outputs.append(
@@ -155,7 +155,7 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
             "attention_mask": batch["attention_mask"],
             "token_type_ids": batch["token_type_ids"],
         }
-        logits, _, _ = self.forward(**inputs)
+        logits, _, _, _ = self.forward(**inputs)
         preds = torch.softmax(logits, dim=-1)
         return preds
 
