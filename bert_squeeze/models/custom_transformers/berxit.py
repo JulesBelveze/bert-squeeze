@@ -9,10 +9,11 @@ so it integrates seamlessly with existing training loops and configs.
 """
 
 from abc import ABC
-from typing import List, Union
+from typing import List, Tuple, Union
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from transformers import PretrainedConfig
 from transformers.models.bert.modeling_bert import (
     BertEmbeddings,
@@ -47,6 +48,25 @@ class BerxitOffRamp(nn.Module):
         return RampOutput(logits=logits, pooled_output=pooled_output)
 
 
+class ExitGate(nn.Module):
+    """A small MLP gate that predicts whether to exit at a given layer.
+
+    Inputs are hand-crafted features from the ramp logits/probs.
+    """
+
+    def __init__(self, in_dim: int = 3, hidden: int = 32):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, 1),
+        )
+
+    def forward(self, feats: torch.Tensor) -> torch.Tensor:
+        # Returns logits for BCEWithLogitsLoss
+        return self.net(feats)
+
+
 class BerxitEncoder(nn.Module):
     """
     Encoder that inserts off-ramps between each Transformer block and
@@ -56,10 +76,16 @@ class BerxitEncoder(nn.Module):
     def __init__(self, config: PretrainedConfig, inference: bool):
         super(BerxitEncoder, self).__init__()
         self.config = config
-        self.layer = nn.ModuleList([BertLayer(config)] * config.num_hidden_layers)
-        self.ramp = nn.ModuleList([BerxitOffRamp(config)] * config.num_hidden_layers)
+        # Ensure distinct modules per layer
+        self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.ramp = nn.ModuleList([BerxitOffRamp(config) for _ in range(config.num_hidden_layers)])
+        # BERxiT gates
+        gate_hidden = getattr(config, "gate_hidden_dim", 32)
+        self.gates = nn.ModuleList([ExitGate(in_dim=3, hidden=gate_hidden) for _ in range(config.num_hidden_layers)])
 
-        self.early_exit_entropy = [-1] * config.num_hidden_layers
+        # Thresholds for DeeBERT entropy (fallback) and BERxiT gate
+        self.early_exit_entropy = [-1.0] * config.num_hidden_layers
+        self.gate_thresholds = [-1.0] * config.num_hidden_layers
         self.inference = inference
 
     def set_early_exit_entropy(self, x: Union[List[float], float]) -> None:
@@ -80,6 +106,27 @@ class BerxitEncoder(nn.Module):
             for name, param in ramp.pooler.state_dict().items():
                 param.copy_(loaded_model[name])
 
+    def set_exit_gate_thresholds(self, x: Union[List[float], float]) -> None:
+        if isinstance(x, float) or isinstance(x, int):
+            self.gate_thresholds = [float(x)] * self.config.num_hidden_layers
+        elif isinstance(x, list):
+            assert len(x) == self.config.num_hidden_layers, "gate thresholds size mismatch"
+            self.gate_thresholds = [float(v) for v in x]
+        else:
+            raise TypeError(
+                f"Expected 'x' to be of type 'float' or 'list' but got :'{type(x)}'"
+            )
+
+    @staticmethod
+    def _gate_features(logits: torch.Tensor) -> torch.Tensor:
+        # logits: [B, C]
+        probs = F.softmax(logits, dim=-1)
+        pmax, _ = probs.max(dim=-1, keepdim=True)  # [B,1]
+        top2 = torch.topk(probs, k=2, dim=-1).values  # [B,2]
+        margin = (top2[:, 0] - top2[:, 1]).unsqueeze(-1)  # [B,1]
+        ent = entropy(probs).unsqueeze(-1)  # [B,1]
+        return torch.cat([pmax, margin, ent], dim=-1)  # [B,3]
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -94,7 +141,8 @@ class BerxitEncoder(nn.Module):
         all_attentions = tuple() if output_attentions else None
 
         if not self.inference:
-            all_ramps = tuple()
+            all_ramps: Tuple[RampOutput, ...] = tuple()
+            all_gates: Tuple[torch.Tensor, ...] = tuple()
             for i, layer_module in enumerate(self.layer):
                 if output_hidden_states:
                     all_hidden_states += (hidden_states,)
@@ -114,6 +162,10 @@ class BerxitEncoder(nn.Module):
 
                 ramp_exit = self.ramp[i](hidden_states)
                 all_ramps += (ramp_exit,)
+                # Gate logits from features of current ramp
+                feats = self._gate_features(ramp_exit.logits)
+                gate_logit = self.gates[i](feats)  # [B,1]
+                all_gates += (gate_logit,)
 
                 if output_hidden_states:
                     all_hidden_states = all_hidden_states + (hidden_states,)
@@ -123,6 +175,7 @@ class BerxitEncoder(nn.Module):
                 hidden_states=all_hidden_states,
                 attentions=all_attentions,
                 ramps_exit=all_ramps,
+                gates_logits=all_gates,
                 exit_layer=i,
             )
         else:
@@ -139,13 +192,21 @@ class BerxitEncoder(nn.Module):
                 )
                 hidden_states = layer_outputs[0]
                 ramp_exit = self.ramp[i](hidden_states)
+                # Compute gate decision
+                feats = self._gate_features(ramp_exit.logits)
+                gate_logit = self.gates[i](feats)
+                gate_prob = torch.sigmoid(gate_logit).squeeze(-1)  # [B]
                 ramp_exit.entropy = entropy(ramp_exit.logits)
 
                 if i == len(self.layer) - 1:
                     for idx, pos in enumerate(positions):
                         all_ramps[pos] = ramp_exit[idx]
                 else:
-                    enough_info = ramp_exit.entropy < self.early_exit_entropy[i]
+                    # Prefer gate thresholds; fallback to entropy if thresholds are negative
+                    if self.gate_thresholds[i] >= 0:
+                        enough_info = gate_prob >= self.gate_thresholds[i]
+                    else:
+                        enough_info = ramp_exit.entropy < self.early_exit_entropy[i]
                     right_pos = positions[enough_info]
 
                     for idx, pos in enumerate(right_pos):
@@ -181,6 +242,9 @@ class BerxitModel(BertPreTrainedModel, ABC):
 
     def init_highway_pooler(self) -> None:
         self.encoder.init_highway_pooler(self.pooler)
+    
+    def set_exit_gate_thresholds(self, x: Union[List[float], float]) -> None:
+        self.encoder.set_exit_gate_thresholds(x)
 
     def get_input_embeddings(self) -> torch.Tensor:
         return self.embeddings.word_embeddings
@@ -287,6 +351,6 @@ class BerxitModel(BertPreTrainedModel, ABC):
             hidden_states=encoder_hidden_states,
             attentions=encoder_outputs.attentions,
             ramps_exits=encoder_outputs.ramps_exit,
+            gates_logits=encoder_outputs.gates_logits,
             exit_layer=encoder_outputs.exit_layer,
         )
-
