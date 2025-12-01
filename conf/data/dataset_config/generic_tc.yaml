@@ -1,8 +1,0 @@
-# @package data.dataset_config
-is_local: false
-label_col: label
-path:
-split:
-text_col: text
-truncate_mode: head
-
