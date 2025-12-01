@@ -35,9 +35,19 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
         super().__init__(
             training_config, pretrained_model, num_labels, model, scorer, **kwargs
         )
+        # Training stage: "backbone" (default) or "gates"
+        self.train_stage = getattr(training_config, "train_stage", "backbone")
+        # Optional global step at which to switch from backbone to gate training
+        self.switch_step: Optional[int] = getattr(training_config, "switch_step", None)
         self.train_highway = training_config.train_highway
-        self.train_gates = getattr(training_config, "train_gates", False)
+        # In backbone stage, gates are optional; in gates stage, we always train them
+        if self.train_stage == "gates":
+            self.train_gates = True
+        else:
+            self.train_gates = getattr(training_config, "train_gates", False)
         self._build_model()
+        # Guard to ensure stage switching happens at most once
+        self._has_switched_stage = False
 
     @overrides
     def forward(
@@ -74,6 +84,8 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
 
     @overrides
     def training_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
+        # Optionally switch from backbone to gate training mid-run.
+        self._maybe_switch_stage()
         inputs = {
             "input_ids": batch["input_ids"],
             "attention_mask": batch["attention_mask"],
@@ -161,10 +173,71 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
         preds = torch.softmax(logits, dim=-1)
         return preds
 
+    def _freeze_backbone_for_gates(self) -> None:
+        """
+        Freeze all parameters except the BERXiT gates so that gate training
+        happens on top of a fixed teacher model.
+        """
+        for name, param in self.named_parameters():
+            if "gates" in name:
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+
+    def _maybe_switch_stage(self) -> None:
+        """
+        If `switch_step` is set and we are still in backbone stage, switch to
+        gate training once `global_step` reaches the threshold. This triggers
+        a reconfiguration of optimizers in Lightning.
+        """
+        if (
+            self.switch_step is None
+            or self.train_stage == "gates"
+            or self._has_switched_stage
+        ):
+            return
+
+        if self.global_step >= self.switch_step:
+            logging.info(
+                "Switching LtBerxit training stage from 'backbone' to 'gates' at "
+                f"global_step={self.global_step}"
+            )
+            self.train_stage = "gates"
+            self.train_gates = True
+            self._freeze_backbone_for_gates()
+            if self.trainer is not None:
+                # Rebuild optimizers so only gate parameters are optimized
+                self.trainer.strategy.setup_optimizers(self.trainer)
+            self._has_switched_stage = True
+
     @overrides
     def _get_optimizer_parameters(self) -> List[Dict]:
-        # Mirror LtDeeBert grouping
+        # Mirror LtDeeBert grouping for backbone stage and provide a gate-only
+        # variant for the "gates" stage.
         no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight']
+
+        # Gate-only training stage: optimize only gate parameters
+        if getattr(self, "train_stage", "backbone") == "gates":
+            gate_params = [
+                (n, p)
+                for n, p in self.named_parameters()
+                if "gates" in n and p.requires_grad
+            ]
+            optimizer_grouped_parameters = [
+                {
+                    'params': [
+                        p for n, p in gate_params if not any(nd in n for nd in no_decay)
+                    ],
+                    'weight_decay': self.config.weight_decay,
+                },
+                {
+                    'params': [
+                        p for n, p in gate_params if any(nd in n for nd in no_decay)
+                    ],
+                    'weight_decay': 0.0,
+                },
+            ]
+            return optimizer_grouped_parameters
 
         if self.config.discriminative_learning:
             if (
