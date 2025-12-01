@@ -14,6 +14,7 @@ CONFIG_MAPPER = {
     "bert": "train_bert.yaml",
     "lstm": "train_lstm.yaml",
     "deebert": "train_deebert.yaml",
+    "berxit": "train_berxit.yaml",
     "fastbert": "train_fastbert.yaml",
     "theseusbert": "train_theseus_bert.yaml",
     "adapter": "train_adapter.yaml",

@@ -1,7 +1,7 @@
 import torch
 from transformers import AutoConfig
 
-from ...models import LtCustomBert, LtDeeBert
+from ...models import LtBerxit, LtCustomBert, LtDeeBert
 
 
 class TransformerArtifactsLoader:
@@ -9,7 +9,11 @@ class TransformerArtifactsLoader:
     TransformerArtifactsLoader
     """
 
-    MODEL_CLASSES = {"bert": LtCustomBert, "deebert": LtDeeBert}
+    MODEL_CLASSES = {
+        "bert": LtCustomBert,
+        "deebert": LtDeeBert,
+        "berxit": LtBerxit,
+    }
 
     def __init__(self, config):
         """

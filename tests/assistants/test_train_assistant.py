@@ -8,6 +8,7 @@ from bert_squeeze.data.modules import LrDataModule, LSTMDataModule, TransformerD
 from bert_squeeze.models import (
     BowLogisticRegression,
     LtAdapter,
+    LtBerxit,
     LtDeeBert,
     LtFastBert,
     LtLSTM,
@@ -75,6 +76,19 @@ class TestTrainAssistant:
         assert isinstance(deebert_assistant.model, LtDeeBert)
         assert deebert_assistant.model.bert.config._name_or_path == "bert-base-uncased"
         assert isinstance(deebert_assistant.data, TransformerDataModule)
+
+    def test_berxit_assistant(self):
+        """"""
+        berxit_assistant = TrainAssistant(
+            "berxit",
+            data_kwargs={"dataset_config": {"path": "Setfit/emotion", "percent": 10}},
+            general_kwargs={"labels": [0, 1, 2, 3, 4, 5], "num_labels": 6},
+            model_kwargs={"pretrained_model": "bert-base-uncased"},
+        )
+        assert berxit_assistant.general.num_labels == 6
+        assert isinstance(berxit_assistant.model, LtBerxit)
+        assert berxit_assistant.model.bert.config._name_or_path == "bert-base-uncased"
+        assert isinstance(berxit_assistant.data, TransformerDataModule)
 
     def test_fastbert_assistant(self):
         """"""

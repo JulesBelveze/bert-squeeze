@@ -29,6 +29,8 @@ class DeeBertEncoderOutput:
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     ramps_exit: Optional[Tuple[RampOutput]] = None
+    # Optional per-layer gate logits/probs for BERxiT
+    gates_logits: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -39,6 +41,8 @@ class DeeBertModelOutput:
     hidden_states: Optional[torch.FloatTensor] = None
     attentions: Optional[torch.FloatTensor] = None
     ramps_exits: Optional[torch.FloatTensor] = None
+    # Optional per-layer gate logits/probs for BERxiT
+    gates_logits: Optional[Tuple[torch.FloatTensor]] = None
 
     @property
     def logits(self) -> torch.Tensor:
