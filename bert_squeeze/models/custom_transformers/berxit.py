@@ -153,6 +153,7 @@ class BerxitEncoder(nn.Module):
                     head_mask=head_mask[i],
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
+                    output_attentions=output_attentions,
                 )
                 hidden_states = layer_outputs[0]
 
@@ -179,8 +180,16 @@ class BerxitEncoder(nn.Module):
                 exit_layer=i,
             )
         else:
-            all_ramps = [0] * hidden_states.shape[0]
-            positions = torch.arange(start=0, end=hidden_states.shape[0]).long()
+            batch_size = hidden_states.shape[0]
+            all_ramps = [0] * batch_size
+            positions = torch.arange(
+                start=0, end=hidden_states.shape[0], device=hidden_states.device
+            ).long()
+            # Collect per-layer gate logits for diagnostics; fill with NaNs by default
+            gates_per_layer: Tuple[torch.Tensor, ...] = tuple(
+                torch.full((batch_size, 1), float('nan'), device=hidden_states.device, dtype=hidden_states.dtype)
+                for _ in range(len(self.layer))
+            )
 
             for i, layer_module in enumerate(self.layer):
                 layer_outputs = layer_module(
@@ -189,13 +198,16 @@ class BerxitEncoder(nn.Module):
                     head_mask=head_mask[i],
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
+                    output_attentions=output_attentions,
                 )
                 hidden_states = layer_outputs[0]
                 ramp_exit = self.ramp[i](hidden_states)
                 # Compute gate decision
                 feats = self._gate_features(ramp_exit.logits)
                 gate_logit = self.gates[i](feats)
-                gate_prob = torch.sigmoid(gate_logit).squeeze(-1)  # [B]
+                # Scatter current gate logits back to original batch positions
+                gates_per_layer[i][positions] = gate_logit
+                gate_prob = torch.sigmoid(gate_logit).squeeze(-1)  # [b_cur]
                 ramp_exit.entropy = entropy(ramp_exit.logits)
 
                 if i == len(self.layer) - 1:
@@ -217,8 +229,16 @@ class BerxitEncoder(nn.Module):
                     positions = positions[~enough_info]
 
                     if positions.nelement() == 0:
-                        return DeeBertEncoderOutput(ramps_exit=all_ramps, exit_layer=i)
-            return DeeBertEncoderOutput(ramps_exit=all_ramps, exit_layer=i)
+                        return DeeBertEncoderOutput(
+                            ramps_exit=all_ramps,
+                            gates_logits=gates_per_layer,
+                            exit_layer=i,
+                        )
+            return DeeBertEncoderOutput(
+                ramps_exit=all_ramps,
+                gates_logits=gates_per_layer,
+                exit_layer=i,
+            )
 
 
 class BerxitModel(BertPreTrainedModel, ABC):
@@ -266,6 +286,8 @@ class BerxitModel(BertPreTrainedModel, ABC):
         inputs_embeds: torch.Tensor = None,
         encoder_hidden_states: torch.Tensor = None,
         encoder_attention_mask: torch.Tensor = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
     ) -> DeeBertModelOutput:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError(
@@ -341,6 +363,8 @@ class BerxitModel(BertPreTrainedModel, ABC):
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         sequence_output = None if self.encoder.inference else encoder_outputs.last_hidden_state
         pooled_output = None if self.encoder.inference else self.pooler(sequence_output)
@@ -348,7 +372,7 @@ class BerxitModel(BertPreTrainedModel, ABC):
         return DeeBertModelOutput(
             sequence_output=sequence_output,
             pooled_output=pooled_output,
-            hidden_states=encoder_hidden_states,
+            hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             ramps_exits=encoder_outputs.ramps_exit,
             gates_logits=encoder_outputs.gates_logits,
