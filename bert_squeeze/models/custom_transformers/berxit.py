@@ -24,28 +24,7 @@ from transformers.models.bert.modeling_bert import (
 
 from ...utils.losses import entropy
 from ...utils.types import DeeBertEncoderOutput, DeeBertModelOutput, RampOutput
-
-
-class BerxitOffRamp(nn.Module):
-    """
-    Classification layers (off-ramps) placed between encoder layers.
-
-    Args:
-        config (PretrainedConfig): configuration defining the model architecture
-    """
-
-    def __init__(self, config: PretrainedConfig):
-        super(BerxitOffRamp, self).__init__()
-        self.pooler = BertPooler(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-    def forward(self, hidden_states: torch.Tensor) -> RampOutput:
-        # Access the first token and apply pooler similar to BERT's default
-        pooled_output = self.pooler(hidden_states[:, 0].unsqueeze(1))
-        output = self.dropout(pooled_output)
-        logits = self.classifier(output)
-        return RampOutput(logits=logits, pooled_output=pooled_output)
+from .deebert import OffRamp
 
 
 class ExitGate(nn.Module):
@@ -81,7 +60,7 @@ class BerxitEncoder(nn.Module):
             [BertLayer(config) for _ in range(config.num_hidden_layers)]
         )
         self.ramp = nn.ModuleList(
-            [BerxitOffRamp(config) for _ in range(config.num_hidden_layers)]
+            [OffRamp(config) for _ in range(config.num_hidden_layers)]
         )
         # BERxiT gates
         gate_hidden = getattr(config, "gate_hidden_dim", 32)
