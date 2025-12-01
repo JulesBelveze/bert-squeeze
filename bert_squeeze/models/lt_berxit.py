@@ -141,7 +141,9 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
             "token_type_ids": batch["token_type_ids"],
         }
         logits, _, _, _ = self.forward(**inputs)
-        loss = self.loss(logits=logits, labels=batch["labels"], train_ramps=self.train_highway)
+        loss = self.loss(
+            logits=logits, labels=batch["labels"], train_ramps=self.train_highway
+        )
         self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
         self.test_step_outputs.append(
             {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
@@ -169,7 +171,9 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
                 isinstance(self.config.learning_rates, ListConfig)
                 and len(self.config.learning_rates) > 1
             ):
-                groups = [(f'layer.{i}.', self.config.learning_rates[i]) for i in range(12)]
+                groups = [
+                    (f'layer.{i}.', self.config.learning_rates[i]) for i in range(12)
+                ]
             else:
                 lr = (
                     self.config.learning_rates[0]
@@ -234,7 +238,9 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
                 },
             ]
             optimizer_grouped_parameters = (
-                no_decay_optimizer_parameters + decay_optimizer_parameters + group_all_parameters
+                no_decay_optimizer_parameters
+                + decay_optimizer_parameters
+                + group_all_parameters
             )
         else:
             if self.config.train_highway:
@@ -271,8 +277,7 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
                         'params': [
                             p
                             for n, p in self.named_parameters()
-                            if ("highway" not in n)
-                            and (any(nd in n for nd in no_decay))
+                            if ("highway" not in n) and (any(nd in n for nd in no_decay))
                         ],
                         'weight_decay': 0.0,
                     },
@@ -325,7 +330,9 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
     def _build_model(self):
         # Pass BERxiT-specific hyperparams via HF config attributes
         if not hasattr(self.model_config, "gate_hidden_dim"):
-            self.model_config.gate_hidden_dim = getattr(self.config, "gate_hidden_dim", 32)
+            self.model_config.gate_hidden_dim = getattr(
+                self.config, "gate_hidden_dim", 32
+            )
         self.bert = BerxitModel(self.model_config)
         self.num_layers = len(self.bert.encoder.layer)
         self.dropout = nn.Dropout(self.model_config.hidden_dropout_prob)
@@ -343,8 +350,3 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
         if hasattr(self.config, "gate_thresholds"):
             self.bert.set_exit_gate_thresholds(self.config.gate_thresholds)
         self.bert.init_highway_pooler()
-
-        # If we start in gate-training stage, freeze backbone so gates learn
-        # on top of a fixed teacher.
-        if getattr(self, "train_stage", "backbone") == "gates":
-            self._freeze_backbone_for_gates()

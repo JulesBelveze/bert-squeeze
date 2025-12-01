@@ -77,11 +77,20 @@ class BerxitEncoder(nn.Module):
         super(BerxitEncoder, self).__init__()
         self.config = config
         # Ensure distinct modules per layer
-        self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
-        self.ramp = nn.ModuleList([BerxitOffRamp(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [BertLayer(config) for _ in range(config.num_hidden_layers)]
+        )
+        self.ramp = nn.ModuleList(
+            [BerxitOffRamp(config) for _ in range(config.num_hidden_layers)]
+        )
         # BERxiT gates
         gate_hidden = getattr(config, "gate_hidden_dim", 32)
-        self.gates = nn.ModuleList([ExitGate(in_dim=3, hidden=gate_hidden) for _ in range(config.num_hidden_layers)])
+        self.gates = nn.ModuleList(
+            [
+                ExitGate(in_dim=3, hidden=gate_hidden)
+                for _ in range(config.num_hidden_layers)
+            ]
+        )
 
         # Thresholds for DeeBERT entropy (fallback) and BERxiT gate
         self.early_exit_entropy = [-1.0] * config.num_hidden_layers
@@ -110,7 +119,9 @@ class BerxitEncoder(nn.Module):
         if isinstance(x, float) or isinstance(x, int):
             self.gate_thresholds = [float(x)] * self.config.num_hidden_layers
         elif isinstance(x, list):
-            assert len(x) == self.config.num_hidden_layers, "gate thresholds size mismatch"
+            assert (
+                len(x) == self.config.num_hidden_layers
+            ), "gate thresholds size mismatch"
             self.gate_thresholds = [float(v) for v in x]
         else:
             raise TypeError(
@@ -187,7 +198,12 @@ class BerxitEncoder(nn.Module):
             ).long()
             # Collect per-layer gate logits for diagnostics; fill with NaNs by default
             gates_per_layer: Tuple[torch.Tensor, ...] = tuple(
-                torch.full((batch_size, 1), float('nan'), device=hidden_states.device, dtype=hidden_states.dtype)
+                torch.full(
+                    (batch_size, 1),
+                    float('nan'),
+                    device=hidden_states.device,
+                    dtype=hidden_states.dtype,
+                )
                 for _ in range(len(self.layer))
             )
 
@@ -262,7 +278,7 @@ class BerxitModel(BertPreTrainedModel, ABC):
 
     def init_highway_pooler(self) -> None:
         self.encoder.init_highway_pooler(self.pooler)
-    
+
     def set_exit_gate_thresholds(self, x: Union[List[float], float]) -> None:
         self.encoder.set_exit_gate_thresholds(x)
 
@@ -339,12 +355,18 @@ class BerxitModel(BertPreTrainedModel, ABC):
         encoder_extended_attention_mask = encoder_extended_attention_mask.to(
             dtype=next(self.parameters()).dtype
         )
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -10000.0
+        encoder_extended_attention_mask = (
+            1.0 - encoder_extended_attention_mask
+        ) * -10000.0
 
         if head_mask is not None:
             if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                head_mask = head_mask.expand(self.config.num_hidden_layers, -1, -1, -1, -1)
+                head_mask = (
+                    head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+                )
+                head_mask = head_mask.expand(
+                    self.config.num_hidden_layers, -1, -1, -1, -1
+                )
             elif head_mask.dim() == 2:
                 head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
             head_mask = head_mask.to(dtype=next(self.parameters()).dtype)
@@ -366,7 +388,9 @@ class BerxitModel(BertPreTrainedModel, ABC):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
-        sequence_output = None if self.encoder.inference else encoder_outputs.last_hidden_state
+        sequence_output = (
+            None if self.encoder.inference else encoder_outputs.last_hidden_state
+        )
         pooled_output = None if self.encoder.inference else self.pooler(sequence_output)
 
         return DeeBertModelOutput(
