@@ -1,4 +1,5 @@
-from typing import Optional
+from pathlib import Path
+from typing import List, Optional, Sequence
 
 import datasets
 from omegaconf import DictConfig
@@ -209,6 +210,29 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         self.source_col = dataset_config.source_col
         self.target_col = dataset_config.target_col
 
+        raw_paths = dataset_config.get("data_path", None)
+        self._uses_data_path = raw_paths is not None
+        if raw_paths is None:
+            raw_paths = dataset_config.get("path")
+        if raw_paths is None:
+            raise ValueError("dataset_config must specify 'path' or 'data_path'.")
+        if isinstance(raw_paths, str):
+            self.data_paths: List[str] = [raw_paths]
+        else:
+            self.data_paths = list(raw_paths)
+        if not self.data_paths:
+            raise ValueError("dataset_config.data_path must contain at least one path.")
+
+        data_format = dataset_config.get("data_format")
+        if isinstance(data_format, Sequence) and not isinstance(data_format, str):
+            self.data_formats = list(data_format)
+        elif data_format is None:
+            self.data_formats = None
+        else:
+            self.data_formats = [data_format] * len(self.data_paths)
+
+        self.combine_strategy = dataset_config.get("combine_strategy", "concatenate")
+
         self.max_target_length = max_target_length
         self.max_source_length = max_source_length
 
@@ -221,6 +245,117 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         self.train = None
         self.test = None
         self.val = None
+
+    def prepare_data(self) -> None:
+        if (
+            not self._uses_data_path
+            and len(self.data_paths) == 1
+            and self.data_formats is None
+        ):
+            super().prepare_data()
+            return
+
+        datasets_list = []
+        formats = self._resolve_formats()
+        for path, fmt in zip(self.data_paths, formats):
+            datasets_list.append(self._load_dataset(path, fmt))
+
+        combined = (
+            datasets_list[0]
+            if len(datasets_list) == 1
+            else self._combine_datasets(datasets_list)
+        )
+
+        if "percent" in self.dataset_config:
+            combined = self._subset_percent(combined, self.dataset_config.percent)
+
+        self.dataset = combined
+
+    def _resolve_formats(self) -> List[str]:
+        if self.data_formats is not None:
+            if len(self.data_formats) != len(self.data_paths):
+                raise ValueError(
+                    "Length of data_format list must match number of data paths."
+                )
+            return self.data_formats
+        return [self._detect_format(path) for path in self.data_paths]
+
+    def _load_dataset(self, path: str, data_format: str) -> datasets.DatasetDict:
+        if data_format == "disk":
+            loaded = datasets.load_from_disk(path)
+            if isinstance(loaded, datasets.Dataset):
+                return datasets.DatasetDict({"train": loaded})
+            return loaded
+        if data_format == "hub":
+            return datasets.load_dataset(path, trust_remote_code=True)
+        if data_format in {"json", "jsonl"}:
+            return datasets.load_dataset("json", data_files=path)
+        if data_format == "csv":
+            return datasets.load_dataset("csv", data_files=path)
+        raise ValueError(f"Unsupported data_format '{data_format}'.")
+
+    def _combine_datasets(
+        self, datasets_list: Sequence[datasets.DatasetDict]
+    ) -> datasets.DatasetDict:
+        splits = datasets_list[0].keys()
+        for ds in datasets_list[1:]:
+            if ds.keys() != splits:
+                raise ValueError("All datasets must share identical splits.")
+
+        if self.combine_strategy == "concatenate":
+            return datasets.DatasetDict(
+                {
+                    split: datasets.concatenate_datasets(
+                        [ds[split] for ds in datasets_list]
+                    )
+                    for split in splits
+                }
+            )
+        if self.combine_strategy == "interleave":
+            return datasets.DatasetDict(
+                {
+                    split: datasets.interleave_datasets(
+                        [ds[split] for ds in datasets_list]
+                    )
+                    for split in splits
+                }
+            )
+        raise ValueError(
+            f"Unknown combine_strategy '{self.combine_strategy}'. "
+            "Expected 'concatenate' or 'interleave'."
+        )
+
+    @staticmethod
+    def _subset_percent(
+        dataset: datasets.DatasetDict, percent: float
+    ) -> datasets.DatasetDict:
+        if percent <= 0 or percent > 100:
+            raise ValueError("percent must be in (0, 100].")
+        return datasets.DatasetDict(
+            {
+                split: split_dataset.select(
+                    range(int(len(split_dataset) * percent / 100))
+                )
+                for split, split_dataset in dataset.items()
+            }
+        )
+
+    @staticmethod
+    def _detect_format(path: str) -> str:
+        candidate = Path(path)
+        if candidate.is_dir():
+            return "disk"
+        if candidate.is_file():
+            suffix = candidate.suffix.lower()
+            if suffix in {".jsonl", ".json"}:
+                return "json"
+            if suffix == ".csv":
+                return "csv"
+            raise ValueError(
+                f"Unable to infer data_format from file extension '{suffix}' for '{path}'. "
+                "Set dataset_config.data_format explicitly."
+            )
+        return "hub"
 
     def featurize(self) -> datasets.DatasetDict:
         """
