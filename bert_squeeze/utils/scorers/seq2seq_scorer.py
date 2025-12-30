@@ -40,6 +40,11 @@ class Seq2SeqScorer:
         "bertscore": MetricConfig(name="bertscore", loader_name="bertscore"),
         "meteor": MetricConfig(name="meteor", loader_name="meteor"),
     }
+    DEFAULT_BERTSCORE_KWARGS = {
+        "lang": "en",
+        "model_type": "microsoft/deberta-base-mnli",
+        "rescale_with_baseline": True,
+    }
 
     def __init__(
         self,
@@ -53,11 +58,7 @@ class Seq2SeqScorer:
         self.metrics = tuple(metrics or self.DEFAULT_METRICS)
         self._validate_metrics()
         self.rouge_types = tuple(rouge_types)
-        self.bertscore_kwargs = bertscore_kwargs or {
-            "lang": "en",
-            "model_type": "microsoft/deberta-base-mnli",
-            "rescale_with_baseline": True,
-        }
+        self.bertscore_kwargs = bertscore_kwargs or self.DEFAULT_BERTSCORE_KWARGS
         self.compute_length_stats = compute_length_stats
         self.length_unit = length_unit
         self._metric_cache: MutableMapping[str, EvaluationModule] = {}
