@@ -54,6 +54,27 @@ You can find a bunch of examples on how to use the library to simply train model
 Disclaimer: I have not extensively tested all procedures and thus do not guarantee the performance of every implemented
 method.
 
+# Evaluation
+
+The library now ships with a general-purpose `Seq2SeqScorer` located under
+`bert_squeeze.utils.scorers`. It wraps ROUGE, BLEU (sacrebleu), METEOR, and BERTScore
+while also computing helpful length statistics. You can use it standalone or through the
+`LightningSeq2SeqScorer` helper to automatically log metrics during validation/test
+steps:
+
+```python
+from bert_squeeze.utils.scorers import Seq2SeqScorer, LightningSeq2SeqScorer
+
+scorer = Seq2SeqScorer(metrics=["rouge", "bertscore"])
+print(scorer.compute(predictions, references))
+
+val_scorer = LightningSeq2SeqScorer(prefix="val", metrics=["rouge"], compute_length_stats=False)
+self.log_dict(val_scorer.get_log_dict(predictions, references, group_labels=languages))
+```
+
+Refer to `docs/evaluation/seq2seq_metrics.md` for a full walkthrough covering installation,
+group-by comparisons, and logging patterns.
+
 # Concepts
 
 ### Transformers

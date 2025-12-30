@@ -36,6 +36,7 @@ Content
    assistants
    distillation
    models
+   evaluation/seq2seq_metrics
 
 .. toctree::
    :maxdepth: 2
