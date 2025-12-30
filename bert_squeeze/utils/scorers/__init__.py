@@ -6,6 +6,7 @@ from .sequence_classification_scorer import (
     FastBertSequenceClassificationScorer,
     LooseSequenceClassificationScorer,
 )
+from .seq2seq_scorer import LightningSeq2SeqScorer, Seq2SeqScorer
 
 Scorer = TypeVar(
     "Scorer",
@@ -14,4 +15,6 @@ Scorer = TypeVar(
     BaseSequenceClassificationScorer,
     FastBertSequenceClassificationScorer,
     LooseSequenceClassificationScorer,
+    Seq2SeqScorer,
+    LightningSeq2SeqScorer,
 )
