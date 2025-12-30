@@ -37,6 +37,7 @@ Content
    distillation
    models
    evaluation/seq2seq_metrics
+   data/preprocessing
 
 .. toctree::
    :maxdepth: 2
