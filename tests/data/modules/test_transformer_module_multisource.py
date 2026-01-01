@@ -24,7 +24,9 @@ class _DummyTokenizer:
 def mock_tokenizer(monkeypatch):
     monkeypatch.setattr(
         "bert_squeeze.data.modules.transformer_module.AutoTokenizer",
-        type("MockTokenizer", (), {"from_pretrained": lambda *_, **__: _DummyTokenizer()}),
+        type(
+            "MockTokenizer", (), {"from_pretrained": lambda *_, **__: _DummyTokenizer()}
+        ),
     )
 
 
