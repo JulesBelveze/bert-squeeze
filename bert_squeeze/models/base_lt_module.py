@@ -357,14 +357,18 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
         scorer: Scorer = None,
         **kwargs,
     ):
-        super().__init__(training_config, pretrained_model, model, scorer, **kwargs)
-        self._sanity_checks(training_config)
-
         self.num_labels = num_labels
         self.model_config = AutoConfig.from_pretrained(
             pretrained_model, num_labels=num_labels
         )
 
+        if model is None:
+            model = self.BASE_CLASS_MODEL.from_pretrained(
+                pretrained_model, config=self.model_config
+            )
+
+        super().__init__(training_config, pretrained_model, model, scorer, **kwargs)
+        self._sanity_checks(training_config)
         self._set_objective()
 
     def on_validation_epoch_end(self):
@@ -426,7 +430,7 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
                 helper object to compute performance metrics during training
         """
         if scorer is None:
-            scorer = BaseSequenceClassificationScorer(self.num_labels)
+            scorer = BaseSequenceClassificationScorer(list(range(self.num_labels)))
 
         self.scorer = deepcopy(scorer)
         self.valid_scorer = deepcopy(scorer)
