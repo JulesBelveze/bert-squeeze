@@ -443,7 +443,13 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
     def _collate_fn(self):
         """Helper function to merge a list of samples into a batch of Tensors"""
 
+        collator = DataCollatorForSeq2Seq(
+            tokenizer=self.tokenizer,
+            label_pad_token_id=-100,
+            return_tensors="pt",
+        )
+
         def _collate(examples):
-            return self.tokenizer.pad(examples, return_tensors="pt")
+            return collator(examples)
 
         return _collate

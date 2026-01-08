@@ -302,15 +302,26 @@ class BaseTransformerModule(pl.LightningModule):
 
         It uses the evaluation scorer to log all the available losses and metrics
         """
-        table = self.valid_scorer.get_table()
+        eval_report = self.valid_scorer.to_dict()
+        try:
+            table = self.valid_scorer.get_table(eval_report)
+        except TypeError:
+            table = self.valid_scorer.get_table()
         self.logger.experiment.add_text("eval/report", table)
 
-        logging_loss = {
-            key: torch.stack(val).mean() for key, val in self.valid_scorer.losses.items()
-        }
-        self.log_dict({f"eval/loss_{key}": val for key, val in logging_loss.items()})
+        logging_loss = {}
+        for key, values in self.valid_scorer.losses.items():
+            if not values:
+                continue
+            first = values[0]
+            if isinstance(first, torch.Tensor):
+                logging_loss[key] = torch.stack(values).mean()
+            else:
+                logging_loss[key] = torch.tensor(np.mean(values))
 
-        eval_report = self.valid_scorer.to_dict()
+        if logging_loss:
+            self.log_dict({f"eval/loss_{key}": val for key, val in logging_loss.items()})
+
         for metric, value in eval_report.items():
             if isinstance(value, dict):
                 self.log_dict({f"eval/{metric}/{key}": v for key, v in value.items()})

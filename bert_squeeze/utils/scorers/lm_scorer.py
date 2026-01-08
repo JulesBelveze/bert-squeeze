@@ -33,7 +33,9 @@ class LMScorer(object):
     @property
     def perplexity(self):
         """"""
-        return np.mean(self.metrics["perplexity"])
+        if not self.metrics["perplexity"]:
+            return float("nan")
+        return torch.stack(self.metrics["perplexity"]).mean().item()
 
     @staticmethod
     def postprocess_text(*args: List[str]):
@@ -49,26 +51,47 @@ class LMScorer(object):
     ):
         """"""
         with torch.no_grad():
-            if isinstance(loss, torch.Tensor):
-                self.losses["global"].append(loss.cpu().numpy())
-            else:
-                self.losses["global"].append(loss.full_loss.cpu().numpy())
+            if loss is None:
+                return
 
-            perplexity = torch.clip(torch.exp(loss), max=MAX_CLIP_VALUE)
-            self.metrics["perplexity"].append(perplexity.cpu().numpy())
+            loss_tensor = (
+                loss.full_loss.detach()
+                if isinstance(loss, DistillationLoss)
+                else loss.detach()
+            )
+            self.losses["global"].append(loss_tensor.cpu())
+
+            perplexity = torch.exp(loss_tensor).clamp(max=MAX_CLIP_VALUE)
+            self.metrics["perplexity"].append(perplexity.cpu())
+
+            if not self.do_mismatch:
+                return
+            if self.tokenizer is None:
+                return
+            if predicted_tokens is None or labels is None or input_ids is None:
+                return
 
             decoded_preds = self.tokenizer.batch_decode(
                 predicted_tokens, skip_special_tokens=True
             )
-            decoded_labels = self.tokenizer.batch_decode(labels, skip_special_tokens=True)
+
+            labels_for_decode = labels
+            if (
+                labels_for_decode == -100
+            ).any() and self.tokenizer.pad_token_id is not None:
+                labels_for_decode = labels_for_decode.clone()
+                labels_for_decode[labels_for_decode == -100] = self.tokenizer.pad_token_id
+
+            decoded_labels = self.tokenizer.batch_decode(
+                labels_for_decode, skip_special_tokens=True
+            )
             input_texts = self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)
 
-            if self.do_mismatch:
-                for pred, label, text in zip(decoded_preds, decoded_labels, input_texts):
-                    if pred != label:
-                        self.mismatches.append(
-                            {"prediction": pred, "truth": label, "text": text}
-                        )
+            for pred, label, text in zip(decoded_preds, decoded_labels, input_texts):
+                if pred != label:
+                    self.mismatches.append(
+                        {"prediction": pred, "truth": label, "text": text}
+                    )
 
     def result(self):
         """"""
@@ -97,16 +120,10 @@ class LMScorer(object):
         Returns:
             str: prettyfied table summarizing all the metrics
         """
-        table = []
-        for k, v in self.to_dict().items():
-            if isinstance(v, np.ndarray):
-                v = v.tolist()
-            elif isinstance(v, np.float64):
-                v = [v.item()]
-            table.append([k] + v)
+        table = [[key, value] for key, value in self.to_dict().items()]
         return tabulate(
             table,
-            headers=["metrics"] + ["perplexity"],
+            headers=["metrics", "value"],
             tablefmt="fancy_grid",
         )
 
@@ -240,14 +257,16 @@ class SummarizationScorer(object):
             str: prettyfied table summarizing all the metrics
         """
         table = []
-        for k, v in results.items():
-            if isinstance(v, np.ndarray):
-                v = v.tolist()
-            elif isinstance(v, np.float64):
-                v = [v.item()]
-            table.append([k] + v)
+        for key, value in results.items():
+            if isinstance(value, np.ndarray):
+                value = value.tolist()
+            elif isinstance(value, np.generic):
+                value = value.item()
+            elif isinstance(value, torch.Tensor):
+                value = value.item()
+            table.append([key, value])
         return tabulate(
             table,
-            headers=["metrics"] + list(results.keys()),
+            headers=["metrics", "value"],
             tablefmt="fancy_grid",
         )

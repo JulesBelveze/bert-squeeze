@@ -1,7 +1,6 @@
 from typing import Optional, Union
 
 import lightning.pytorch as pl
-import numpy as np
 import torch
 import torch.nn as nn
 from omegaconf import DictConfig
@@ -72,19 +71,20 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
         }
         outputs = self.forward(**inputs)
 
-        self.scorer.add(outputs.loss.detach())
+        self.scorer.add(loss=outputs.loss.detach())
 
         if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
-            self.logger.experiment["train/loss"].log(
-                value=np.mean(self.scorer.losses), step=self.global_step
-            )
-
-            self.logger.experiment["train/perplexity"].log(
-                self.scorer.perplexity, step=self.global_step
+            mean_loss = torch.stack(self.scorer.losses["global"]).mean()
+            self.log("train/loss", mean_loss, on_step=True, on_epoch=False)
+            self.log(
+                "train/perplexity",
+                torch.exp(mean_loss).clamp(max=1e8),
+                on_step=True,
+                on_epoch=False,
             )
             self.scorer.reset()
 
-        return {"loss": outputs.loss}
+        return outputs.loss
 
     def validation_step(self, batch, batch_idx, *args, **kwargs) -> dict:
         """"""
@@ -94,7 +94,12 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
             "labels": batch["labels"],
         }
         outputs = self.forward(**inputs)
-        prediction = self.model.generate(batch["input_ids"], **self.generate_kwargs)
+        generate_kwargs = dict(self.generate_kwargs) if self.generate_kwargs else {}
+        prediction = self.model.generate(
+            batch["input_ids"],
+            attention_mask=batch["attention_mask"],
+            **generate_kwargs,
+        )
 
         self.valid_scorer.add(
             loss=outputs.loss.detach(),
@@ -103,4 +108,4 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
             labels=batch["labels"],
         )
 
-        return {"loss": outputs.loss}
+        return outputs.loss
