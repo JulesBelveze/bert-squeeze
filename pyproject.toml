@@ -37,6 +37,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+aim = [
+    "aim>=3.17.0"
+]
 docs = [
     "Sphinx<7.0",
     "furo>=2023.3.27",
