@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import lightning.pytorch as pl
 import torch.nn
@@ -38,17 +38,17 @@ class DistilAssistant(object):
     Args:
         name (str):
             name of the base model to fine-tune
-        general_kwargs (Dict[str, Any]):
+        general_kwargs (Dict[str, object]):
             keyword arguments that can be added or overwrite the default 'general' configuration
-        train_kwargs (Dict[str, Any]):
+        train_kwargs (Dict[str, object]):
             keyword arguments that can be added or overwrite the default 'train' configuration
-        student_kwargs (Dict[str, Any]):
+        student_kwargs (Dict[str, object]):
             keyword arguments that can be added or overwrite the default 'model.student' configuration
-        teacher_kwargs (Dict[str, Any]):
+        teacher_kwargs (Dict[str, object]):
             keyword arguments that can be added or overwrite the default 'model.teacher' configuration
-        data_kwargs (Dict[str, Any]):
+        data_kwargs (Dict[str, object]):
             keyword arguments that can be added or overwrite the default 'data' configuration
-        logger_kwargs (Dict[str, Any]):
+        logger_kwargs (Dict[str, object]):
             keyword arguments that can be added or overwrite the default 'logger' configuration
         callbacks (List[Callback]):
             list of callbacks to use during training
@@ -68,13 +68,13 @@ class DistilAssistant(object):
     def __init__(
         self,
         name: str,
-        general_kwargs: Dict[str, Any] = None,
-        train_kwargs: Dict[str, Any] = None,
-        student_kwargs: Dict[str, Any] = None,
-        teacher_kwargs: Dict[str, Any] = {},
-        data_kwargs: Dict[str, Any] = None,
-        logger_kwargs: Dict[str, Any] = None,
-        callbacks: List[Callback] = None,
+        general_kwargs: Optional[Dict[str, object]] = None,
+        train_kwargs: Optional[Dict[str, object]] = None,
+        student_kwargs: Optional[Dict[str, object]] = None,
+        teacher_kwargs: Dict[str, object] = {},
+        data_kwargs: Optional[Dict[str, object]] = None,
+        logger_kwargs: Optional[Dict[str, object]] = None,
+        callbacks: Optional[List[Callback]] = None,
     ):
         conf = OmegaConf.load(
             resource_filename(
@@ -142,7 +142,7 @@ class DistilAssistant(object):
         return self._model_conf["student"]
 
     @property
-    def model(self) -> Any:
+    def model(self) -> pl.LightningModule:
         """"""
         if self._model is None:
             self.model = instantiate(self._model_conf)
@@ -164,11 +164,11 @@ class DistilAssistant(object):
         return self._model
 
     @model.setter
-    def model(self, value: Any) -> None:
+    def model(self, value: pl.LightningModule) -> None:
         self._model = value
 
     @property
-    def student(self) -> Any:
+    def student(self) -> Optional[Union[pl.LightningModule, torch.nn.Module]]:
         """"""
         if self._model is None:
             logging.warning("The Distiller has not been instantiated.")
@@ -176,7 +176,7 @@ class DistilAssistant(object):
         return self.model.student
 
     @property
-    def teacher(self) -> Any:
+    def teacher(self) -> Optional[Union[pl.LightningModule, torch.nn.Module]]:
         """"""
         if self._model is None:
             logging.warning("The Distiller has not been instantiated.")
@@ -184,7 +184,7 @@ class DistilAssistant(object):
         return self.model.teacher
 
     @property
-    def data(self) -> Any:
+    def data(self) -> pl.LightningDataModule:
         """"""
         if self._data is None:
             data = instantiate(self._data_conf, _recursive_=True)
@@ -194,7 +194,7 @@ class DistilAssistant(object):
         return self._data
 
     @data.setter
-    def data(self, value: Any) -> None:
+    def data(self, value: pl.LightningDataModule) -> None:
         """"""
         self._data = value
 
@@ -226,7 +226,7 @@ class DistilAssistant(object):
         return self._callbacks
 
     @callbacks.setter
-    def callbacks(self, value) -> None:
+    def callbacks(self, value: Optional[List[Callback]]) -> None:
         """"""
         self._callbacks = value
 

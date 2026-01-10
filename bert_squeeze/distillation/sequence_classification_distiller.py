@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
@@ -104,13 +104,15 @@ class BaseSequenceClassificationDistiller(BaseDistiller):
         self.s_valid_scorer = BaseSequenceClassificationScorer(self.labels)
         self.s_test_scorer = BaseSequenceClassificationScorer(self.labels)
 
-    def get_teacher_logits(self, batch: Dict[str, torch.Tensor]) -> Any:
+    def get_teacher_logits(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         raise NotImplementedError()
 
-    def get_student_logits(self, batch: Dict[str, torch.Tensor]) -> Any:
+    def get_student_logits(
+        self, batch: Dict[str, torch.Tensor]
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         raise NotImplementedError()
 
-    def log_eval_report(self, probs: List[np.array]) -> None:
+    def log_eval_report(self, probs: List[np.ndarray]) -> None:
         """
         Method that logs an evaluation report.
 

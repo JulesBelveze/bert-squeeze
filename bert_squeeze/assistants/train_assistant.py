@@ -1,7 +1,8 @@
 import logging
 import os
-from typing import Any, Dict, List
+from typing import Dict, List, Optional
 
+import lightning.pytorch as pl
 from hydra.utils import instantiate
 from lightning.pytorch.callbacks import Callback
 from lightning.pytorch.loggers import Logger, TensorBoardLogger
@@ -39,15 +40,15 @@ class TrainAssistant(object):
     Args:
         name (str):
             name of the base model to fine-tune
-        general_kwargs (Dict[str, Any]):
+        general_kwargs (Dict[str, object]):
             keyword arguments that can be added or overwrite the default 'general' configuration
-        train_kwargs (Dict[str, Any]):
+        train_kwargs (Dict[str, object]):
             keyword arguments that can be added or overwrite the default 'train' configuration
-        model_kwargs (Dict[str, Any]):
+        model_kwargs (Dict[str, object]):
             keyword arguments that can be added or overwrite the default 'model' configuration
-        data_kwargs (Dict[str, Any]):
+        data_kwargs (Dict[str, object]):
             keyword arguments that can be added or overwrite the default 'data' configuration
-        logger_kwargs (Dict[str, Any]):
+        logger_kwargs (Dict[str, object]):
             keyword arguments that can be added or overwrite the default 'logger' configuration
         callbacks (List[Callback]):
             list of callbacks to use during training
@@ -56,12 +57,12 @@ class TrainAssistant(object):
     def __init__(
         self,
         name: str,
-        general_kwargs: Dict[str, Any] = None,
-        train_kwargs: Dict[str, Any] = None,
-        model_kwargs: Dict[str, Any] = None,
-        data_kwargs: Dict[str, Any] = None,
-        logger_kwargs: Dict[str, Any] = None,
-        callbacks: List[Callback] = None,
+        general_kwargs: Optional[Dict[str, object]] = None,
+        train_kwargs: Optional[Dict[str, object]] = None,
+        model_kwargs: Optional[Dict[str, object]] = None,
+        data_kwargs: Optional[Dict[str, object]] = None,
+        logger_kwargs: Optional[Dict[str, object]] = None,
+        callbacks: Optional[List[Callback]] = None,
     ):
         try:
             conf = OmegaConf.load(
@@ -112,25 +113,25 @@ class TrainAssistant(object):
         self._logger_conf = conf.get("logger")
         self._callbacks_conf = conf.get("callbacks", [])
 
-        self._model = None
-        self._data = None
+        self._model: Optional[pl.LightningModule] = None
+        self._data: Optional[pl.LightningDataModule] = None
         self._logger = None
         self._callbacks = None
 
     @property
-    def model(self) -> Any:
+    def model(self) -> pl.LightningModule:
         """"""
         if self._model is None:
             self.model = instantiate(self._model_conf)
         return self._model
 
     @model.setter
-    def model(self, value: Any) -> None:
+    def model(self, value: pl.LightningModule) -> None:
         """"""
         self._model = value
 
     @property
-    def data(self) -> Any:
+    def data(self) -> pl.LightningDataModule:
         """"""
         if self._data is None:
             data = instantiate(self._data_conf)
@@ -140,7 +141,7 @@ class TrainAssistant(object):
         return self._data
 
     @data.setter
-    def data(self, value: Any) -> None:
+    def data(self, value: pl.LightningDataModule) -> None:
         """"""
         self._data = value
 

@@ -26,6 +26,9 @@
 - Naming: modules/files `snake_case.py`; classes `CapWords`; functions/vars `snake_case`.
 - Prefer type hints and docstrings; keep public APIs stable under `bert_squeeze/`.
 
+### Typing
+- Do not use type `Any`; be as strict as possible on type
+
 ## Testing Guidelines
 - Use `pytest`; place new tests under `tests/` as `test_*.py`.
 - Keep tests deterministic (avoid network); use `tests/fixtures/` for small assets.
