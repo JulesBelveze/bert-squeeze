@@ -7,13 +7,15 @@ logger = logging.getLogger(__name__)
 
 class ExperimentLogger:
     """
-    Small adapter around a Lightning logger to log non-metric artifacts (text, figures)
-    across multiple backends (TensorBoard, Aim).
+    Small adapter around a Lightning logger to log non-metric artifacts across multiple backends
+    Currently supported:
+    - TensorBoard
+    - Aim
     """
 
     def __init__(
         self,
-        lightning_logger: object,
+        lightning_logger: Optional[object],
         step: Optional[int] = None,
         epoch: Optional[int] = None,
     ) -> None:
@@ -74,7 +76,7 @@ class ExperimentLogger:
 
 
 def log_experiment_text(
-    lightning_logger: object,
+    lightning_logger: Optional[object],
     name: str,
     text: str,
     step: Optional[int] = None,
@@ -97,7 +99,7 @@ def log_experiment_text(
 
 
 def log_experiment_figure(
-    lightning_logger: object,
+    lightning_logger: Optional[object],
     name: str,
     figure: object,
     step: Optional[int] = None,
@@ -120,7 +122,7 @@ def log_experiment_figure(
 
 
 def _log_experiment_artifact(
-    lightning_logger: object,
+    lightning_logger: Optional[object],
     *,
     name: str,
     value: object,
@@ -144,7 +146,7 @@ def _log_experiment_artifact(
         )
 
 
-def _iter_experiments(lightning_logger: object) -> Iterator[object]:
+def _iter_experiments(lightning_logger: Optional[object]) -> Iterator[object]:
     if lightning_logger is None:
         return
 
@@ -200,7 +202,8 @@ def _try_aim_track(
 
 
 def _looks_like_aim_run(experiment: object, aim_module: object) -> bool:
-    if experiment is None or getattr(experiment, "track", None) is None:
+    track = getattr(experiment, "track", None)
+    if experiment is None or track is None or not callable(track):
         return False
 
     run_type = getattr(aim_module, "Run", None)
@@ -247,16 +250,7 @@ def _aim_track(
     if track is None or not callable(track):
         return
 
-    kwargs = {"name": name}
-    if step is not None:
-        kwargs["step"] = step
-    if epoch is not None:
-        kwargs["epoch"] = epoch
-
-    for keys_to_drop in [[], ["epoch"], ["step"], ["epoch", "step"]]:
-        call_kwargs = dict(kwargs)
-        for key in keys_to_drop:
-            call_kwargs.pop(key, None)
+    for call_kwargs in _iter_aim_track_kwargs(name=name, step=step, epoch=epoch):
         try:
             track(value, **call_kwargs)
             return
@@ -265,3 +259,34 @@ def _aim_track(
         except Exception:
             logger.debug("Aim tracking failed", exc_info=True)
             return
+
+
+def _iter_aim_track_kwargs(
+    *, name: str, step: Optional[int], epoch: Optional[int]
+) -> Iterator[dict[str, object]]:
+    """
+    Yield Aim ``track`` kwargs in a best-effort order.
+
+    Aim has changed accepted arguments across versions; try the most informative kwargs
+    first, then progressively drop unsupported ones.
+    """
+    base: dict[str, object] = {"name": name}
+
+    if step is not None and epoch is not None:
+        yield {"name": name, "step": step, "epoch": epoch}
+        yield {"name": name, "step": step}
+        yield {"name": name, "epoch": epoch}
+        yield base
+        return
+
+    if step is not None:
+        yield {"name": name, "step": step}
+        yield base
+        return
+
+    if epoch is not None:
+        yield {"name": name, "epoch": epoch}
+        yield base
+        return
+
+    yield base
