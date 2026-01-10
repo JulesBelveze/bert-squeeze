@@ -46,6 +46,9 @@ uv sync
 
 You are all set!
 
+Optional: install Aim support with `uv sync --extra aim` and configure
+`logger_kwargs={"_target_": "lightning.pytorch.loggers.AimLogger"}` in an assistant.
+
 # Quickstarts
 
 You can find a bunch of examples on how to use the library to simply train models or perform optimization techniques 

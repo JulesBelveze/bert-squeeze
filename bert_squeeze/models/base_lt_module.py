@@ -19,6 +19,7 @@ from transformers import (
     AutoModelForSequenceClassification,
 )
 
+from ..utils.experiment_logging import ExperimentLogger
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.optimizers import BertAdam
 from ..utils.scorers import BaseSequenceClassificationScorer, LMScorer, Scorer
@@ -307,7 +308,8 @@ class BaseTransformerModule(pl.LightningModule):
             table = self.valid_scorer.get_table(eval_report)
         except TypeError:
             table = self.valid_scorer.get_table()
-        self.logger.experiment.add_text("eval/report", table)
+        exp_logger = ExperimentLogger.from_module(self)
+        exp_logger.add_text("eval/report", table)
 
         logging_loss = {}
         for key, values in self.valid_scorer.losses.items():
@@ -325,8 +327,8 @@ class BaseTransformerModule(pl.LightningModule):
         for metric, value in eval_report.items():
             if isinstance(value, dict):
                 self.log_dict({f"eval/{metric}/{key}": v for key, v in value.items()})
-            elif not isinstance(value, list) and not isinstance(value, np.ndarray):
-                self.log("eval/{}".format(metric), value)
+            elif not isinstance(value, (list, np.ndarray)):
+                self.log(f"eval/{metric}", value)
 
 
 class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
@@ -408,7 +410,7 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
             logging.warning(
                 "You are using label smoothing and the smoothing parameteris set to 0.0."
             )
-        elif objective == "weighted" and all([w == 1.0 for w in self.class_weights]):
+        elif objective == "weighted" and all(w == 1.0 for w in self.class_weights):
             logging.warning(
                 "You are using a weighted CrossEntropy but the class"
                 "weights are all equal to 1.0."
@@ -461,11 +463,12 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
         """
         super().log_eval_report()
 
+        exp_logger = ExperimentLogger.from_module(self)
         for i in range(probs.shape[1]):
             fig = plt.figure(figsize=(15, 15))
             sns.histplot(probs[:, i], bins=100)
-            plt.title("Probability boxplot for label {}".format(i))
-            self.logger.experiment.add_figure("eval/dist_label_{}".format(i), fig)
+            plt.title(f"Probability boxplot for label {i}")
+            exp_logger.add_figure(f"eval/dist_label_{i}", fig)
             plt.close("all")
 
 

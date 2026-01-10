@@ -93,6 +93,11 @@ class DistilAssistant(object):
             [general_kwargs, train_kwargs, data_kwargs, logger_kwargs, callbacks],
         ):
             if kws is not None:
+                base = conf.get(name)
+                if base is None:
+                    conf[name] = kws
+                    continue
+
                 if "_target_" in kws and kws["_target_"] != conf[name]["_target_"]:
                     del conf[name]
                     conf[name] = kws

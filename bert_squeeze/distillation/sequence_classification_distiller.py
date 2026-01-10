@@ -13,6 +13,7 @@ from torch.nn import CrossEntropyLoss
 from transformers.modeling_outputs import SequenceClassifierOutput
 
 from bert_squeeze.distillation.base_distiller import BaseDistiller
+from bert_squeeze.utils.experiment_logging import ExperimentLogger
 from bert_squeeze.utils.losses import LabelSmoothingLoss
 from bert_squeeze.utils.losses.distillation_losses import KLDivLoss
 from bert_squeeze.utils.scorers import BaseSequenceClassificationScorer
@@ -71,7 +72,7 @@ class BaseSequenceClassificationDistiller(BaseDistiller):
                 "You are using label smoothing and the smoothing parameteris set to 0.0."
             )
         elif objective == "weighted" and all(
-            [w == 1.0 for w in self.params.get("class_weights", None)]
+            w == 1.0 for w in self.params.get("class_weights", [])
         ):
             logging.warning(
                 "You are using a weighted CrossEntropy but the class"
@@ -123,11 +124,12 @@ class BaseSequenceClassificationDistiller(BaseDistiller):
         super().log_eval_report()
 
         # logging probability distributions
-        for i in range(len(probs)):
+        exp_logger = ExperimentLogger.from_module(self)
+        for i, prob in enumerate(probs):
             fig = plt.figure(figsize=(15, 15))
-            sns.distplot(probs[i], kde=False, bins=100)
-            plt.title("Probability boxplot for label {}".format(i))
-            self.logger.experiment.add_figure("eval/dist_label_{}".format(i), fig)
+            sns.distplot(prob, kde=False, bins=100)
+            plt.title(f"Probability boxplot for label {i}")
+            exp_logger.add_figure(f"eval/dist_label_{i}", fig)
             plt.close("all")
 
 

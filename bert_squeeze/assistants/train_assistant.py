@@ -7,7 +7,8 @@ from lightning.pytorch.callbacks import Callback
 from lightning.pytorch.loggers import Logger, TensorBoardLogger
 from omegaconf import OmegaConf
 from pkg_resources import resource_filename
-from pydantic.utils import deep_update
+
+from bert_squeeze.utils.utils_fct import deep_update
 
 CONFIG_MAPPER = {
     "lr": "train_lr.yaml",
@@ -100,7 +101,8 @@ class TrainAssistant(object):
             ],
         ):
             if kws is not None:
-                conf[name] = deep_update(conf[name], kws)
+                base = conf.get(name)
+                conf[name] = kws if base is None else deep_update(base, kws)
 
         self.name = name
         self.general = conf["general"]

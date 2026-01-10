@@ -35,6 +35,19 @@ class TestTrainAssistant:
         assert isinstance(lr_assistant.data, LrDataModule)
         assert isinstance(lr_assistant.logger, TensorBoardLogger)
 
+    def test_custom_logger_kwargs(self, tmp_path):
+        assistant = TrainAssistant(
+            "lr",
+            data_kwargs={"dataset_config": {"path": "Setfit/emotion", "percent": 10}},
+            logger_kwargs={
+                "_target_": "lightning.pytorch.loggers.TensorBoardLogger",
+                "save_dir": str(tmp_path),
+            },
+        )
+
+        assert isinstance(assistant.logger, TensorBoardLogger)
+        assert assistant.logger.save_dir == str(tmp_path)
+
     def test_data(self, lr_assistant):
         """"""
         assert isinstance(lr_assistant.data.train_dataloader(), DataLoader)

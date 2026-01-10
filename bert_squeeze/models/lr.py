@@ -11,6 +11,7 @@ from omegaconf import DictConfig
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 
+from ..utils.experiment_logging import ExperimentLogger
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.scorers import BaseSequenceClassificationScorer
 
@@ -164,7 +165,7 @@ class BowLogisticRegression(pl.LightningModule):
             logging.warning(
                 "You are using label smoothing and the smoothing parameteris set to 0.0."
             )
-        elif objective == "weighted" and all([w == 1.0 for w in self.class_weights]):
+        elif objective == "weighted" and all(w == 1.0 for w in self.class_weights):
             logging.warning(
                 "You are using a weighted CrossEntropy but the class"
                 "weights are all equal to 1.0."
@@ -188,8 +189,9 @@ class BowLogisticRegression(pl.LightningModule):
             probs (np.array):
                 predicted probabilities by the model
         """
+        exp_logger = ExperimentLogger.from_module(self)
         table = self.valid_scorer.get_table()
-        self.logger.experiment.add_text("eval/report", table)
+        exp_logger.add_text("eval/report", table)
 
         logging_loss = {
             key: torch.stack(val).mean() for key, val in self.valid_scorer.losses.items()
@@ -198,12 +200,12 @@ class BowLogisticRegression(pl.LightningModule):
 
         eval_report = self.valid_scorer.to_dict()
         for key, value in eval_report.items():
-            if not isinstance(value, list) and not isinstance(value, np.ndarray):
-                self.log("eval/{}".format(key), value)
+            if not isinstance(value, (list, np.ndarray)):
+                self.log(f"eval/{key}", value)
 
         for i in range(probs.shape[1]):
             fig = plt.figure(figsize=(15, 15))
             sns.distplot(probs[:, i], kde=False, bins=100)
-            plt.title("Probability boxplot for label {}".format(i))
-            self.logger.experiment.add_figure("eval/dist_label_{}".format(i), fig)
+            plt.title(f"Probability boxplot for label {i}")
+            exp_logger.add_figure(f"eval/dist_label_{i}", fig)
             plt.close("all")

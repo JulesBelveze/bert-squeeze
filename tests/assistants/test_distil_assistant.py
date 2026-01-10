@@ -1,4 +1,5 @@
 import torch.nn
+from lightning.pytorch.loggers import TensorBoardLogger
 from pkg_resources import resource_filename
 from torch.utils.data import DataLoader
 from transformers import BertForSequenceClassification
@@ -9,6 +10,19 @@ from bert_squeeze.models.lt_t5 import SimpleT5Model
 
 class TestDistilAssistant:
     """"""
+
+    def test_custom_logger_kwargs(self, tmp_path):
+        distil_assistant = DistilAssistant(
+            "distil",
+            data_kwargs={"path": "emotion"},
+            logger_kwargs={
+                "_target_": "lightning.pytorch.loggers.TensorBoardLogger",
+                "save_dir": str(tmp_path),
+            },
+        )
+
+        assert isinstance(distil_assistant.logger, TensorBoardLogger)
+        assert distil_assistant.logger.save_dir == str(tmp_path)
 
     def test_two_hf_models(self, caplog):
         """"""

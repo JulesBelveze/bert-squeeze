@@ -7,6 +7,7 @@ from omegaconf import DictConfig, ListConfig
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import AdamW
 
+from ..utils.experiment_logging import ExperimentLogger
 from ..utils.optimizers import BertAdam
 from ..utils.types import DistillationLoss
 
@@ -229,7 +230,7 @@ class BaseDistiller(pl.LightningModule):
         """
         results = self.s_valid_scorer.to_dict()
         table = self.s_valid_scorer.get_table(results)
-        self.logger.experiment.add_text("eval/report", table)
+        ExperimentLogger.from_module(self).add_text("eval/report", table)
 
         # logging losses to neptune
         logging_loss = {
@@ -240,5 +241,5 @@ class BaseDistiller(pl.LightningModule):
 
         # logging other metrics
         for key, value in results.items():
-            if not isinstance(value, list) and not isinstance(value, np.ndarray):
+            if not isinstance(value, (list, np.ndarray)):
                 self.log_dict({f"eval/{key}": value})
