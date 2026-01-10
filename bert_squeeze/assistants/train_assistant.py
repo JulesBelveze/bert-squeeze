@@ -9,6 +9,7 @@ from lightning.pytorch.loggers import Logger, TensorBoardLogger
 from omegaconf import OmegaConf
 from pkg_resources import resource_filename
 
+from bert_squeeze.utils.loggers import resolve_logger_config
 from bert_squeeze.utils.utils_fct import deep_update
 
 CONFIG_MAPPER = {
@@ -110,7 +111,10 @@ class TrainAssistant(object):
         self.train = conf["train"]
         self._model_conf = conf["model"]
         self._data_conf = conf["data"]
-        self._logger_conf = conf.get("logger")
+        self._logger_conf = resolve_logger_config(
+            conf.get("logger"),
+            default_save_dir=self.general["output_dir"],
+        )
         self._callbacks_conf = conf.get("callbacks", [])
 
         self._model: Optional[pl.LightningModule] = None

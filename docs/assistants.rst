@@ -13,7 +13,8 @@ By default, assistants will use a :class:`~lightning.pytorch.loggers.TensorBoard
 writing under ``general.output_dir``.
 
 You can pass a Lightning logger configuration through ``logger_kwargs``. For instance,
-to use Aim (requires installing ``aim`` or the ``bert-squeeze[aim]`` extra):
+to use Aim (requires installing ``aim`` or the ``bert-squeeze[aim]`` extra) you can
+use the ``backend`` shorthand:
 
 .. code-block:: python
 
@@ -22,7 +23,7 @@ to use Aim (requires installing ``aim`` or the ``bert-squeeze[aim]`` extra):
    assistant = TrainAssistant(
        "bert",
        data_kwargs={"dataset_config": {"path": "Setfit/emotion", "percent": 10}},
-       logger_kwargs={"_target_": "lightning.pytorch.loggers.AimLogger"},
+       logger_kwargs={"backend": "aim"},
    )
 
 

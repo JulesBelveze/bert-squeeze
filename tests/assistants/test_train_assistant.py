@@ -48,6 +48,16 @@ class TestTrainAssistant:
         assert isinstance(assistant.logger, TensorBoardLogger)
         assert assistant.logger.save_dir == str(tmp_path)
 
+    def test_logger_backend_tensorboard(self, tmp_path):
+        assistant = TrainAssistant(
+            "lr",
+            data_kwargs={"dataset_config": {"path": "Setfit/emotion", "percent": 10}},
+            logger_kwargs={"backend": "tensorboard", "save_dir": str(tmp_path)},
+        )
+
+        assert isinstance(assistant.logger, TensorBoardLogger)
+        assert assistant.logger.save_dir == str(tmp_path)
+
     def test_data(self, lr_assistant):
         """"""
         assert isinstance(lr_assistant.data.train_dataloader(), DataLoader)

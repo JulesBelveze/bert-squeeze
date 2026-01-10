@@ -46,8 +46,8 @@ uv sync
 
 You are all set!
 
-Optional: install Aim support with `uv sync --extra aim` and configure
-`logger_kwargs={"_target_": "lightning.pytorch.loggers.AimLogger"}` in an assistant.
+Optional: install Aim support with `uv sync --extra aim` and configure 
+`logger_kwargs={"backend": "aim"}` in an assistant.
 
 # Quickstarts
 
