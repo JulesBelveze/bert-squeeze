@@ -1,16 +1,38 @@
 import copy
 from collections import defaultdict
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import evaluate
 import numpy as np
 import torch
 from tabulate import tabulate
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from bert_squeeze.utils.types import DistillationLoss
 
 MAX_CLIP_VALUE = 1e8
+IGNORE_INDEX = -100
+
+
+def _get_fallback_pad_token_id(tokenizer: PreTrainedTokenizerBase) -> int:
+    for token_id_attr in ("pad_token_id", "eos_token_id", "unk_token_id"):
+        token_id = getattr(tokenizer, token_id_attr, None)
+        if token_id is not None:
+            return int(token_id)
+    return 0
+
+
+def _replace_ignore_index(
+    token_ids: torch.Tensor, *, replacement_token_id: Optional[int]
+) -> torch.Tensor:
+    if replacement_token_id is None:
+        return token_ids
+    if not (token_ids == IGNORE_INDEX).any().item():
+        return token_ids
+
+    token_ids = token_ids.clone()
+    token_ids[token_ids == IGNORE_INDEX] = replacement_token_id
+    return token_ids
 
 
 class LMScorer(object):
@@ -75,12 +97,9 @@ class LMScorer(object):
                 predicted_tokens, skip_special_tokens=True
             )
 
-            labels_for_decode = labels
-            if (
-                labels_for_decode == -100
-            ).any() and self.tokenizer.pad_token_id is not None:
-                labels_for_decode = labels_for_decode.clone()
-                labels_for_decode[labels_for_decode == -100] = self.tokenizer.pad_token_id
+            labels_for_decode = _replace_ignore_index(
+                labels, replacement_token_id=self.tokenizer.pad_token_id
+            )
 
             decoded_labels = self.tokenizer.batch_decode(
                 labels_for_decode, skip_special_tokens=True
@@ -194,11 +213,24 @@ class SummarizationScorer(object):
                 decoded_preds = self.tokenizer.batch_decode(
                     predicted_tokens, skip_special_tokens=True
                 )
+
+                labels_for_decode = labels
+                if labels_for_decode is not None:
+                    replacement_token_id = None
+                    if (labels_for_decode == IGNORE_INDEX).any():
+                        replacement_token_id = _get_fallback_pad_token_id(self.tokenizer)
+                    labels_for_decode = _replace_ignore_index(
+                        labels_for_decode, replacement_token_id=replacement_token_id
+                    )
+
                 decoded_labels = self.tokenizer.batch_decode(
-                    labels, skip_special_tokens=True
+                    labels_for_decode, skip_special_tokens=True
                 )
+                input_ids_cpu = input_ids.cpu()
                 input_ids = np.where(
-                    input_ids.cpu() != -100, input_ids.cpu(), self.tokenizer.pad_token_id
+                    input_ids_cpu != IGNORE_INDEX,
+                    input_ids_cpu,
+                    self.tokenizer.pad_token_id,
                 )
                 input_texts = self.tokenizer.batch_decode(
                     input_ids, skip_special_tokens=True
@@ -211,7 +243,9 @@ class SummarizationScorer(object):
                     predictions=decoded_preds, references=decoded_labels
                 )
 
-                for pred, label, text in zip(predicted_tokens, labels, input_ids):
+                for pred, label, text in zip(
+                    predicted_tokens, labels_for_decode, input_ids
+                ):
                     predicted_kw = self.tokenizer.decode(pred, skip_special_tokens=True)
                     truth = self.tokenizer.decode(label, skip_special_tokens=True)
                     initial_text = self.tokenizer.decode(text, skip_special_tokens=True)
