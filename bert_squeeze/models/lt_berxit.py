@@ -270,7 +270,7 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
                             and not any(nd in n for nd in no_decay)
                             and any(nd in n for nd in [g])
                         ],
-                        'weight_decay_rate': self.config.weight_decay,
+                        'weight_decay': self.config.weight_decay,
                         'lr': l,
                     }
                 )
@@ -283,7 +283,7 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
                             and any(nd in n for nd in no_decay)
                             and any(nd in n for nd in [g])
                         ],
-                        'weight_decay_rate': 0.0,
+                        'weight_decay': 0.0,
                         'lr': l,
                     }
                 )
@@ -297,7 +297,7 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
                         and not any(nd in n for nd in no_decay)
                         and not any(nd in n for nd in group_all)
                     ],
-                    'weight_decay_rate': self.config.weight_decay,
+                    'weight_decay': self.config.weight_decay,
                 },
                 {
                     'params': [
@@ -307,7 +307,7 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
                         and any(nd in n for nd in no_decay)
                         and not any(nd in n for nd in group_all)
                     ],
-                    'weight_decay_rate': 0.0,
+                    'weight_decay': 0.0,
                 },
             ]
             optimizer_grouped_parameters = (

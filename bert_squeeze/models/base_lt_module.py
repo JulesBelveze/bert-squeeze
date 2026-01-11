@@ -13,7 +13,6 @@ from omegaconf import DictConfig, ListConfig
 from torch.nn import CrossEntropyLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import (
-    AdamW,
     AutoConfig,
     AutoModelForSeq2SeqLM,
     AutoModelForSequenceClassification,
@@ -107,52 +106,41 @@ class BaseTransformerModule(pl.LightningModule):
                                a list of schedulers to use during training
         """
         optimizer_parameters = self._get_optimizer_parameters()
+        learning_rate = (
+            self.config.learning_rates[0]
+            if isinstance(self.config.learning_rates, ListConfig)
+            else self.config.learning_rate
+        )
 
         optimizer_name = self.config.get("optimizer", "adamw")
         if optimizer_name == "adamw":
-            optimizer = AdamW(
+            optimizer = torch.optim.AdamW(
                 optimizer_parameters,
-                lr=(
-                    self.config.learning_rates[0]
-                    if isinstance(self.config.learning_rates, ListConfig)
-                    else self.config.learning_rate
-                ),
+                lr=learning_rate,
                 eps=self.config.adam_eps,
             )
 
             if self.config.lr_scheduler:
                 scheduler = ReduceLROnPlateau(optimizer)
-                lr_scheduler = {"scheduler": scheduler, "name": "NeptuneLogger"}
+                lr_scheduler = {'scheduler': scheduler, 'name': 'NeptuneLogger'}
                 return [optimizer], [lr_scheduler]
 
         elif optimizer_name == "bertadam":
             optimizer = BertAdam(
                 optimizer_parameters,
-                lr=(
-                    self.config.learning_rates[0]
-                    if isinstance(self.config.learning_rates, ListConfig)
-                    else self.config.learning_rate
-                ),
+                lr=learning_rate,
                 warmup=self.config.warmup_ratio,
             )
 
         elif optimizer_name == "adam":
             optimizer = torch.optim.Adam(
                 optimizer_parameters,
-                lr=(
-                    self.config.learning_rates[0]
-                    if isinstance(self.config.learning_rates, ListConfig)
-                    else self.config.learning_rate
-                ),
+                lr=learning_rate,
             )
         elif optimizer_name == "sgd":
             optimizer = torch.optim.SGD(
                 optimizer_parameters,
-                lr=(
-                    self.config.learning_rates[0]
-                    if isinstance(self.config.learning_rates, ListConfig)
-                    else self.config.learning_rate
-                ),
+                lr=learning_rate,
             )
         else:
             raise ValueError(f"Optimizer '{self.config.optimizer}' not supported.")
@@ -216,7 +204,7 @@ class BaseTransformerModule(pl.LightningModule):
                             if not any(nd in n for nd in no_decay)
                             and any(nd in n for nd in [g])
                         ],
-                        'weight_decay_rate': self.config.weight_decay,
+                        'weight_decay': self.config.weight_decay,
                         'lr': l,
                     }
                 )
@@ -228,7 +216,7 @@ class BaseTransformerModule(pl.LightningModule):
                             if any(nd in n for nd in no_decay)
                             and any(nd in n for nd in [g])
                         ],
-                        'weight_decay_rate': 0.0,
+                        'weight_decay': 0.0,
                         'lr': l,
                     }
                 )
@@ -241,7 +229,7 @@ class BaseTransformerModule(pl.LightningModule):
                         if not any(nd in n for nd in no_decay)
                         and not any(nd in n for nd in group_all)
                     ],
-                    'weight_decay_rate': self.config.weight_decay,
+                    'weight_decay': self.config.weight_decay,
                 },
                 {
                     'params': [
@@ -250,7 +238,7 @@ class BaseTransformerModule(pl.LightningModule):
                         if any(nd in n for nd in no_decay)
                         and not any(nd in n for nd in group_all)
                     ],
-                    'weight_decay_rate': 0.0,
+                    'weight_decay': 0.0,
                 },
             ]
             optimizer_grouped_parameters = (
@@ -266,7 +254,7 @@ class BaseTransformerModule(pl.LightningModule):
                         for n, p in self.named_parameters()
                         if not any(nd in n for nd in no_decay)
                     ],
-                    'weight_decay_rate': self.config.weight_decay,
+                    'weight_decay': self.config.weight_decay,
                 },
                 {
                     'params': [
@@ -274,7 +262,7 @@ class BaseTransformerModule(pl.LightningModule):
                         for n, p in self.named_parameters()
                         if any(nd in n for nd in no_decay)
                     ],
-                    'weight_decay_rate': 0.0,
+                    'weight_decay': 0.0,
                 },
             ]
         return optimizer_grouped_parameters

@@ -5,7 +5,6 @@ import numpy as np
 import torch
 from omegaconf import DictConfig, ListConfig
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from transformers import AdamW
 
 from ..utils.experiment_logging import ExperimentLogger
 from ..utils.optimizers import BertAdam
@@ -92,7 +91,7 @@ class BaseDistiller(pl.LightningModule):
                             if not any(nd in n for nd in no_decay)
                             and any(nd in n for nd in [g])
                         ],
-                        'weight_decay_rate': self.params.weight_decay,
+                        'weight_decay': self.params.weight_decay,
                         'lr': l,
                     }
                 )
@@ -104,7 +103,7 @@ class BaseDistiller(pl.LightningModule):
                             if any(nd in n for nd in no_decay)
                             and any(nd in n for nd in [g])
                         ],
-                        'weight_decay_rate': 0.0,
+                        'weight_decay': 0.0,
                         'lr': l,
                     }
                 )
@@ -117,7 +116,7 @@ class BaseDistiller(pl.LightningModule):
                         if not any(nd in n for nd in no_decay)
                         and not any(nd in n for nd in group_all)
                     ],
-                    'weight_decay_rate': self.params.weight_decay,
+                    'weight_decay': self.params.weight_decay,
                 },
                 {
                     'params': [
@@ -126,7 +125,7 @@ class BaseDistiller(pl.LightningModule):
                         if any(nd in n for nd in no_decay)
                         and not any(nd in n for nd in group_all)
                     ],
-                    'weight_decay_rate': 0.0,
+                    'weight_decay': 0.0,
                 },
             ]
             optimizer_grouped_parameters = (
@@ -142,7 +141,7 @@ class BaseDistiller(pl.LightningModule):
                         for n, p in self.student.named_parameters()
                         if not any(nd in n for nd in no_decay)
                     ],
-                    'weight_decay_rate': self.params.weight_decay,
+                    'weight_decay': self.params.weight_decay,
                 },
                 {
                     'params': [
@@ -150,7 +149,7 @@ class BaseDistiller(pl.LightningModule):
                         for n, p in self.student.named_parameters()
                         if any(nd in n for nd in no_decay)
                     ],
-                    'weight_decay_rate': 0.0,
+                    'weight_decay': 0.0,
                 },
             ]
         return optimizer_grouped_parameters
@@ -164,35 +163,33 @@ class BaseDistiller(pl.LightningModule):
                                a list of schedulers to use during training
         """
         optimizer_parameters = self._get_student_parameters()
+        learning_rate = self.params.learning_rates[0]
+
         if self.params.optimizer == "sgd":
-            optimizer = torch.optim.SGD(
-                optimizer_parameters, lr=self.params.learning_rates[0]
-            )
+            optimizer = torch.optim.SGD(optimizer_parameters, lr=learning_rate)
         elif self.params.optimizer == "adamw":
-            optimizer = AdamW(
+            optimizer = torch.optim.AdamW(
                 optimizer_parameters,
-                lr=self.params.learning_rates[0],
+                lr=learning_rate,
                 eps=self.params.adam_eps,
             )
         elif self.params.optimizer == "bertadam":
             optimizer = BertAdam(
                 optimizer_parameters,
-                lr=self.params.learning_rates[0],
+                lr=learning_rate,
                 warmup=self.params.warmup_ratio,
             )
         elif self.params.optimizer == "adam":
-            optimizer = torch.optim.Adam(
-                optimizer_parameters, lr=self.params.learning_rates[0]
-            )
+            optimizer = torch.optim.Adam(optimizer_parameters, lr=learning_rate)
         else:
             raise ValueError(f"Optimizer '{self.params.optimizer}' not supported.")
 
         if self.params.lr_scheduler:
             scheduler = ReduceLROnPlateau(optimizer)
             lr_scheduler = {
-                "scheduler": scheduler,
-                "name": "NeptuneLogger",
-                "monitor": "loss",
+                'scheduler': scheduler,
+                'name': 'NeptuneLogger',
+                'monitor': 'loss',
             }
             return [optimizer], [lr_scheduler]
 
