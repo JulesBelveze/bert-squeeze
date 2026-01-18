@@ -39,6 +39,8 @@ data:
   _target_: bert_squeeze.data.modules.transformer_module.Seq2SeqTransformerDataModule
   dataset_config:
     is_local: false
+    source_prefix:
+    target_prefix:
     target_col:
     path:
     split:
@@ -47,4 +49,4 @@ data:
   max_target_length: 64
   max_source_length: 256
   tokenizer_name: ${model.pretrained_model}
-
+  num_workers: 0
