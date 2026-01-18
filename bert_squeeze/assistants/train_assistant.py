@@ -1,5 +1,5 @@
 import logging
-import os
+from importlib import resources
 from typing import Dict, List, Optional
 
 import lightning.pytorch as pl
@@ -7,7 +7,6 @@ from hydra.utils import instantiate
 from lightning.pytorch.callbacks import Callback
 from lightning.pytorch.loggers import Logger, TensorBoardLogger
 from omegaconf import OmegaConf
-from pkg_resources import resource_filename
 
 from bert_squeeze.utils.utils_fct import deep_update
 
@@ -65,17 +64,18 @@ class TrainAssistant(object):
         callbacks: Optional[List[Callback]] = None,
     ):
         try:
-            conf = OmegaConf.load(
-                resource_filename(
-                    "bert_squeeze",
-                    os.path.join("assistants/configs", CONFIG_MAPPER[name]),
-                )
-            )
+            config_name = CONFIG_MAPPER[name]
         except KeyError:
             raise ValueError(
                 f"'{name}' is not a valid configuration name, please use one of the"
                 f" following: {CONFIG_MAPPER.keys()}"
             )
+
+        config_path = resources.files("bert_squeeze").joinpath(
+            "assistants/configs", config_name
+        )
+        with resources.as_file(config_path) as resolved_path:
+            conf = OmegaConf.load(resolved_path)
         if (
             data_kwargs is not None
             and data_kwargs.get("dataset_config", {}).get("path") is not None

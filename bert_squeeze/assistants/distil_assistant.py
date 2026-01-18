@@ -1,5 +1,5 @@
 import logging
-import os
+from importlib import resources
 from typing import Dict, List, Optional, Union
 
 import lightning.pytorch as pl
@@ -8,7 +8,6 @@ from hydra.utils import instantiate
 from lightning.pytorch.callbacks import Callback
 from lightning.pytorch.loggers import Logger, TensorBoardLogger
 from omegaconf import DictConfig, OmegaConf
-from pkg_resources import resource_filename
 
 from bert_squeeze.utils.utils_fct import deep_update, load_model_from_exp
 
@@ -54,10 +53,17 @@ class DistilAssistant(object):
             list of callbacks to use during training
 
     Example:
+        >>> from importlib import resources
         >>> from bert_squeeze.assistants import DistilAssistant
         >>> distil_assistant = DistilAssistant(
                 "distil-parallel",
-                data_kwargs={"path": resource_filename("bert_squeeze", "data/local_datasets/parallel_dataset.py")},
+                data_kwargs={
+                    "path": str(
+                        resources.files("bert_squeeze").joinpath(
+                            "data/local_datasets/parallel_dataset.py"
+                        )
+                    )
+                },
                 teacher_kwargs={
                     "_target_": transformers.models.auto.AutoModelForSequenceClassification.from_pretrained
                     "pretrained_model_name_or_path": "bert-base-cased"
@@ -76,11 +82,19 @@ class DistilAssistant(object):
         logger_kwargs: Optional[Dict[str, object]] = None,
         callbacks: Optional[List[Callback]] = None,
     ):
-        conf = OmegaConf.load(
-            resource_filename(
-                "bert_squeeze", os.path.join("assistants/configs", CONFIG_MAPPER[name])
+        try:
+            config_name = CONFIG_MAPPER[name]
+        except KeyError:
+            raise ValueError(
+                f"'{name}' is not a valid configuration name, please use one of the"
+                f" following: {CONFIG_MAPPER.keys()}"
             )
+
+        config_path = resources.files("bert_squeeze").joinpath(
+            "assistants/configs", config_name
         )
+        with resources.as_file(config_path) as resolved_path:
+            conf = OmegaConf.load(resolved_path)
         self._teacher_checkpoint = teacher_kwargs.pop("checkpoint_path", None)
 
         for name in ["teacher_module", "student_module"]:
