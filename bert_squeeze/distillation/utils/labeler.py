@@ -1,6 +1,8 @@
 import logging
 from collections import defaultdict
-from typing import Any, Dict, List, Tuple, Union
+from importlib import resources
+from pathlib import Path
+from typing import Dict, List, Tuple, Union
 
 import datasets
 import lightning.pytorch as pl
@@ -8,7 +10,6 @@ import torch
 import torch.nn.functional as F
 from datasets import Dataset, DatasetDict
 from omegaconf import DictConfig
-from pkg_resources import resource_filename
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoTokenizer
@@ -65,15 +66,26 @@ class HardLabeler(object):
                 fine-tuned model along with the associated tokenizer
         """
         if config.get("checkpoint_path") is not None:
-            checkpoint_path = resource_filename("bert_squeeze", config.checkpoint_path)
             teacher_class = config.teacher
-
-            teacher = teacher_class.load_from_checkpoint(
-                checkpoint_path,
-                training_config=config,
-                pretrained_model=config.pretrained_model,
-                num_labels=config.num_labels,
-            )
+            checkpoint_path = Path(config.checkpoint_path)
+            if checkpoint_path.is_absolute():
+                teacher = teacher_class.load_from_checkpoint(
+                    str(checkpoint_path),
+                    training_config=config,
+                    pretrained_model=config.pretrained_model,
+                    num_labels=config.num_labels,
+                )
+            else:
+                checkpoint_resource = resources.files("bert_squeeze").joinpath(
+                    config.checkpoint_path
+                )
+                with resources.as_file(checkpoint_resource) as resolved_path:
+                    teacher = teacher_class.load_from_checkpoint(
+                        resolved_path,
+                        training_config=config,
+                        pretrained_model=config.pretrained_model,
+                        num_labels=config.num_labels,
+                    )
         else:
             teacher = config.teacher
 
@@ -111,12 +123,14 @@ class HardLabeler(object):
     def get_dataloader(self) -> torch.utils.data.DataLoader:
         """"""
         if self.dataset_config.is_local:
-            dataset = datasets.load_dataset(
-                resource_filename(
-                    "bert-squeeze", f"data/{self.dataset_config.path}_dataset.py"
-                ),
-                split=self.dataset_config.split,
+            dataset_resource = resources.files("bert_squeeze").joinpath(
+                "data", f"{self.dataset_config.path}_dataset.py"
             )
+            with resources.as_file(dataset_resource) as resolved_path:
+                dataset = datasets.load_dataset(
+                    str(resolved_path),
+                    split=self.dataset_config.split,
+                )
         else:
             dataset = datasets.load_dataset(
                 self.dataset_config.path, split=self.dataset_config.split
@@ -129,7 +143,7 @@ class HardLabeler(object):
         featurized_dataset.set_format(type="pt")
         return DataLoader(featurized_dataset, batch_size=self.batch_size, drop_last=True)
 
-    def label_dataset(self) -> Dict[str, List[Any]]:
+    def label_dataset(self) -> Dict[str, List[Union[int, List[int]]]]:
         """
         Annotates the unlabeled dataset using the fine-tuned teacher.
 
