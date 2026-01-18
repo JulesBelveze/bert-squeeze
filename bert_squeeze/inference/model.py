@@ -25,7 +25,9 @@ class ModelWrapper:
         if not resolved_path.is_absolute():
             self._resource_stack = ExitStack()
             resource = resources.files("bert_squeeze").joinpath(checkpoint_path)
-            resolved_path = self._resource_stack.enter_context(resources.as_file(resource))
+            resolved_path = self._resource_stack.enter_context(
+                resources.as_file(resource)
+            )
 
         self.session = self._get_ort_session(str(resolved_path), **kwargs)
 

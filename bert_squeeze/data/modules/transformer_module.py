@@ -6,7 +6,12 @@ import datasets
 from omegaconf import DictConfig
 from overrides import overrides
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, DataCollatorForSeq2Seq, PreTrainedTokenizerBase, BatchEncoding
+from transformers import (
+    AutoTokenizer,
+    BatchEncoding,
+    DataCollatorForSeq2Seq,
+    PreTrainedTokenizerBase,
+)
 
 from .base import BaseDataModule
 
