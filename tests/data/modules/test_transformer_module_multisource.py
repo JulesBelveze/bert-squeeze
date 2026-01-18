@@ -4,7 +4,10 @@ import datasets
 import pytest
 from omegaconf import OmegaConf
 
-from bert_squeeze.data.modules.transformer_module import Seq2SeqTransformerDataModule
+from bert_squeeze.data.modules.transformer_module import (
+    Seq2SeqTransformerDataModule,
+    _get_seq2seq_tokenizer,
+)
 
 
 class _DummyTokenizer:
@@ -16,12 +19,10 @@ class _DummyTokenizer:
     def __call__(self, *_, **__):
         return {"input_ids": [], "attention_mask": []}
 
-    def as_target_tokenizer(self):
-        return self
-
 
 @pytest.fixture(autouse=True)
 def mock_tokenizer(monkeypatch):
+    _get_seq2seq_tokenizer.cache_clear()
     monkeypatch.setattr(
         "bert_squeeze.data.modules.transformer_module.AutoTokenizer",
         type(
