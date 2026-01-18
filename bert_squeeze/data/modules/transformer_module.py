@@ -209,8 +209,8 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         self.dataset_config = dataset_config
         self.source_col = dataset_config.source_col
         self.target_col = dataset_config.target_col
-        self.source_prefix = dataset_config.get("source_prefix")
-        self.target_prefix = dataset_config.get("target_prefix")
+        self.source_prefix = dataset_config.source_prefix
+        self.target_prefix = dataset_config.target_prefix
 
         raw_paths = dataset_config.get("data_path", None)
         self._uses_data_path = raw_paths is not None
@@ -364,8 +364,8 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         Returns:
             DatasetDict: featurized dataset
         """
-        source_prefix = self.source_prefix or ""
-        target_prefix = self.target_prefix or ""
+        source_prefix = self.source_prefix
+        target_prefix = self.target_prefix
         source_col = self.source_col
         target_col = self.target_col
 
