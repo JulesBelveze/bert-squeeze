@@ -172,7 +172,19 @@ class BaseTransformerModule(pl.LightningModule):
         Returns:
             List[Dict]: group of parameters to optimize
         """
-        no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight']
+        no_decay = [
+            'bias',
+            'gamma',
+            'beta',
+            'LayerNorm.weight',
+            'LayerNorm.bias',
+            'layer_norm.weight',
+            'layer_norm.bias',
+            'layernorm.weight',
+            'layernorm.bias',
+            'ln_f.weight',
+            'ln_f.bias',
+        ]
 
         if self.config.discriminative_learning:
             if (

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import List, Mapping, Optional, Sequence
 
 import datasets
 from omegaconf import DictConfig
@@ -209,6 +209,8 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         self.dataset_config = dataset_config
         self.source_col = dataset_config.source_col
         self.target_col = dataset_config.target_col
+        self.source_prefix = dataset_config.get("source_prefix")
+        self.target_prefix = dataset_config.get("target_prefix")
 
         raw_paths = dataset_config.get("data_path", None)
         self._uses_data_path = raw_paths is not None
@@ -362,9 +364,20 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         Returns:
             DatasetDict: featurized dataset
         """
+        source_prefix = self.source_prefix or ""
+        target_prefix = self.target_prefix or ""
+        source_col = self.source_col
+        target_col = self.target_col
+
+        def _format_source(example: Mapping[str, object]) -> str:
+            return f"{source_prefix}{example[source_col]}"
+
+        def _format_target(example: Mapping[str, object]) -> str:
+            return f"{target_prefix}{example[target_col]}"
+
         tokenized_dataset = self.dataset.map(
-            lambda x: self.tokenizer(
-                x[self.source_col],
+            lambda example: self.tokenizer(
+                _format_source(example),
                 padding=False,
                 max_length=self.max_source_length,
                 truncation=True,
@@ -374,7 +387,7 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
             tokenized_dataset = tokenized_dataset.map(
                 lambda x: {
                     "labels": self.tokenizer(
-                        x[self.target_col],
+                        _format_target(x),
                         padding=False,
                         max_length=self.max_target_length,
                         truncation=True,

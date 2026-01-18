@@ -214,7 +214,19 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
     def _get_optimizer_parameters(self) -> List[Dict]:
         # Mirror LtDeeBert grouping for backbone stage and provide a gate-only
         # variant for the "gates" stage.
-        no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight']
+        no_decay = [
+            'bias',
+            'gamma',
+            'beta',
+            'LayerNorm.weight',
+            'LayerNorm.bias',
+            'layer_norm.weight',
+            'layer_norm.bias',
+            'layernorm.weight',
+            'layernorm.bias',
+            'ln_f.weight',
+            'ln_f.bias',
+        ]
 
         # Gate-only training stage: optimize only gate parameters
         if getattr(self, "train_stage", "backbone") == "gates":
