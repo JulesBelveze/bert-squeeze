@@ -21,6 +21,7 @@ CONFIG_MAPPER = {
     "theseusbert": "train_theseus_bert.yaml",
     "adapter": "train_adapter.yaml",
     "t5": "train_t5.yaml",
+    "layerskip": "train_layerskip.yaml",
 }
 
 
