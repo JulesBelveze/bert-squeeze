@@ -215,8 +215,8 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         self.dataset_config = dataset_config
         self.source_col = dataset_config.source_col
         self.target_col = dataset_config.target_col
-        self.source_prefix = dataset_config.source_prefix
-        self.target_prefix = dataset_config.target_prefix
+        self.source_prefix = dataset_config.get("source_prefix") or ""
+        self.target_prefix = dataset_config.get("target_prefix") or ""
 
         raw_paths = dataset_config.get("data_path", None)
         self._uses_data_path = raw_paths is not None

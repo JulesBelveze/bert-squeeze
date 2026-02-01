@@ -212,7 +212,7 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
         Returns:
             List[Dict]: group of parameters to optimize
         """
-        no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight']
+        no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight', 'layer_norm.weight']
 
         if self.config.discriminative_learning:
             if (
