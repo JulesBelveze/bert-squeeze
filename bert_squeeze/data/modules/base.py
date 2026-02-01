@@ -28,9 +28,7 @@ class BaseDataModule(pl.LightningDataModule):
         Returns:
             None
         """
-        dataset = datasets.load_dataset(
-            self.dataset_config.path, trust_remote_code=True
-        )
+        dataset = datasets.load_dataset(self.dataset_config.path, trust_remote_code=True)
         dataset = self._normalize_splits(dataset)
 
         if "percent" in self.dataset_config:
