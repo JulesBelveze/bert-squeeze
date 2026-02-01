@@ -23,8 +23,7 @@ class LayerDropoutWrapper(nn.Module):
         if not self.training or self.dropout_prob == 0.0:
             return self.layer(hidden_states, attention_mask, *args, **kwargs)
 
-        keep_layer = torch.rand(1, device=hidden_states.device).item() > self.dropout_prob
-        if keep_layer:
+        if torch.rand(1, device=hidden_states.device).item() > self.dropout_prob:
             return self.layer(hidden_states, attention_mask, *args, **kwargs)
 
         output = self.layer(hidden_states, attention_mask, *args, **kwargs)

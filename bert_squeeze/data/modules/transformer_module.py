@@ -1,13 +1,20 @@
+from contextlib import nullcontext
+from functools import lru_cache
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Union
 
 import datasets
 from omegaconf import DictConfig
 from overrides import overrides
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, DataCollatorForSeq2Seq
+from transformers import AutoTokenizer, DataCollatorForSeq2Seq, PreTrainedTokenizerBase
 
 from .base import BaseDataModule
+
+
+@lru_cache(maxsize=8)
+def _get_seq2seq_tokenizer(tokenizer_name: str) -> PreTrainedTokenizerBase:
+    return AutoTokenizer.from_pretrained(tokenizer_name)
 
 
 class TransformerDataModule(BaseDataModule):
@@ -239,7 +246,9 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         self.train_batch_size = kwargs.get("train_batch_size", 32)
         self.eval_batch_size = kwargs.get("eval_batch_size", 32)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        self.tokenizer = _get_seq2seq_tokenizer(tokenizer_name)
+        self.source_prefix = dataset_config.get("source_prefix") or ""
+        self.target_prefix = dataset_config.get("target_prefix") or ""
 
         self.dataset = None
         self.train = None
@@ -364,17 +373,19 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         """
         tokenized_dataset = self.dataset.map(
             lambda x: self.tokenizer(
-                x[self.source_col],
+                self._apply_prefix(x[self.source_col], self.source_prefix),
                 padding=False,
                 max_length=self.max_source_length,
                 truncation=True,
             )
         )
-        with self.tokenizer.as_target_tokenizer():
+        target_tokenizer = getattr(self.tokenizer, "as_target_tokenizer", None)
+        context = target_tokenizer() if target_tokenizer is not None else nullcontext()
+        with context:
             tokenized_dataset = tokenized_dataset.map(
                 lambda x: {
                     "labels": self.tokenizer(
-                        x[self.target_col],
+                        self._apply_prefix(x[self.target_col], self.target_prefix),
                         padding=False,
                         max_length=self.max_target_length,
                         truncation=True,
@@ -453,3 +464,13 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
             return collator(examples)
 
         return _collate
+
+    @staticmethod
+    def _apply_prefix(
+        value: Optional[Union[str, Sequence[str]]], prefix: str
+    ) -> Optional[Union[str, List[str]]]:
+        if not prefix or value is None:
+            return value
+        if isinstance(value, str):
+            return f"{prefix}{value}"
+        return [f"{prefix}{item}" for item in value]

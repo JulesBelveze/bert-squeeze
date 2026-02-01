@@ -1,6 +1,6 @@
 import logging
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import lightning.pytorch as pl
 import torch
@@ -58,8 +58,8 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
     @overrides
     def forward(
         self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -85,12 +85,8 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
 
     @overrides
     def training_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch.get("token_type_ids"),
-        }
-        outputs = self.forward(**inputs)
+        inputs = self._build_inputs(batch)
+        outputs = self._forward_all_layers(**inputs)
         loss = self.loss(outputs=outputs, labels=batch["labels"])
 
         logits = self._get_layer_logits(outputs[-1])
@@ -107,57 +103,15 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
 
     @overrides
     def validation_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch.get("token_type_ids"),
-        }
-
-        if self.inference_mode:
-            hidden_states = self._forward_early_exit(**inputs)
-        else:
-            hidden_states = self._forward_all_layers(**inputs)[-1]
-
-        logits = self._get_layer_logits(hidden_states)
-        loss = super().loss(labels=batch["labels"], logits=logits)
-        self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        self.validation_step_outputs.append(
-            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
-        )
-        return loss
+        return self._eval_step(batch, self.valid_scorer, self.validation_step_outputs)
 
     @overrides
     def test_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch.get("token_type_ids"),
-        }
-
-        if self.inference_mode:
-            hidden_states = self._forward_early_exit(**inputs)
-        else:
-            hidden_states = self._forward_all_layers(**inputs)[-1]
-
-        logits = self._get_layer_logits(hidden_states)
-        loss = super().loss(labels=batch["labels"], logits=logits)
-        self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        self.test_step_outputs.append(
-            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
-        )
-        return loss
+        return self._eval_step(batch, self.test_scorer, self.test_step_outputs)
 
     def predict_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch.get("token_type_ids"),
-        }
-        if self.inference_mode:
-            hidden_states = self._forward_early_exit(**inputs)
-        else:
-            hidden_states = self._forward_all_layers(**inputs)[-1]
-
+        inputs = self._build_inputs(batch)
+        hidden_states = self._eval_hidden_states(inputs)
         logits = self._get_layer_logits(hidden_states)
         return torch.softmax(logits, dim=-1)
 
@@ -203,6 +157,40 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
         if hidden_states is None:
             raise RuntimeError("output_hidden_states must be enabled for LayerSkip.")
         return tuple(hidden_states[1:])
+
+    def _eval_step(
+        self,
+        batch,
+        scorer,
+        output_store: List[Dict[str, torch.Tensor]],
+    ) -> torch.Tensor:
+        inputs = self._build_inputs(batch)
+        hidden_states = self._eval_hidden_states(inputs)
+        logits = self._get_layer_logits(hidden_states)
+        labels = batch["labels"]
+        loss = super().loss(labels=labels, logits=logits)
+        scorer.add(logits.cpu(), labels.cpu(), loss.cpu())
+        output_store.append(
+            {"loss": loss, "logits": logits.cpu(), "labels": labels.cpu()}
+        )
+        return loss
+
+    def _eval_hidden_states(
+        self, inputs: Dict[str, Optional[torch.Tensor]]
+    ) -> torch.Tensor:
+        if self.inference_mode:
+            return self._forward_early_exit(**inputs)
+        return self._forward_all_layers(**inputs)[-1]
+
+    @staticmethod
+    def _build_inputs(
+        batch: Dict[str, torch.Tensor]
+    ) -> Dict[str, Optional[torch.Tensor]]:
+        return {
+            "input_ids": batch["input_ids"],
+            "attention_mask": batch["attention_mask"],
+            "token_type_ids": batch.get("token_type_ids"),
+        }
 
     def _forward_early_exit(
         self,
