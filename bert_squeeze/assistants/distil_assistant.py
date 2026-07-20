@@ -1,6 +1,7 @@
 import logging
+from copy import deepcopy
 from importlib import resources
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, cast
 
 import lightning.pytorch as pl
 import torch.nn
@@ -17,6 +18,16 @@ CONFIG_MAPPER = {
     "distil-soft": "distil_soft.yaml",
     "distil-hard": "distil_hard.yaml",
     "distil-seq2seq": "distil_seq2seq.yaml",
+}
+
+DATA_SECTION_KEYS = {
+    "_target_",
+    "teacher_module",
+    "student_module",
+    "soft_data_config",
+    "hard_labeler",
+    "train_batch_size",
+    "eval_batch_size",
 }
 
 
@@ -77,7 +88,7 @@ class DistilAssistant(object):
         general_kwargs: Optional[Dict[str, object]] = None,
         train_kwargs: Optional[Dict[str, object]] = None,
         student_kwargs: Optional[Dict[str, object]] = None,
-        teacher_kwargs: Dict[str, object] = {},
+        teacher_kwargs: Optional[Dict[str, object]] = None,
         data_kwargs: Optional[Dict[str, object]] = None,
         logger_kwargs: Optional[Dict[str, object]] = None,
         callbacks: Optional[List[Callback]] = None,
@@ -95,41 +106,63 @@ class DistilAssistant(object):
         )
         with resources.as_file(config_path) as resolved_path:
             conf = OmegaConf.load(resolved_path)
-        self._teacher_checkpoint = teacher_kwargs.pop("checkpoint_path", None)
+        teacher_overrides = deepcopy(teacher_kwargs) if teacher_kwargs is not None else {}
+        data_overrides = deepcopy(data_kwargs) if data_kwargs is not None else None
+        self._teacher_checkpoint = teacher_overrides.pop("checkpoint_path", None)
 
-        for name in ["teacher_module", "student_module"]:
-            conf["data"][name]["dataset_config"] = deep_update(
-                conf["data"][name]["dataset_config"], data_kwargs
+        if data_overrides is not None:
+            shared_dataset_overrides = cast(
+                Dict[str, object], data_overrides.pop("dataset_config", {})
+            )
+            shared_dataset_overrides.update(
+                {
+                    key: value
+                    for key, value in data_overrides.items()
+                    if key not in DATA_SECTION_KEYS
+                }
             )
 
-        for name, kws in zip(
+            for module_name in ["teacher_module", "student_module"]:
+                conf["data"][module_name]["dataset_config"] = deep_update(
+                    conf["data"][module_name]["dataset_config"],
+                    shared_dataset_overrides,
+                )
+
+        for section_name, overrides in zip(
             ["general", "train", "data", "logger", "callbacks"],
-            [general_kwargs, train_kwargs, data_kwargs, logger_kwargs, callbacks],
+            [general_kwargs, train_kwargs, data_overrides, logger_kwargs, callbacks],
         ):
-            if kws is not None:
-                base = conf.get(name)
+            if overrides is not None:
+                base = conf.get(section_name)
                 if base is None:
-                    conf[name] = kws
+                    conf[section_name] = overrides
                     continue
 
-                if "_target_" in kws and kws["_target_"] != conf[name]["_target_"]:
-                    del conf[name]
-                    conf[name] = kws
-                elif name == "data":
-                    for module in ["teacher_module", "student_module"]:
+                if (
+                    isinstance(overrides, dict)
+                    and "_target_" in overrides
+                    and overrides["_target_"] != conf[section_name]["_target_"]
+                ):
+                    del conf[section_name]
+                    conf[section_name] = overrides
+                elif section_name == "data":
+                    for module_name in ["teacher_module", "student_module"]:
                         if (
-                            module in kws
-                            and "_target_" in kws[module]
-                            and conf[name][module]["_target_"] != kws[module]["_target_"]
+                            module_name in overrides
+                            and "_target_" in overrides[module_name]
+                            and conf[section_name][module_name]["_target_"]
+                            != overrides[module_name]["_target_"]
                         ):
-                            del conf[name][module]
-                            conf[name][module] = kws[module]
+                            del conf[section_name][module_name]
+                            conf[section_name][module_name] = overrides[module_name]
 
-                conf[name] = deep_update(conf[name], kws)
+                conf[section_name] = deep_update(conf[section_name], overrides)
 
-        for name, kws in zip(["teacher", "student"], [teacher_kwargs, student_kwargs]):
-            if kws is not None:
-                conf["model"][name] = deep_update(conf["model"][name], kws)
+        for role, overrides in zip(
+            ["teacher", "student"], [teacher_overrides, student_kwargs]
+        ):
+            if overrides is not None:
+                conf["model"][role] = deep_update(conf["model"][role], overrides)
 
         self.name = name
         self.general = conf["general"]
