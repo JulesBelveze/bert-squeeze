@@ -41,9 +41,13 @@ class LtSequenceClassificationCustomBert(BaseSequenceClassificationTransformerMo
         scorer: Scorer = None,
         **kwargs,
     ):
+        if model is None:
+            model = CustomBertModel.from_pretrained(pretrained_model)
+
         super().__init__(
             training_config, pretrained_model, num_labels, model, scorer, **kwargs
         )
+        self._build_model()
 
     @overrides
     def forward(
@@ -142,7 +146,7 @@ class LtSequenceClassificationCustomBert(BaseSequenceClassificationTransformerMo
 
     def _build_model(self):
         """"""
-        self.encoder = CustomBertModel.from_pretrained(self.pretrained_model)
+        self.encoder = self.model
         self.classifier = torch.nn.Sequential(
             torch.nn.Dropout(self.model_config.hidden_dropout_prob),
             torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),

@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from omegaconf import DictConfig, ListConfig
 from overrides import overrides
 from torch.nn import CrossEntropyLoss
+from transformers import AutoConfig
 
 from bert_squeeze.utils.scorers import Scorer
 
@@ -42,6 +43,14 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
         scorer: Scorer = None,
         **kwargs,
     ):
+        if model is None:
+            model = DeeBertModel.from_pretrained(
+                pretrained_model,
+                config=AutoConfig.from_pretrained(
+                    pretrained_model, num_labels=num_labels
+                ),
+            )
+
         super().__init__(
             training_config, pretrained_model, num_labels, model, scorer, **kwargs
         )
@@ -384,7 +393,7 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
 
     def _build_model(self):
         """"""
-        self.bert = DeeBertModel(self.model_config)
+        self.bert = self.model
         self.num_layers = len(self.bert.encoder.layer)
         self.dropout = nn.Dropout(self.model_config.hidden_dropout_prob)
         self.classifier = torch.nn.Sequential(
@@ -395,6 +404,5 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
             torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels),
         )
 
-        self.bert.init_weights()
         self.bert.encoder.set_early_exit_entropy(self.config.early_exit_entropy)
         self.bert.init_highway_pooler()
