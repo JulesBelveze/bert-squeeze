@@ -25,6 +25,11 @@ from ..utils.scorers import BaseSequenceClassificationScorer, LMScorer, Scorer
 from ..utils.types import Loss
 
 
+class _IdentityParamList(list):
+    def __contains__(self, item: object) -> bool:
+        return any(param is item for param in self)
+
+
 class BaseTransformerModule(pl.LightningModule):
     """
     Base class to extend for all Transformer-based modules.
@@ -172,7 +177,7 @@ class BaseTransformerModule(pl.LightningModule):
         Returns:
             List[Dict]: group of parameters to optimize
         """
-        no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight']
+        no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight', 'layer_norm.weight']
 
         if self.config.discriminative_learning:
             if (
@@ -265,6 +270,8 @@ class BaseTransformerModule(pl.LightningModule):
                     'weight_decay': 0.0,
                 },
             ]
+        for group in optimizer_grouped_parameters:
+            group["params"] = _IdentityParamList(list(group["params"]))
         return optimizer_grouped_parameters
 
     def _set_scorers(self, *args, **kwargs) -> None:

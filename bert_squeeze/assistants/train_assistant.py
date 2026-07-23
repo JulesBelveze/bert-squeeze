@@ -1,5 +1,5 @@
-import logging
-import os
+from copy import deepcopy
+from importlib import resources
 from typing import Dict, List, Optional
 
 import lightning.pytorch as pl
@@ -7,7 +7,6 @@ from hydra.utils import instantiate
 from lightning.pytorch.callbacks import Callback
 from lightning.pytorch.loggers import Logger, TensorBoardLogger
 from omegaconf import OmegaConf
-from pkg_resources import resource_filename
 
 from bert_squeeze.utils.utils_fct import deep_update
 
@@ -66,45 +65,42 @@ class TrainAssistant(object):
         callbacks: Optional[List[Callback]] = None,
     ):
         try:
-            conf = OmegaConf.load(
-                resource_filename(
-                    "bert_squeeze",
-                    os.path.join("assistants/configs", CONFIG_MAPPER[name]),
-                )
-            )
+            config_name = CONFIG_MAPPER[name]
         except KeyError:
             raise ValueError(
                 f"'{name}' is not a valid configuration name, please use one of the"
                 f" following: {CONFIG_MAPPER.keys()}"
             )
-        if (
-            data_kwargs is not None
-            and data_kwargs.get("dataset_config", {}).get("path") is not None
-        ):
-            logging.warning(
-                "Found value for `dataset_config.path` which conflicts with parameter"
-                " `dataset_path`, usingvalue from the later."
-            )
 
-        conf["data"]["dataset_config"] = deep_update(
-            conf["data"]["dataset_config"], data_kwargs["dataset_config"]
+        config_path = resources.files("bert_squeeze").joinpath(
+            "assistants/configs", config_name
         )
-        del data_kwargs["dataset_config"]
+        with resources.as_file(config_path) as resolved_path:
+            conf = OmegaConf.load(resolved_path)
+        data_overrides = deepcopy(data_kwargs) if data_kwargs is not None else None
+        if data_overrides is not None:
+            dataset_overrides = data_overrides.pop("dataset_config", None)
+            if dataset_overrides is not None:
+                conf["data"]["dataset_config"] = deep_update(
+                    conf["data"]["dataset_config"], dataset_overrides
+                )
 
-        for name, kws in zip(
+        for section_name, overrides in zip(
             ["general", "train", "model", "data", "logger", "callbacks"],
             [
                 general_kwargs,
                 train_kwargs,
                 model_kwargs,
-                data_kwargs,
+                data_overrides,
                 logger_kwargs,
                 callbacks,
             ],
         ):
-            if kws is not None:
-                base = conf.get(name)
-                conf[name] = kws if base is None else deep_update(base, kws)
+            if overrides is not None:
+                base = conf.get(section_name)
+                conf[section_name] = (
+                    overrides if base is None else deep_update(base, overrides)
+                )
 
         self.name = name
         self.general = conf["general"]

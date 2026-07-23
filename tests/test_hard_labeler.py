@@ -1,15 +1,19 @@
+from pathlib import Path
+
 import omegaconf
 import pytest
 import torch
 from hydra.utils import instantiate
-from pkg_resources import resource_filename
 from transformers import BertForSequenceClassification
 
 
 @pytest.fixture
 def conf():
-    path = resource_filename(
-        "bert_squeeze", "../tests/fixtures/resources/dummy_hard_labeler_config.yaml"
+    path = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "resources"
+        / "dummy_hard_labeler_config.yaml"
     )
     return omegaconf.OmegaConf.load(path)
 

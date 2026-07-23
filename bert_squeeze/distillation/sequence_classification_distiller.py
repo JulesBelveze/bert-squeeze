@@ -247,7 +247,7 @@ class SequenceClassificationDistiller(BaseSequenceClassificationDistiller):
         else:
             objective = torch.tensor(0.0).to(labels.device)
 
-        kd_loss = self.loss_distill(teacher_logits, student_logits)
+        kd_loss = self.loss_distill(student_logits, teacher_logits)
         full_loss = (1 - self.params.alpha) * kd_loss + self.params.alpha * objective
         return DistillationLoss(kd_loss=kd_loss, objective=objective, full_loss=full_loss)
 
@@ -448,9 +448,9 @@ class SequenceClassificationParallelDistiller(BaseSequenceClassificationDistille
         Returns:
             DistillationLoss
         """
-        kd_loss_original = self.loss_distill(teacher_logits, student_logits)
+        kd_loss_original = self.loss_distill(student_logits, teacher_logits)
         kd_loss_translation = self.loss_distill(
-            teacher_logits, student_logits_translation
+            student_logits_translation, teacher_logits
         )
         full_loss = kd_loss_translation + kd_loss_original
         return DistillationLoss(

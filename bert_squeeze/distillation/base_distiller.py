@@ -59,7 +59,7 @@ class BaseDistiller(pl.LightningModule):
         Returns:
             List[Dict]: group of parameters to optimize
         """
-        no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight']
+        no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight', 'layer_norm.weight']
 
         if self.params.discriminative_learning:
             if (

@@ -47,6 +47,14 @@ class LtTheseusBert(BaseSequenceClassificationTransformerModule):
         scorer: Scorer = None,
         **kwargs,
     ):
+        if model is None:
+            model = TheseusBertModel.from_pretrained(
+                pretrained_model,
+                config=AutoConfig.from_pretrained(
+                    pretrained_model, num_labels=num_labels
+                ),
+            )
+
         super().__init__(
             training_config, pretrained_model, num_labels, model, scorer, **kwargs
         )
@@ -158,10 +166,8 @@ class LtTheseusBert(BaseSequenceClassificationTransformerModule):
 
     def _build_model(self):
         """"""
-        encoder = TheseusBertModel(AutoConfig.from_pretrained(self.pretrained_model))
-        encoder.from_pretrained(self.pretrained_model)
-        encoder.encoder.init_successor_layers()
-        self.encoder = encoder
+        self.encoder = self.model
+        self.encoder.encoder.init_successor_layers()
 
         self.classifier = torch.nn.Sequential(
             torch.nn.Dropout(self.model_config.hidden_dropout_prob),

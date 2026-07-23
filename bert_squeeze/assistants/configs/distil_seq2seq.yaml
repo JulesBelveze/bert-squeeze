@@ -50,6 +50,8 @@ data:
     _target_: bert_squeeze.data.modules.transformer_module.Seq2SeqTransformerDataModule
     dataset_config:
       is_local: false
+      source_prefix:
+      target_prefix:
       target_col:
       path:
       split:
@@ -65,6 +67,8 @@ data:
       split: ${data.teacher_module.dataset_config.split}
       source_col: ${data.teacher_module.dataset_config.source_col}
       target_col: ${data.teacher_module.dataset_config.target_col}
+      source_prefix: ${data.teacher_module.dataset_config.source_prefix}
+      target_prefix: ${data.teacher_module.dataset_config.target_prefix}
     tokenizer_name: ${model.student.pretrained_model}
     max_target_length: ${data.teacher_module.max_target_length}
     max_source_length: ${data.teacher_module.max_source_length}

@@ -18,7 +18,7 @@ class KLDivLoss(nn.Module):
     def __init__(self, T: float = 1.0):
         super(KLDivLoss, self).__init__()
         self.T = T
-        self.kl = nn.KLDivLoss()
+        self.kl = nn.KLDivLoss(reduction="batchmean")
 
     def forward(
         self, student_logits: torch.Tensor, teacher_logits: torch.Tensor
@@ -33,6 +33,6 @@ class KLDivLoss(nn.Module):
             torch.Tensor:
                 Kullback-Leibler divergence
         """
-        p_t = F.softmax(teacher_logits / self.T, dim=1)
-        p_s = F.log_softmax(student_logits / self.T)
+        p_t = F.softmax(teacher_logits / self.T, dim=-1)
+        p_s = F.log_softmax(student_logits / self.T, dim=-1)
         return self.kl(p_s, p_t) * (self.T**2)

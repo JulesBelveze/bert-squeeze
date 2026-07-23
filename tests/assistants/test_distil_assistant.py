@@ -1,6 +1,5 @@
 import torch.nn
 from lightning.pytorch.loggers import TensorBoardLogger
-from pkg_resources import resource_filename
 from torch.utils.data import DataLoader
 from transformers import BertForSequenceClassification
 

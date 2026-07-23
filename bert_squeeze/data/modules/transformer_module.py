@@ -1,13 +1,17 @@
-from contextlib import nullcontext
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Optional, Sequence, Union
+from typing import List, Mapping, Optional, Sequence
 
 import datasets
 from omegaconf import DictConfig
 from overrides import overrides
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, DataCollatorForSeq2Seq, PreTrainedTokenizerBase
+from transformers import (
+    AutoTokenizer,
+    BatchEncoding,
+    DataCollatorForSeq2Seq,
+    PreTrainedTokenizerBase,
+)
 
 from .base import BaseDataModule
 
@@ -71,7 +75,7 @@ class TransformerDataModule(BaseDataModule):
         if "distilbert" not in self.tokenizer.name_or_path:
             columns += ["token_type_ids"]
 
-        tokenized_dataset.set_format(type='torch', columns=columns)
+        tokenized_dataset.set_format(type="torch", columns=columns)
         return tokenized_dataset
 
     def setup(self, stage: Optional[str] = None):
@@ -185,7 +189,7 @@ class TransformerParallelDataModule(TransformerDataModule):
         if "distilbert" not in self.tokenizer.name_or_path:
             columns += ["token_type_ids", "translation_token_type_ids"]
 
-        tokenized_dataset.set_format(type='torch', columns=columns)
+        tokenized_dataset.set_format(type="torch", columns=columns)
         return tokenized_dataset
 
 
@@ -216,6 +220,8 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         self.dataset_config = dataset_config
         self.source_col = dataset_config.source_col
         self.target_col = dataset_config.target_col
+        self.source_prefix = dataset_config.get("source_prefix") or ""
+        self.target_prefix = dataset_config.get("target_prefix") or ""
 
         raw_paths = dataset_config.get("data_path", None)
         self._uses_data_path = raw_paths is not None
@@ -245,10 +251,10 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
 
         self.train_batch_size = kwargs.get("train_batch_size", 32)
         self.eval_batch_size = kwargs.get("eval_batch_size", 32)
+        self.num_workers = kwargs.get("num_workers", 0)
 
-        self.tokenizer = _get_seq2seq_tokenizer(tokenizer_name)
-        self.source_prefix = dataset_config.get("source_prefix") or ""
-        self.target_prefix = dataset_config.get("target_prefix") or ""
+        self.tokenizer_name = tokenizer_name
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
         self.dataset = None
         self.train = None
@@ -372,32 +378,22 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
             DatasetDict: featurized dataset
         """
         tokenized_dataset = self.dataset.map(
-            lambda x: self.tokenizer(
-                self._apply_prefix(x[self.source_col], self.source_prefix),
-                padding=False,
-                max_length=self.max_source_length,
-                truncation=True,
-            )
+            _tokenize_seq2seq_batch,
+            batched=True,
+            fn_kwargs={
+                "tokenizer_name": self.tokenizer_name,
+                "source_col": self.source_col,
+                "target_col": self.target_col,
+                "source_prefix": self.source_prefix,
+                "target_prefix": self.target_prefix,
+                "max_source_length": self.max_source_length,
+                "max_target_length": self.max_target_length,
+            },
         )
-        target_tokenizer = getattr(self.tokenizer, "as_target_tokenizer", None)
-        context = target_tokenizer() if target_tokenizer is not None else nullcontext()
-        with context:
-            tokenized_dataset = tokenized_dataset.map(
-                lambda x: {
-                    "labels": self.tokenizer(
-                        self._apply_prefix(x[self.target_col], self.target_prefix),
-                        padding=False,
-                        max_length=self.max_target_length,
-                        truncation=True,
-                    )["input_ids"]
-                }
-            )
         columns = ["input_ids", "attention_mask", "labels"]
         if not any(
-            [
-                model_name in self.tokenizer.name_or_path
-                for model_name in ["distilbert", "t5"]
-            ]
+            model_name in self.tokenizer.name_or_path
+            for model_name in ("distilbert", "t5")
         ):
             columns += ["token_type_ids"]
 
@@ -405,7 +401,7 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         for split, split_dataset in tokenized_dataset.items():
             columns_to_del = set(split_dataset.column_names) - set(columns_to_keep)
             tokenized_dataset[split] = split_dataset.remove_columns(list(columns_to_del))
-        tokenized_dataset.set_format(type='torch', columns=columns)
+        tokenized_dataset.set_format(type="torch", columns=columns)
         return tokenized_dataset
 
     def setup(self, stage: Optional[str] = None):
@@ -425,6 +421,7 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
             collate_fn=self._collate_fn(),
             batch_size=self.train_batch_size,
             drop_last=True,
+            num_workers=self.num_workers,
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -437,6 +434,7 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
             collate_fn=self._collate_fn(),
             batch_size=self.eval_batch_size,
             drop_last=True,
+            num_workers=self.num_workers,
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -449,6 +447,7 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
             collate_fn=self._collate_fn(),
             batch_size=self.eval_batch_size,
             drop_last=True,
+            num_workers=self.num_workers,
         )
 
     def _collate_fn(self):
@@ -461,16 +460,45 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
         )
 
         def _collate(examples):
+            for example in examples:
+                labels = example.get("labels")
+                if labels is not None and not isinstance(labels, list):
+                    example["labels"] = labels.tolist()
             return collator(examples)
 
         return _collate
 
-    @staticmethod
-    def _apply_prefix(
-        value: Optional[Union[str, Sequence[str]]], prefix: str
-    ) -> Optional[Union[str, List[str]]]:
-        if not prefix or value is None:
-            return value
-        if isinstance(value, str):
-            return f"{prefix}{value}"
-        return [f"{prefix}{item}" for item in value]
+@lru_cache(maxsize=None)
+def _get_seq2seq_tokenizer(tokenizer_name: str) -> PreTrainedTokenizerBase:
+    return AutoTokenizer.from_pretrained(tokenizer_name)
+
+
+def _tokenize_seq2seq_batch(
+    examples: Mapping[str, Sequence[str]],
+    *,
+    tokenizer_name: str,
+    source_col: str,
+    target_col: str,
+    source_prefix: str,
+    target_prefix: str,
+    max_source_length: int,
+    max_target_length: int,
+) -> BatchEncoding:
+    tokenizer = _get_seq2seq_tokenizer(tokenizer_name)
+    sources = [f"{source_prefix}{text}" for text in examples[source_col]]
+    targets = [f"{target_prefix}{text}" for text in examples[target_col]]
+
+    model_inputs = tokenizer(
+        sources,
+        padding=False,
+        max_length=max_source_length,
+        truncation=True,
+    )
+    labels = tokenizer(
+        text_target=targets,
+        padding=False,
+        max_length=max_target_length,
+        truncation=True,
+    )
+    model_inputs["labels"] = labels["input_ids"]
+    return model_inputs

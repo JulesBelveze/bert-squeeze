@@ -1,7 +1,8 @@
 import logging
+from importlib import resources
+from pathlib import Path
 
 import torch
-from pkg_resources import resource_filename
 from transformers import AutoConfig
 
 from ...data import LrDataModule, TransformerDataModule
@@ -26,12 +27,19 @@ class DistillationArtifactsLoader:
         """
         self.config = config
 
-        config.teacher.checkpoint_path = resource_filename(
-            "bert-squeeze", config.teacher.checkpoint_path
-        )
-        self.fine_tuned_teacher = load_model_from_exp(
-            config.teacher.checkpoint_path, self.teacher_class
-        )
+        checkpoint_path = Path(config.teacher.checkpoint_path)
+        if checkpoint_path.is_absolute():
+            self.fine_tuned_teacher = load_model_from_exp(
+                str(checkpoint_path), self.teacher_class
+            )
+        else:
+            checkpoint_resource = resources.files("bert_squeeze").joinpath(
+                config.teacher.checkpoint_path
+            )
+            with resources.as_file(checkpoint_resource) as resolved_path:
+                self.fine_tuned_teacher = load_model_from_exp(
+                    str(resolved_path), self.teacher_class
+                )
 
     @property
     def model_class(self):

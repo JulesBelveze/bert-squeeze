@@ -1,10 +1,14 @@
+from contextlib import ExitStack
+from importlib import resources
+from pathlib import Path
+from typing import Optional
+
 from onnxruntime import (
     ExecutionMode,
     GraphOptimizationLevel,
     InferenceSession,
     SessionOptions,
 )
-from pkg_resources import resource_filename
 
 
 class ModelWrapper:
@@ -16,8 +20,16 @@ class ModelWrapper:
         self, checkpoint_path: str, preprocessor, postprocessor=None, *args, **kwargs
     ):
         """"""
-        filepath = resource_filename("bert-squeeze", checkpoint_path)
-        self.session = self._get_ort_session(filepath, **kwargs)
+        self._resource_stack: Optional[ExitStack] = None
+        resolved_path = Path(checkpoint_path)
+        if not resolved_path.is_absolute():
+            self._resource_stack = ExitStack()
+            resource = resources.files("bert_squeeze").joinpath(checkpoint_path)
+            resolved_path = self._resource_stack.enter_context(
+                resources.as_file(resource)
+            )
+
+        self.session = self._get_ort_session(str(resolved_path), **kwargs)
 
         self.preprocessor = preprocessor
         self.postprocessor = postprocessor
@@ -61,3 +73,11 @@ class ModelWrapper:
         if self.postprocessor is not None:
             outputs = self.postprocessor(outputs)
         return outputs
+
+    def close(self) -> None:
+        if self._resource_stack is not None:
+            self._resource_stack.close()
+            self._resource_stack = None
+
+    def __del__(self):
+        self.close()
