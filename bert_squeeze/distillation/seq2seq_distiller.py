@@ -44,11 +44,13 @@ class Seq2SeqDistiller(BaseDistiller):
 
     def get_teacher_logits(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """"""
-        output = self.teacher(
-            labels=batch['t_labels'],
-            input_ids=batch['t_input_ids'],
-            attention_mask=batch['t_attention_mask'],
-        )
+        self.teacher.eval()
+        with torch.no_grad():
+            output = self.teacher(
+                labels=batch['t_labels'],
+                input_ids=batch['t_input_ids'],
+                attention_mask=batch['t_attention_mask'],
+            )
         if isinstance(output, Seq2SeqLMOutput):
             return output.logits
         return output
@@ -93,10 +95,13 @@ class Seq2SeqDistiller(BaseDistiller):
         active_idx = labels != ignore_index
         if active_idx.sum().item() > 0:
             objective = self.loss_ce(student_logits[active_idx], labels[active_idx])
+            kd_loss = self.loss_distill(
+                student_logits[active_idx], teacher_logits[active_idx]
+            )
         else:
-            objective = torch.tensor(0.0).to(labels.device)
+            objective = student_logits.sum() * 0
+            kd_loss = objective
 
-        kd_loss = self.loss_distill(teacher_logits, student_logits)
         full_loss = (1 - self.params.alpha) * kd_loss + self.params.alpha * objective
         return DistillationLoss(kd_loss=kd_loss, objective=objective, full_loss=full_loss)
 
