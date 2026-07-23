@@ -56,7 +56,7 @@ class BaseSequenceClassificationScorer:
                       of class i
         """
         return self.confusion_matrix.diagonal() / (
-            self.confusion_matrix.sum(axis=-1) + self.eps
+            self.confusion_matrix.sum(axis=0) + self.eps
         )
 
     @property
@@ -87,9 +87,7 @@ class BaseSequenceClassificationScorer:
         Returns:
             float: average weighted precision
         """
-        return (self.confusion_matrix.sum(axis=0) * self.precision) / (
-            self.confusion_matrix.sum() + self.eps
-        )
+        return self._weighted_average(self.precision)
 
     @property
     def recall(self) -> np.ndarray:
@@ -102,7 +100,7 @@ class BaseSequenceClassificationScorer:
                       of class i
         """
         return self.confusion_matrix.diagonal() / (
-            self.confusion_matrix.sum(axis=0) + self.eps
+            self.confusion_matrix.sum(axis=-1) + self.eps
         )
 
     @property
@@ -133,9 +131,7 @@ class BaseSequenceClassificationScorer:
         Returns:
             float: average weighted recall
         """
-        return (self.confusion_matrix.sum(axis=0) * self.recall) / (
-            self.confusion_matrix.sum() + self.eps
-        )
+        return self._weighted_average(self.recall)
 
     @property
     def f1(self) -> np.ndarray:
@@ -178,9 +174,11 @@ class BaseSequenceClassificationScorer:
         Returns:
             float: average weighted f1
         """
-        return (self.confusion_matrix.sum(axis=0) * self.f1) / (
-            self.confusion_matrix.sum() + self.eps
-        )
+        return self._weighted_average(self.f1)
+
+    def _weighted_average(self, values: np.ndarray) -> float:
+        support = self.confusion_matrix.sum(axis=1)
+        return float(np.dot(support, values) / (support.sum() + self.eps))
 
     def _inc_counter(self) -> None:
         """
@@ -239,7 +237,7 @@ class BaseSequenceClassificationScorer:
         self.confusion_matrix = np.zeros((self.n_labels, self.n_labels))
         self.losses = defaultdict(list)
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> Dict[str, Union[float, np.ndarray]]:
         """
         Returns all the accessible metrics within a dict where the key is the metric name
         and the value is the metric.
@@ -274,8 +272,8 @@ class BaseSequenceClassificationScorer:
         for k, v in self.to_dict().items():
             if isinstance(v, np.ndarray):
                 v = v.tolist()
-            elif isinstance(v, np.float64):
-                v = [v.item()]
+            elif isinstance(v, (float, np.floating)):
+                v = [float(v)]
             table.append([k] + v)
         return tabulate(
             table,
@@ -401,7 +399,7 @@ class FastBertSequenceClassificationScorer:
         """
         precisions = {}
         for layer, cfm in self.confusion_matrix.items():
-            precisions[layer] = cfm.diagonal() / (cfm.sum(axis=-1) + self.eps)
+            precisions[layer] = cfm.diagonal() / (cfm.sum(axis=0) + self.eps)
         return precisions
 
     @property
@@ -415,7 +413,7 @@ class FastBertSequenceClassificationScorer:
         """
         recalls = {}
         for layer, cfm in self.confusion_matrix.items():
-            recalls[layer] = cfm.diagonal() / (cfm.sum(axis=0) + self.eps)
+            recalls[layer] = cfm.diagonal() / (cfm.sum(axis=-1) + self.eps)
         return recalls
 
     @property
