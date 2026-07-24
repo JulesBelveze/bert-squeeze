@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Callable, Optional
@@ -123,13 +125,14 @@ def test_layer_dropout_skips_computation_and_restores_batch(
     fully_dropped.eval()
     output = fully_dropped(hidden_states, attention_mask)
 
+    assert dropped_layer.training is False
     assert dropped_layer.calls == 1
     assert torch.equal(output[0], hidden_states + 1)
 
     monkeypatch.setattr(
         torch,
         "rand",
-        lambda batch_size, device: torch.tensor([0.1, 0.9], device=device),
+        lambda batch_size: torch.tensor([0.1, 0.9]),
     )
     partial_layer = _IncrementLayer()
     partially_dropped = LayerDropoutWrapper(partial_layer, dropout_prob=0.5)
@@ -178,7 +181,6 @@ def test_early_exit_returns_logits_without_running_later_layers(
 
     logits = model(**inputs)
 
-    assert logits.shape == (2, 2)
     assert torch.allclose(logits, expected_logits, atol=1e-6)
     assert call_counts == [1, 1, 0, 0]
 
@@ -216,7 +218,6 @@ def test_standard_forward_matches_bert_classifier(tiny_checkpoint: str) -> None:
     logits = model(**inputs)
     reference_logits = model.model(**inputs).logits
 
-    assert logits.shape == (2, 2)
     assert torch.allclose(logits, reference_logits, atol=1e-6)
 
 

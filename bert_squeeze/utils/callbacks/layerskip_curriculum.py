@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional
 
 import lightning.pytorch as pl
@@ -6,8 +8,6 @@ from lightning.pytorch.callbacks import Callback
 
 
 class LayerSkipCurriculumCallback(Callback):
-    """Controls which layers contribute to early-exit loss via curriculum learning."""
-
     def __init__(
         self,
         curriculum_type: str = "rotational",
@@ -25,7 +25,7 @@ class LayerSkipCurriculumCallback(Callback):
         self,
         trainer: pl.Trainer,
         pl_module: pl.LightningModule,
-        batch,
+        batch: object,
         batch_idx: int,
     ) -> None:
         num_layers = getattr(pl_module, "num_layers", 0)

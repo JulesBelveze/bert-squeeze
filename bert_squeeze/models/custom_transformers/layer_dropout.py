@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional
 
 import torch
@@ -5,8 +7,6 @@ import torch.nn as nn
 
 
 class LayerDropoutWrapper(nn.Module):
-    """Wraps a transformer layer to enable stochastic layer dropout during training."""
-
     def __init__(self, layer: nn.Module, dropout_prob: float) -> None:
         super().__init__()
         if not 0.0 <= dropout_prob <= 1.0:
@@ -26,7 +26,15 @@ class LayerDropoutWrapper(nn.Module):
 
     @property
     def layer(self) -> nn.Module:
-        return object.__getattribute__(self, "_wrapped_layer")
+        layer = object.__getattribute__(self, "_wrapped_layer")
+        if not isinstance(layer, nn.Module):
+            raise TypeError("Wrapped layer must be a torch module.")
+        return layer
+
+    def train(self, mode: bool = True) -> LayerDropoutWrapper:
+        super().train(mode)
+        self.layer.train(mode)
+        return self
 
     def forward(
         self,
@@ -35,21 +43,20 @@ class LayerDropoutWrapper(nn.Module):
         *args: object,
         **kwargs: object,
     ) -> tuple[object, ...]:
-        self._sync_wrapped_layer()
+        self._sync_wrapped_state()
         if not self.training or self.dropout_prob == 0.0:
-            return self.layer(hidden_states, attention_mask, *args, **kwargs)
+            return self._run_layer(hidden_states, attention_mask, args, kwargs)
 
         batch_size = hidden_states.shape[0]
-        keep_mask = (
-            torch.rand(batch_size, device=hidden_states.device) >= self.dropout_prob
-        )
+        keep_mask = torch.rand(batch_size) >= self.dropout_prob
         kept_batch_size = int(keep_mask.sum().item())
         if kept_batch_size == batch_size:
-            return self.layer(hidden_states, attention_mask, *args, **kwargs)
+            return self._run_layer(hidden_states, attention_mask, args, kwargs)
 
         if kept_batch_size == 0:
             return self._skipped_outputs(hidden_states, args, kwargs)
 
+        keep_mask = keep_mask.to(hidden_states.device)
         kept_attention_mask = self._slice_batch_value(
             attention_mask, keep_mask, batch_size
         )
@@ -60,14 +67,17 @@ class LayerDropoutWrapper(nn.Module):
             key: self._slice_batch_value(value, keep_mask, batch_size)
             for key, value in kwargs.items()
         }
-        layer_outputs = self.layer(
-            hidden_states[keep_mask], kept_attention_mask, *kept_args, **kept_kwargs
+        layer_outputs = self._run_layer(
+            hidden_states[keep_mask], kept_attention_mask, kept_args, kept_kwargs
         )
-        if not isinstance(layer_outputs, tuple):
-            raise TypeError("LayerSkip transformer layers must return a tuple.")
+        updated_hidden_states = layer_outputs[0]
+        if not isinstance(updated_hidden_states, torch.Tensor):
+            raise TypeError(
+                "LayerSkip transformer layers must return hidden states first."
+            )
 
         restored_hidden_states = hidden_states.clone()
-        restored_hidden_states[keep_mask] = layer_outputs[0]
+        restored_hidden_states[keep_mask] = updated_hidden_states
         restored_outputs: list[object] = [restored_hidden_states]
         restored_outputs.extend(
             self._restore_batch_value(value, keep_mask, batch_size, kept_batch_size)
@@ -75,8 +85,19 @@ class LayerDropoutWrapper(nn.Module):
         )
         return tuple(restored_outputs)
 
-    def _sync_wrapped_layer(self) -> None:
-        self.layer.training = self.training
+    def _run_layer(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> tuple[object, ...]:
+        outputs = self.layer(hidden_states, attention_mask, *args, **kwargs)
+        if not isinstance(outputs, tuple):
+            raise TypeError("LayerSkip transformer layers must return a tuple.")
+        return outputs
+
+    def _sync_wrapped_state(self) -> None:
         for name, parameter in self._parameters.items():
             self.layer._parameters[name] = parameter
         for name, buffer in self._buffers.items():

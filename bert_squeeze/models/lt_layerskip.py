@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional, Union
 
 import lightning.pytorch as pl
@@ -6,14 +8,16 @@ import torch.nn as nn
 from omegaconf import DictConfig
 from overrides import overrides
 
-from bert_squeeze.utils.scorers import BaseSequenceClassificationScorer
+from bert_squeeze.utils.scorers.sequence_classification_scorer import (
+    BaseSequenceClassificationScorer,
+)
 
 from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers.layer_dropout import LayerDropoutWrapper
 
 
 class LtLayerSkip(BaseSequenceClassificationTransformerModule):
-    """Fine-tunes BERT classifiers and exits after ``exit_layer`` encoder blocks."""
+    """Train a BERT classifier that exits after ``exit_layer`` encoder blocks."""
 
     def __init__(
         self,
