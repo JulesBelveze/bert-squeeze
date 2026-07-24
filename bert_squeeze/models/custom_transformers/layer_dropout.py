@@ -1,4 +1,4 @@
-from typing import MutableMapping, Optional
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -11,8 +11,22 @@ class LayerDropoutWrapper(nn.Module):
         super().__init__()
         if not 0.0 <= dropout_prob <= 1.0:
             raise ValueError("dropout_prob must be between 0 and 1.")
-        self.layer = layer
+        for name, parameter in layer.named_parameters(recurse=False):
+            self.register_parameter(name, parameter)
+        for name, buffer in layer.named_buffers(recurse=False):
+            self.register_buffer(
+                name,
+                buffer,
+                persistent=name not in layer._non_persistent_buffers_set,
+            )
+        for name, module in layer.named_children():
+            self.add_module(name, module)
+        object.__setattr__(self, "_wrapped_layer", layer)
         self.dropout_prob = dropout_prob
+
+    @property
+    def layer(self) -> nn.Module:
+        return object.__getattribute__(self, "_wrapped_layer")
 
     def forward(
         self,
@@ -21,6 +35,7 @@ class LayerDropoutWrapper(nn.Module):
         *args: object,
         **kwargs: object,
     ) -> tuple[object, ...]:
+        self._sync_wrapped_layer()
         if not self.training or self.dropout_prob == 0.0:
             return self.layer(hidden_states, attention_mask, *args, **kwargs)
 
@@ -28,10 +43,11 @@ class LayerDropoutWrapper(nn.Module):
         keep_mask = (
             torch.rand(batch_size, device=hidden_states.device) >= self.dropout_prob
         )
-        if keep_mask.all():
+        kept_batch_size = int(keep_mask.sum().item())
+        if kept_batch_size == batch_size:
             return self.layer(hidden_states, attention_mask, *args, **kwargs)
 
-        if not keep_mask.any():
+        if kept_batch_size == 0:
             return self._skipped_outputs(hidden_states, args, kwargs)
 
         kept_attention_mask = self._slice_batch_value(
@@ -53,53 +69,18 @@ class LayerDropoutWrapper(nn.Module):
         restored_hidden_states = hidden_states.clone()
         restored_hidden_states[keep_mask] = layer_outputs[0]
         restored_outputs: list[object] = [restored_hidden_states]
-        kept_batch_size = layer_outputs[0].shape[0]
         restored_outputs.extend(
             self._restore_batch_value(value, keep_mask, batch_size, kept_batch_size)
             for value in layer_outputs[1:]
         )
         return tuple(restored_outputs)
 
-    def state_dict(
-        self,
-        *args: object,
-        destination: Optional[MutableMapping[str, torch.Tensor]] = None,
-        prefix: str = "",
-        keep_vars: bool = False,
-    ) -> MutableMapping[str, torch.Tensor]:
-        return self.layer.state_dict(
-            *args,
-            destination=destination,
-            prefix=prefix,
-            keep_vars=keep_vars,
-        )
-
-    def _load_from_state_dict(
-        self,
-        state_dict: MutableMapping[str, torch.Tensor],
-        prefix: str,
-        local_metadata: dict[str, object],
-        strict: bool,
-        missing_keys: list[str],
-        unexpected_keys: list[str],
-        error_msgs: list[str],
-    ) -> None:
-        wrapped_prefix = f"{prefix}layer."
-        for layer_key in self.layer.state_dict():
-            public_key = f"{prefix}{layer_key}"
-            wrapped_key = f"{wrapped_prefix}{layer_key}"
-            if public_key in state_dict and wrapped_key not in state_dict:
-                state_dict[wrapped_key] = state_dict.pop(public_key)
-
-        super()._load_from_state_dict(
-            state_dict,
-            prefix,
-            local_metadata,
-            strict,
-            missing_keys,
-            unexpected_keys,
-            error_msgs,
-        )
+    def _sync_wrapped_layer(self) -> None:
+        self.layer.training = self.training
+        for name, parameter in self._parameters.items():
+            self.layer._parameters[name] = parameter
+        for name, buffer in self._buffers.items():
+            self.layer._buffers[name] = buffer
 
     def _skipped_outputs(
         self,
@@ -107,15 +88,27 @@ class LayerDropoutWrapper(nn.Module):
         args: tuple[object, ...],
         kwargs: dict[str, object],
     ) -> tuple[object, ...]:
+        hidden_states = self._attach_zero_gradients(hidden_states)
         if not self._output_attentions_enabled(args, kwargs):
             return (hidden_states,)
 
-        num_heads = self.layer.attention.self.num_attention_heads
+        attention = getattr(self.layer, "attention", None)
+        self_attention = getattr(attention, "self", None)
+        num_heads = getattr(self_attention, "num_attention_heads", None)
+        if not isinstance(num_heads, int):
+            raise AttributeError("Wrapped layer does not expose its attention heads.")
         sequence_length = hidden_states.shape[1]
         attentions = hidden_states.new_zeros(
             hidden_states.shape[0], num_heads, sequence_length, sequence_length
         )
         return hidden_states, attentions
+
+    def _attach_zero_gradients(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        zero_dependency = hidden_states.new_zeros(())
+        for parameter in self.parameters():
+            if parameter.numel() > 0:
+                zero_dependency = zero_dependency + parameter.reshape(-1)[0] * 0.0
+        return hidden_states + zero_dependency
 
     @staticmethod
     def _output_attentions_enabled(

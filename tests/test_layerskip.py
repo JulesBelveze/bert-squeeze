@@ -20,6 +20,7 @@ class _IncrementLayer(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.increment = nn.Parameter(torch.tensor(1.0))
+        self.scale = nn.Parameter(torch.tensor(1.0))
         self.calls = 0
         self.batch_sizes: list[int] = []
         self.attention_masks: list[Optional[torch.Tensor]] = []
@@ -34,7 +35,7 @@ class _IncrementLayer(nn.Module):
         self.calls += 1
         self.batch_sizes.append(hidden_states.shape[0])
         self.attention_masks.append(attention_mask)
-        return (hidden_states + self.increment,)
+        return (hidden_states * self.scale + self.increment,)
 
 
 def _training_config() -> DictConfig:
@@ -85,6 +86,7 @@ def _build_model(
     e_scale: float = 0.2,
     exit_layer: int = 2,
     inference_mode: bool = False,
+    dropout_schedule: str = "exponential",
 ) -> LtLayerSkip:
     return LtLayerSkip(
         training_config=_training_config(),
@@ -94,6 +96,7 @@ def _build_model(
         e_scale=e_scale,
         exit_layer=exit_layer,
         inference_mode=inference_mode,
+        dropout_schedule=dropout_schedule,
     )
 
 
@@ -110,6 +113,12 @@ def test_layer_dropout_skips_computation_and_restores_batch(
 
     assert dropped_layer.calls == 0
     assert torch.equal(output[0], hidden_states)
+    output[0].sum().backward()
+    assert all(
+        parameter.grad is not None and torch.count_nonzero(parameter.grad) == 0
+        for parameter in dropped_layer.parameters()
+    )
+    hidden_states.grad = None
 
     fully_dropped.eval()
     output = fully_dropped(hidden_states, attention_mask)
@@ -174,6 +183,31 @@ def test_early_exit_returns_logits_without_running_later_layers(
     assert call_counts == [1, 1, 0, 0]
 
 
+def test_early_exit_accepts_input_embeddings(tiny_checkpoint: str) -> None:
+    model = _build_model(tiny_checkpoint, inference_mode=True, exit_layer=2)
+    model.eval()
+    inputs = _inputs()
+    input_embeddings = model._get_base_model().embeddings.word_embeddings(
+        inputs["input_ids"]
+    )
+    embedded_inputs = {
+        "inputs_embeds": input_embeddings,
+        "attention_mask": inputs["attention_mask"],
+        "token_type_ids": inputs["token_type_ids"],
+    }
+    hidden_states = model._forward_all_layers(
+        input_ids=None,
+        **embedded_inputs,
+    )
+    expected_logits = model._get_layer_logits(hidden_states[model.exit_layer - 1])
+
+    logits = model(**embedded_inputs)
+
+    assert torch.allclose(logits, expected_logits, atol=1e-6)
+    with pytest.raises(ValueError, match="either input_ids or inputs_embeds"):
+        model(input_ids=inputs["input_ids"], **embedded_inputs)
+
+
 def test_standard_forward_matches_bert_classifier(tiny_checkpoint: str) -> None:
     model = _build_model(tiny_checkpoint)
     model.eval()
@@ -236,6 +270,35 @@ def test_curriculum_rotates_early_exits_and_keeps_final_layer() -> None:
     assert torch.equal(module.curriculum_mask, torch.tensor([0.0, 0.0, 1.0, 1.0]))
 
 
+@pytest.mark.parametrize(
+    "factory",
+    [
+        pytest.param(lambda path: _build_model(path, p_max=-0.1), id="p-max-low"),
+        pytest.param(lambda path: _build_model(path, p_max=1.1), id="p-max-high"),
+        pytest.param(lambda path: _build_model(path, e_scale=-0.1), id="e-scale"),
+        pytest.param(lambda path: _build_model(path, exit_layer=0), id="exit-low"),
+        pytest.param(lambda path: _build_model(path, exit_layer=5), id="exit-high"),
+        pytest.param(
+            lambda path: _build_model(path, dropout_schedule="unknown"),
+            id="schedule",
+        ),
+    ],
+)
+def test_layerskip_rejects_invalid_configuration(
+    tiny_checkpoint: str,
+    factory: Callable[[str], LtLayerSkip],
+) -> None:
+    with pytest.raises(ValueError):
+        factory(tiny_checkpoint)
+
+
+def test_curriculum_rejects_invalid_configuration() -> None:
+    with pytest.raises(ValueError):
+        LayerSkipCurriculumCallback(curriculum_type="unknown")
+    with pytest.raises(ValueError):
+        LayerSkipCurriculumCallback(rotation_period=0)
+
+
 def test_layerskip_trains_with_synthetic_batches(tiny_checkpoint: str) -> None:
     model = _build_model(tiny_checkpoint, p_max=0.5)
     initial_classifier = model.model.classifier.weight.detach().clone()
@@ -275,6 +338,32 @@ def test_layerskip_assistant_uses_the_local_checkpoint(tiny_checkpoint: str) -> 
 
     assert isinstance(assistant.model, LtLayerSkip)
     assert isinstance(assistant.callbacks[0], LayerSkipCurriculumCallback)
+
+
+def test_wrapped_layers_preserve_attention_and_pruning(tiny_checkpoint: str) -> None:
+    model = _build_model(tiny_checkpoint)
+    first_layer = model._get_transformer_layers()[0]
+
+    model.model.prune_heads({0: [0]})
+
+    assert first_layer.attention.self.num_attention_heads == 1
+
+
+def test_fully_dropped_layers_preserve_attention_outputs(
+    tiny_checkpoint: str,
+) -> None:
+    model = _build_model(tiny_checkpoint)
+    model.train()
+    for layer in model._get_transformer_layers():
+        layer.dropout_prob = 1.0
+
+    outputs = model._get_base_model()(
+        **_inputs(), output_attentions=True, return_dict=True
+    )
+
+    assert outputs.attentions is not None
+    assert len(outputs.attentions) == model.num_layers
+    assert all(torch.count_nonzero(attention) == 0 for attention in outputs.attentions)
 
 
 def test_layerskip_state_round_trips_through_hugging_face(

@@ -6,14 +6,14 @@ import torch.nn as nn
 from omegaconf import DictConfig
 from overrides import overrides
 
-from bert_squeeze.utils.scorers import Scorer
+from bert_squeeze.utils.scorers import BaseSequenceClassificationScorer
 
 from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers.layer_dropout import LayerDropoutWrapper
 
 
 class LtLayerSkip(BaseSequenceClassificationTransformerModule):
-    """Fine-tunes BERT classifiers with layer dropout and static early exit."""
+    """Fine-tunes BERT classifiers and exits after ``exit_layer`` encoder blocks."""
 
     def __init__(
         self,
@@ -26,8 +26,7 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
         dropout_schedule: str = "exponential",
         inference_mode: bool = False,
         model: Optional[Union[pl.LightningModule, nn.Module]] = None,
-        scorer: Optional[Scorer] = None,
-        **kwargs: object,
+        scorer: Optional[BaseSequenceClassificationScorer] = None,
     ):
         if not 0.0 <= p_max <= 1.0:
             raise ValueError("p_max must be between 0 and 1.")
@@ -38,9 +37,21 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
                 "dropout_schedule must be one of: exponential, linear, uniform."
             )
 
-        super().__init__(
-            training_config, pretrained_model, num_labels, model, scorer, **kwargs
-        )
+        if scorer is None:
+            super().__init__(
+                training_config=training_config,
+                pretrained_model=pretrained_model,
+                num_labels=num_labels,
+                model=model,
+            )
+        else:
+            super().__init__(
+                training_config=training_config,
+                pretrained_model=pretrained_model,
+                num_labels=num_labels,
+                model=model,
+                scorer=scorer,
+            )
         if self.model_config.model_type != "bert":
             raise ValueError("LtLayerSkip currently supports BERT models only.")
         self.p_max = p_max
@@ -71,6 +82,7 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         **kwargs: object,
     ) -> torch.Tensor:
         if self.inference_mode and not self.training:
@@ -80,6 +92,7 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
                 token_type_ids=token_type_ids,
                 position_ids=position_ids,
                 head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
                 **kwargs,
             )
         else:
@@ -89,6 +102,7 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
                 token_type_ids=token_type_ids,
                 position_ids=position_ids,
                 head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
                 **kwargs,
             )[-1]
         return self._get_layer_logits(hidden_states)
@@ -181,6 +195,7 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         **kwargs: object,
     ) -> tuple[torch.Tensor, ...]:
         base_model = self._get_base_model()
@@ -193,6 +208,7 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
             output_hidden_states=True,
             return_dict=True,
             **forward_kwargs,
@@ -205,7 +221,7 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
     def _eval_step(
         self,
         batch: dict[str, torch.Tensor],
-        scorer: Scorer,
+        scorer: BaseSequenceClassificationScorer,
         output_store: list[dict[str, torch.Tensor]],
     ) -> torch.Tensor:
         inputs = self._build_inputs(batch)
@@ -235,22 +251,30 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         **kwargs: object,
     ) -> torch.Tensor:
-        if input_ids is None:
-            raise ValueError("input_ids are required for LayerSkip early exit.")
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("Specify either input_ids or inputs_embeds, not both.")
+        if input_ids is not None:
+            input_shape = input_ids.size()
+            device = input_ids.device
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+            device = inputs_embeds.device
+        else:
+            raise ValueError("input_ids or inputs_embeds are required for early exit.")
 
         base_model = self._get_base_model()
-        input_shape = input_ids.size()
         batch_size, sequence_length = input_shape
         if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=input_ids.device)
+            attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
             buffered_token_type_ids = getattr(
                 base_model.embeddings, "token_type_ids", None
             )
             if buffered_token_type_ids is None:
-                token_type_ids = torch.zeros_like(input_ids)
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
             else:
                 token_type_ids = buffered_token_type_ids[:, :sequence_length].expand(
                     batch_size, sequence_length
@@ -258,6 +282,7 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
 
         hidden_states = base_model.embeddings(
             input_ids=input_ids,
+            inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
         )
