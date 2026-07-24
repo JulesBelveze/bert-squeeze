@@ -16,11 +16,6 @@ from transformers import (
 from .base import BaseDataModule
 
 
-@lru_cache(maxsize=8)
-def _get_seq2seq_tokenizer(tokenizer_name: str) -> PreTrainedTokenizerBase:
-    return AutoTokenizer.from_pretrained(tokenizer_name)
-
-
 class TransformerDataModule(BaseDataModule):
     """
     DataModule for Transformer-based models.
@@ -467,6 +462,7 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
             return collator(examples)
 
         return _collate
+
 
 @lru_cache(maxsize=None)
 def _get_seq2seq_tokenizer(tokenizer_name: str) -> PreTrainedTokenizerBase:

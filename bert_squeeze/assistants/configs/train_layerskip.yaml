@@ -5,6 +5,7 @@ general:
   get_mismatched: true
   evaluate_during_training: true
   labels: [ 0, 1 ]
+  num_labels: 2
   output_dir: outputs
   save_steps: 500
   validation_every_n_epoch: 1
@@ -12,8 +13,6 @@ general:
 callbacks:
   - _target_: bert_squeeze.utils.callbacks.layerskip_curriculum.LayerSkipCurriculumCallback
     curriculum_type: "rotational"
-    rotation_period: 11
-    train_last_layer: true
 
 train:
   adam_eps: 1e-8
@@ -38,10 +37,9 @@ model:
   _target_: bert_squeeze.models.lt_layerskip.LtLayerSkip
   training_config: ${train}
   pretrained_model: "bert-base-cased"
-  num_labels: 2
+  num_labels: ${general.num_labels}
   p_max: 0.1
   e_scale: 0.2
-  exit_layer: 6
   dropout_schedule: "exponential"
   inference_mode: false
   scorer:

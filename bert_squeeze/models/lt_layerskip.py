@@ -1,6 +1,4 @@
-import logging
-import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import lightning.pytorch as pl
 import torch
@@ -15,10 +13,7 @@ from .custom_transformers.layer_dropout import LayerDropoutWrapper
 
 
 class LtLayerSkip(BaseSequenceClassificationTransformerModule):
-    """
-    Lightning module to fine-tune a LayerSkip-style model on sequence classification
-    tasks with layer dropout and early exit supervision.
-    """
+    """Fine-tunes BERT classifiers with layer dropout and static early exit."""
 
     def __init__(
         self,
@@ -31,12 +26,23 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
         dropout_schedule: str = "exponential",
         inference_mode: bool = False,
         model: Optional[Union[pl.LightningModule, nn.Module]] = None,
-        scorer: Scorer = None,
+        scorer: Optional[Scorer] = None,
         **kwargs: object,
     ):
+        if not 0.0 <= p_max <= 1.0:
+            raise ValueError("p_max must be between 0 and 1.")
+        if e_scale < 0.0:
+            raise ValueError("e_scale must be non-negative.")
+        if dropout_schedule not in {"exponential", "linear", "uniform"}:
+            raise ValueError(
+                "dropout_schedule must be one of: exponential, linear, uniform."
+            )
+
         super().__init__(
             training_config, pretrained_model, num_labels, model, scorer, **kwargs
         )
+        if self.model_config.model_type != "bert":
+            raise ValueError("LtLayerSkip currently supports BERT models only.")
         self.p_max = p_max
         self.e_scale = e_scale
         self.dropout_schedule = dropout_schedule
@@ -44,10 +50,12 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
 
         layers = self._get_transformer_layers()
         self.num_layers = len(layers)
-        self.exit_layer = exit_layer if exit_layer is not None else self.num_layers // 2
-        if not 0 <= self.exit_layer < self.num_layers:
+        self.exit_layer = (
+            exit_layer if exit_layer is not None else max(1, self.num_layers // 2)
+        )
+        if not 1 <= self.exit_layer <= self.num_layers:
             raise ValueError(
-                "exit_layer must be in [0, num_layers - 1], got "
+                "exit_layer must be in [1, num_layers], got "
                 f"{self.exit_layer} for num_layers={self.num_layers}."
             )
 
@@ -64,9 +72,9 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         **kwargs: object,
-    ) -> Union[Tuple[torch.Tensor, ...], torch.Tensor]:
-        if self.training or not self.inference_mode:
-            return self._forward_all_layers(
+    ) -> torch.Tensor:
+        if self.inference_mode and not self.training:
+            hidden_states = self._forward_early_exit(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 token_type_ids=token_type_ids,
@@ -74,20 +82,31 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
                 head_mask=head_mask,
                 **kwargs,
             )
-        return self._forward_early_exit(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            **kwargs,
-        )
+        else:
+            hidden_states = self._forward_all_layers(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                position_ids=position_ids,
+                head_mask=head_mask,
+                **kwargs,
+            )[-1]
+        return self._get_layer_logits(hidden_states)
 
-    @overrides
-    def training_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
+    def training_step(
+        self,
+        batch: dict[str, torch.Tensor],
+        batch_idx: int,
+        *args: object,
+        **kwargs: object,
+    ) -> torch.Tensor:
         inputs = self._build_inputs(batch)
-        outputs = self._forward_all_layers(**inputs)
-        loss = self.loss(outputs=outputs, labels=batch["labels"])
+        outputs = self._forward_all_layers(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+        )
+        loss = self._compute_training_loss(outputs, batch["labels"])
 
         logits = self._get_layer_logits(outputs[-1])
         self.scorer.add(logits.detach().cpu(), batch["labels"], loss.detach().cpu())
@@ -101,44 +120,69 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
 
         return loss
 
-    @overrides
-    def validation_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
+    def validation_step(
+        self,
+        batch: dict[str, torch.Tensor],
+        batch_idx: int,
+        *args: object,
+        **kwargs: object,
+    ) -> torch.Tensor:
         return self._eval_step(batch, self.valid_scorer, self.validation_step_outputs)
 
-    @overrides
-    def test_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
+    def test_step(
+        self,
+        batch: dict[str, torch.Tensor],
+        batch_idx: int,
+        *args: object,
+        **kwargs: object,
+    ) -> torch.Tensor:
         return self._eval_step(batch, self.test_scorer, self.test_step_outputs)
 
-    def predict_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
+    def predict_step(
+        self,
+        batch: dict[str, torch.Tensor],
+        batch_idx: int,
+        *args: object,
+        **kwargs: object,
+    ) -> torch.Tensor:
         inputs = self._build_inputs(batch)
-        hidden_states = self._eval_hidden_states(inputs)
-        logits = self._get_layer_logits(hidden_states)
+        logits = self.forward(**inputs)
         return torch.softmax(logits, dim=-1)
 
-    def loss(
-        self, outputs: Tuple[torch.Tensor, ...], labels: torch.Tensor
+    def _compute_training_loss(
+        self, outputs: tuple[torch.Tensor, ...], labels: torch.Tensor
     ) -> torch.Tensor:
-        layer_losses = []
-        for hidden_states in outputs:
-            logits = self._get_layer_logits(hidden_states)
-            layer_losses.append(super().loss(labels=labels, logits=logits))
-
-        losses = torch.stack(layer_losses)
         weights = self.loss_scales * self.curriculum_mask
-        weight_sum = weights.sum()
-        if weight_sum.item() <= 0:
-            return losses[-1]
-        return (losses * weights).sum() / weight_sum
+        enabled_layers = torch.nonzero(weights > 0, as_tuple=False).flatten()
+        if enabled_layers.numel() == 0:
+            enabled_layers = torch.tensor(
+                [self.num_layers - 1], device=weights.device, dtype=torch.long
+            )
+            weights = weights.clone()
+            weights[-1] = 1.0
+
+        base_loss = super().loss
+        layer_losses = torch.stack(
+            [
+                base_loss(
+                    labels=labels,
+                    logits=self._get_layer_logits(outputs[layer_idx]),
+                )
+                for layer_idx in enabled_layers.tolist()
+            ]
+        )
+        enabled_weights = weights[enabled_layers]
+        return (layer_losses * enabled_weights).sum() / enabled_weights.sum()
 
     def _forward_all_layers(
         self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        input_ids: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         **kwargs: object,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         base_model = self._get_base_model()
         forward_kwargs = dict(kwargs)
         forward_kwargs.pop("output_hidden_states", None)
@@ -160,13 +204,12 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
 
     def _eval_step(
         self,
-        batch,
-        scorer,
-        output_store: List[Dict[str, torch.Tensor]],
+        batch: dict[str, torch.Tensor],
+        scorer: Scorer,
+        output_store: list[dict[str, torch.Tensor]],
     ) -> torch.Tensor:
         inputs = self._build_inputs(batch)
-        hidden_states = self._eval_hidden_states(inputs)
-        logits = self._get_layer_logits(hidden_states)
+        logits = self.forward(**inputs)
         labels = batch["labels"]
         loss = super().loss(labels=labels, logits=logits)
         scorer.add(logits.cpu(), labels.cpu(), loss.cpu())
@@ -175,17 +218,10 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
         )
         return loss
 
-    def _eval_hidden_states(
-        self, inputs: Dict[str, Optional[torch.Tensor]]
-    ) -> torch.Tensor:
-        if self.inference_mode:
-            return self._forward_early_exit(**inputs)
-        return self._forward_all_layers(**inputs)[-1]
-
     @staticmethod
     def _build_inputs(
-        batch: Dict[str, torch.Tensor]
-    ) -> Dict[str, Optional[torch.Tensor]]:
+        batch: dict[str, torch.Tensor]
+    ) -> dict[str, Optional[torch.Tensor]]:
         return {
             "input_ids": batch["input_ids"],
             "attention_mask": batch["attention_mask"],
@@ -194,22 +230,51 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
 
     def _forward_early_exit(
         self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        input_ids: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         **kwargs: object,
     ) -> torch.Tensor:
-        hidden_states = self._forward_all_layers(
+        if input_ids is None:
+            raise ValueError("input_ids are required for LayerSkip early exit.")
+
+        base_model = self._get_base_model()
+        input_shape = input_ids.size()
+        batch_size, sequence_length = input_shape
+        if attention_mask is None:
+            attention_mask = torch.ones(input_shape, device=input_ids.device)
+        if token_type_ids is None:
+            buffered_token_type_ids = getattr(
+                base_model.embeddings, "token_type_ids", None
+            )
+            if buffered_token_type_ids is None:
+                token_type_ids = torch.zeros_like(input_ids)
+            else:
+                token_type_ids = buffered_token_type_ids[:, :sequence_length].expand(
+                    batch_size, sequence_length
+                )
+
+        hidden_states = base_model.embeddings(
             input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
-            **kwargs,
+            token_type_ids=token_type_ids,
         )
-        return hidden_states[self.exit_layer]
+        extended_attention_mask = base_model.get_extended_attention_mask(
+            attention_mask, input_shape
+        )
+        prepared_head_mask = base_model.get_head_mask(head_mask, self.num_layers)
+
+        layers = self._get_transformer_layers()
+        for layer_idx in range(self.exit_layer):
+            layer_outputs = layers[layer_idx](
+                hidden_states,
+                extended_attention_mask,
+                prepared_head_mask[layer_idx],
+            )
+            hidden_states = layer_outputs[0]
+        return hidden_states
 
     def _get_layer_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
         pooled_output = self._pool_hidden_states(hidden_states)
@@ -255,16 +320,15 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
             raise ValueError("Dropout schedule does not match number of layers.")
 
         for idx, (layer, prob) in enumerate(zip(layers, dropout_probs)):
-            layers[idx] = LayerDropoutWrapper(layer, prob, idx)
+            layers[idx] = LayerDropoutWrapper(layer, prob)
 
-    def _compute_dropout_schedule(self) -> List[float]:
+    def _compute_dropout_schedule(self) -> list[float]:
         if self.num_layers <= 1:
             return [0.0] * self.num_layers
 
         if self.dropout_schedule == "exponential":
-            scale = math.log(2.0) / (self.num_layers - 1)
             return [
-                min(self.p_max, self.p_max * (math.exp(layer_idx * scale) - 1.0))
+                self.p_max * (2 ** (layer_idx / (self.num_layers - 1)) - 1.0)
                 for layer_idx in range(self.num_layers)
             ]
         if self.dropout_schedule == "linear":
@@ -275,26 +339,17 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
         if self.dropout_schedule == "uniform":
             return [self.p_max] * self.num_layers
 
-        raise ValueError(
-            "dropout_schedule must be one of: exponential, linear, uniform. Got "
-            f"{self.dropout_schedule}."
-        )
+        raise RuntimeError("Unsupported dropout schedule.")
 
     def _compute_loss_scales(self) -> torch.Tensor:
         if self.num_layers <= 1:
             return torch.ones(self.num_layers)
 
-        scales: List[float] = []
-        for layer_idx in range(self.num_layers):
-            if layer_idx < self.num_layers - 1:
-                scale = self.e_scale * (layer_idx * (layer_idx + 1) / 2)
-            else:
-                prev_sum = (self.num_layers - 2) * (self.num_layers - 1) / 2
-                scale = (self.num_layers - 1) + self.e_scale * prev_sum
-            scales.append(scale)
-
-        total = sum(scales)
-        if total <= 0:
-            logging.warning("Loss scales sum to 0; falling back to uniform weights.")
-            return torch.ones(self.num_layers) / self.num_layers
-        return torch.tensor(scales, dtype=torch.float) / total
+        early_scales = [
+            self.e_scale * (layer_idx * (layer_idx + 1) / 2)
+            for layer_idx in range(self.num_layers - 1)
+        ]
+        previous_scale_sum = (self.num_layers - 2) * (self.num_layers - 1) / 2
+        final_scale = self.num_layers - 1 + self.e_scale * previous_scale_sum
+        scales = torch.tensor([*early_scales, final_scale], dtype=torch.float)
+        return scales / scales.sum()

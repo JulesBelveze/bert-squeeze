@@ -12,12 +12,14 @@ class LayerSkipCurriculumCallback(Callback):
         self,
         curriculum_type: str = "rotational",
         rotation_period: Optional[int] = None,
-        train_last_layer: bool = True,
     ) -> None:
         super().__init__()
+        if curriculum_type not in {"rotational", "gradual", "all"}:
+            raise ValueError("curriculum_type must be rotational, gradual, or all.")
+        if rotation_period is not None and rotation_period <= 0:
+            raise ValueError("rotation_period must be positive.")
         self.curriculum_type = curriculum_type
         self.rotation_period = rotation_period
-        self.train_last_layer = train_last_layer
 
     def on_train_batch_start(
         self,
@@ -38,19 +40,19 @@ class LayerSkipCurriculumCallback(Callback):
                     mask[layer_idx] = 1.0
         elif self.curriculum_type == "gradual":
             total_steps = trainer.max_steps
-            if total_steps is None or total_steps <= 0:
-                total_steps = trainer.estimated_stepping_batches
+            if total_steps <= 0:
+                total_steps = int(trainer.estimated_stepping_batches)
             total_steps = max(1, total_steps)
 
-            enabled_from = max(
-                0,
-                num_layers - 1 - int(2 * num_layers * trainer.global_step / total_steps),
+            enabled_layers = min(
+                num_layers,
+                int(2 * num_layers * trainer.global_step / total_steps),
             )
+            enabled_from = num_layers - enabled_layers
             mask[enabled_from:] = 1.0
-        else:
+        elif self.curriculum_type == "all":
             mask.fill_(1.0)
 
-        if self.train_last_layer:
-            mask[-1] = 1.0
+        mask[-1] = 1.0
 
         pl_module.curriculum_mask.copy_(mask)
