@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import os
 from collections import defaultdict
@@ -45,14 +47,20 @@ class LtFastBert(BaseSequenceClassificationTransformerModule):
         super().__init__(
             training_config, pretrained_model, num_labels, model, scorer, **kwargs
         )
-        self.training_stage = getattr(kwargs, "training_stage", 0)
+        training_stage = kwargs.get("training_stage", 0)
+        if not isinstance(training_stage, int) or training_stage not in {0, 1}:
+            raise ValueError("training_stage must be 0 or 1.")
+        self.training_stage = training_stage
 
         self._build_model()
 
         if self.training_stage == 0:
-            self._load_pretrained_bert_model(
-                getattr(kwargs, "pretrained_model_path", None)
-            )
+            pretrained_model_path = kwargs.get("pretrained_model_path")
+            if pretrained_model_path is not None and not isinstance(
+                pretrained_model_path, str
+            ):
+                raise TypeError("pretrained_model_path must be a string.")
+            self._load_pretrained_bert_model(pretrained_model_path)
 
     @overrides
     def forward(
@@ -203,7 +211,9 @@ class LtFastBert(BaseSequenceClassificationTransformerModule):
         self.embeddings = BertEmbeddings(self.model_config)
         self.encoder = FastBertGraph(self.model_config)
 
-    def _load_pretrained_bert_model(self, pretrained_model_path: str = None) -> None:
+    def _load_pretrained_bert_model(
+        self, pretrained_model_path: Optional[str] = None
+    ) -> None:
         """
         Loads the pretrained weights into the model.
 

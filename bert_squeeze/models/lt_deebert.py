@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import lightning.pytorch as pl
 import torch
@@ -11,6 +13,7 @@ from torch.nn import CrossEntropyLoss
 from transformers import AutoConfig
 
 from bert_squeeze.utils.scorers import Scorer
+from bert_squeeze.utils.types import RampOutput
 
 from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers.deebert import DeeBertModel
@@ -66,7 +69,7 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
         position_ids: torch.Tensor = None,
         head_mask: torch.Tensor = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor], int]:
+    ) -> Tuple[torch.Tensor, Sequence[RampOutput], int]:
         """
         During training, we pass the hidden states through all layers and store all the off-ramps
         outputs as well as the final classification layer.
@@ -104,7 +107,7 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
             head_mask=head_mask,
         )
 
-        if self.training:
+        if not self.bert.encoder.inference:
             exit_layer = self.num_layers
             pooled_output = outputs.pooled_output
             pooled_output = self.dropout(pooled_output)
@@ -125,7 +128,7 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
             "attention_mask": batch["attention_mask"],
             "token_type_ids": batch["token_type_ids"],
         }
-        logits, ramps_exits, exit_layer = self.forward(**inputs)
+        logits, ramps_exits, _ = self.forward(**inputs)
         loss = self.loss(
             logits=logits,
             labels=batch["labels"],
@@ -155,7 +158,7 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
             "attention_mask": batch["attention_mask"],
             "token_type_ids": batch["token_type_ids"],
         }
-        logits, ramps_exits, exit_layer = self.forward(**inputs)
+        logits, ramps_exits, _ = self.forward(**inputs)
         loss = self.loss(
             logits=logits,
             labels=batch["labels"],
@@ -176,6 +179,7 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
 
         self.log_eval_report(labels_probs)
         self.valid_scorer.reset()
+        self.validation_step_outputs.clear()
 
     @overrides
     def test_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
@@ -185,9 +189,12 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
             "attention_mask": batch["attention_mask"],
             "token_type_ids": batch["token_type_ids"],
         }
-        logits, ramps_exits, exit_layer = self.forward(**inputs)
+        logits, ramps_exits, _ = self.forward(**inputs)
         loss = self.loss(
-            logits=logits, labels=batch["labels"], train_ramps=self.train_highway
+            logits=logits,
+            labels=batch["labels"],
+            ramps_exits=ramps_exits,
+            train_ramps=self.train_highway,
         )
         self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
         self.test_step_outputs.append(
@@ -199,6 +206,7 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
         """"""
         logging.info(self.test_scorer.get_table())
         self.test_scorer.reset()
+        self.test_step_outputs.clear()
 
     def predict_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
         """"""
@@ -345,8 +353,8 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
     def loss(
         self,
         labels: torch.Tensor,
-        logits: torch.Tensor = None,
-        ramps_exits: Tuple[torch.Tensor] = None,
+        logits: Optional[torch.Tensor] = None,
+        ramps_exits: Optional[Sequence[RampOutput]] = None,
         train_ramps: bool = False,
         *args,
         **kwargs,
@@ -371,7 +379,9 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
         """
         # We want to fine-tune each individual ramp
         if train_ramps:
-            ramps_losses = []
+            if ramps_exits is None or len(ramps_exits) < 2:
+                raise ValueError("Ramp training requires at least two ramp outputs.")
+            ramps_losses: List[torch.Tensor] = []
             # We train all but the last off-ramp (corresponds to stage 2 in paper)
             for ramps_exit in ramps_exits[:-1]:
                 ramps_logits = ramps_exit.logits
@@ -382,8 +392,12 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
                 )
                 ramps_losses.append(ramps_loss)
 
-            loss = sum(ramps_losses)
+            loss = torch.stack(ramps_losses).sum()
         else:
+            if logits is None:
+                raise ValueError(
+                    "Classifier logits are required when ramps are disabled."
+                )
             # We only train the last off-ramp
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(

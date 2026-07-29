@@ -2,6 +2,8 @@
 # The main difference relies on the fact that I'm trying to use HuggingFace's
 # 'transformers' components as much as possible.
 
+from __future__ import annotations
+
 from typing import List, Tuple, Union
 
 import torch
@@ -129,7 +131,9 @@ class FastBertGraph(nn.Module):
         if inference:
             # positions will keep track of the original position of each element in the
             # batch when elements will be removed
-            final_probs = torch.zeros((hidden_states[0].shape[0], 2), device=device)
+            final_probs = hidden_states[0].new_zeros(
+                (hidden_states[0].shape[0], self.config.num_labels)
+            )
             positions = torch.arange(
                 start=0, end=hidden_states[0].shape[0], device=device
             ).long()

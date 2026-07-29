@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import lightning.pytorch as pl
 import torch
@@ -11,6 +13,7 @@ from torch.nn import CrossEntropyLoss
 from transformers import AutoConfig
 
 from bert_squeeze.utils.scorers import Scorer
+from bert_squeeze.utils.types import RampOutput
 
 from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers.berxit import BerxitModel
@@ -67,7 +70,12 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
         position_ids: torch.Tensor = None,
         head_mask: torch.Tensor = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor], int, Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[
+        torch.Tensor,
+        Sequence[RampOutput],
+        int,
+        Optional[Tuple[torch.Tensor, ...]],
+    ]:
         outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
@@ -76,7 +84,7 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
             head_mask=head_mask,
         )
 
-        if self.training:
+        if not self.bert.encoder.inference:
             exit_layer = self.num_layers
             pooled_output = outputs.pooled_output
             pooled_output = self.dropout(pooled_output)
@@ -153,6 +161,7 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
 
         self.log_eval_report(labels_probs)
         self.valid_scorer.reset()
+        self.validation_step_outputs.clear()
 
     @overrides
     def test_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
@@ -161,9 +170,14 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
             "attention_mask": batch["attention_mask"],
             "token_type_ids": batch["token_type_ids"],
         }
-        logits, _, _, _ = self.forward(**inputs)
+        logits, ramps_exits, _, gates_logits = self.forward(**inputs)
         loss = self.loss(
-            logits=logits, labels=batch["labels"], train_ramps=self.train_highway
+            logits=logits,
+            labels=batch["labels"],
+            ramps_exits=ramps_exits,
+            train_ramps=self.train_highway,
+            train_gates=self.train_gates,
+            gates_logits=gates_logits,
         )
         self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
         self.test_step_outputs.append(
@@ -370,17 +384,19 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
     def loss(
         self,
         labels: torch.Tensor,
-        logits: torch.Tensor = None,
-        ramps_exits: Tuple[torch.Tensor] = None,
+        logits: Optional[torch.Tensor] = None,
+        ramps_exits: Optional[Sequence[RampOutput]] = None,
         train_ramps: bool = False,
         train_gates: bool = False,
-        gates_logits: Optional[Tuple[torch.Tensor]] = None,
+        gates_logits: Optional[Tuple[torch.Tensor, ...]] = None,
         *args,
         **kwargs,
     ) -> torch.Tensor:
         # Same ramp loss mechanics as LtDeeBert for consistency
         if train_ramps:
-            ramps_losses = []
+            if ramps_exits is None or len(ramps_exits) < 2:
+                raise ValueError("Ramp training requires at least two ramp outputs.")
+            ramps_losses: List[torch.Tensor] = []
             for ramps_exit in ramps_exits[:-1]:
                 ramps_logits = ramps_exit.logits
                 loss_fct = CrossEntropyLoss()
@@ -388,25 +404,31 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
                     ramps_logits.view(-1, self.model_config.num_labels), labels.view(-1)
                 )
                 ramps_losses.append(ramps_loss)
-            loss = sum(ramps_losses)
+            loss = torch.stack(ramps_losses).sum()
         else:
+            if logits is None:
+                raise ValueError(
+                    "Classifier logits are required when ramps are disabled."
+                )
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(
                 logits.view(-1, self.model_config.num_labels), labels.view(-1)
             )
         # Optional: add gate loss using pseudo-labels from final ramp
-        if train_gates and gates_logits is not None:
+        if train_gates:
+            if ramps_exits is None or gates_logits is None:
+                raise ValueError("Gate training requires ramp and gate outputs.")
             with torch.no_grad():
                 final_logits = ramps_exits[-1].logits  # [B, C]
                 final_pred = final_logits.argmax(dim=-1)  # [B]
             bce = torch.nn.BCEWithLogitsLoss()
-            gate_losses = []
+            gate_losses: List[torch.Tensor] = []
             for i, gate_logit in enumerate(gates_logits[:-1]):
                 layer_pred = ramps_exits[i].logits.argmax(dim=-1)  # [B]
                 target = (layer_pred == final_pred).float().unsqueeze(-1)  # [B,1]
                 gate_losses.append(bce(gate_logit, target))
             if gate_losses:
-                loss = loss + sum(gate_losses)
+                loss = loss + torch.stack(gate_losses).sum()
         return loss
 
     def _build_model(self):

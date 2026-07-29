@@ -5,6 +5,7 @@ general:
   get_mismatched: true
   evaluate_during_training: true
   labels: [ 0, 1 ]
+  num_labels: 2
   output_dir: outputs
   save_steps: 500
   validation_every_n_epoch: 1
@@ -30,7 +31,7 @@ train:
 
 model:
   _target_: bert_squeeze.models.lt_bert.LtSequenceClassificationCustomBert
-  num_labels: 2
+  num_labels: ${general.num_labels}
   pretrained_model: "bert-base-cased"
   training_config: ${train}
   scorer:

@@ -5,6 +5,7 @@ general:
   get_mismatched: true
   evaluate_during_training: true
   labels: [ 0, 1 ]
+  num_labels: 2
   output_dir: outputs
   save_steps: 500
   validation_every_n_epoch: 1
@@ -34,7 +35,7 @@ model:
   training_config: ${train}
   task_name:
   adapter_config_name: "seq_bn"
-  labels: [ "0", "1" ]
+  labels: ${general.labels}
   scorer:
     _target_: bert_squeeze.utils.scorers.sequence_classification_scorer.BaseSequenceClassificationScorer
     labels: ${general.labels}
