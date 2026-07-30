@@ -5,6 +5,7 @@ general:
   get_mismatched: true
   evaluate_during_training: true
   labels: [ 0, 1 ]
+  num_labels: 2
   output_dir: outputs
   save_steps: 500
   validation_every_n_epoch: 1
@@ -32,7 +33,7 @@ model:
   _target_: bert_squeeze.models.lt_theseus_bert.LtTheseusBert
   training_config: ${train}
   pretrained_model: "bert-base-cased"
-  num_labels: 2
+  num_labels: ${general.num_labels}
   replacement_scheduler:
     type: "linear"
     base_replacing_rate: 0.3

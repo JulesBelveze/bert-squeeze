@@ -1,13 +1,9 @@
-from typing import Optional, Tuple, Union
+from __future__ import annotations
 
-import lightning.pytorch as pl
+from typing import Tuple, Union
+
 import torch
-import torch.nn as nn
-from omegaconf import DictConfig
 from overrides import overrides
-from transformers import AutoModel
-
-from bert_squeeze.utils.scorers import Scorer
 
 from .base_lt_module import BaseSequenceClassificationTransformerModule
 
@@ -29,20 +25,6 @@ class LtCustomDistilBert(BaseSequenceClassificationTransformerModule):
             helper object to compute performance metrics during training
     """
 
-    def __init__(
-        self,
-        training_config: DictConfig,
-        pretrained_model: str,
-        num_labels: int,
-        model: Optional[Union[pl.LightningModule, nn.Module]] = None,
-        scorer: Scorer = None,
-        **kwargs,
-    ):
-        super().__init__(
-            training_config, pretrained_model, num_labels, model, scorer, **kwargs
-        )
-        self._build_model()
-
     @overrides
     def forward(
         self,
@@ -50,7 +32,7 @@ class LtCustomDistilBert(BaseSequenceClassificationTransformerModule):
         attention_mask: torch.Tensor = None,
         output_attentions: bool = False,
         **kwargs,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, ...]]]:
         """
         Args:
             input_ids (torch.Tensor):
@@ -61,29 +43,42 @@ class LtCustomDistilBert(BaseSequenceClassificationTransformerModule):
             output_attentions (bool):
                 whether to output attention scores.
         Returns:
-            Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]: logits obtained from model pass
-                along with the attention scores if `output_attentions=True`.
+            Logits, optionally paired with per-layer attention tensors.
         """
-        outputs = self.encoder(
-            input_ids, attention_mask=attention_mask, output_attentions=output_attentions
+        kwargs.pop("return_dict", None)
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            return_dict=True,
+            **kwargs,
         )
-        hidden_state = outputs[0]
-        logits = self.classifier(hidden_state)
+        logits = getattr(outputs, "logits", None)
+        if not isinstance(logits, torch.Tensor):
+            raise TypeError("DistilBERT sequence classifiers must return tensor logits.")
 
         if output_attentions:
-            return logits, outputs.attentions
+            attentions = getattr(outputs, "attentions", None)
+            if not isinstance(attentions, tuple):
+                raise TypeError(
+                    "DistilBERT did not return attentions when they were requested."
+                )
+            return logits, attentions
         return logits
+
+    def _classification_logits(
+        self, input_ids: torch.Tensor, attention_mask: torch.Tensor
+    ) -> torch.Tensor:
+        outputs = self.forward(input_ids=input_ids, attention_mask=attention_mask)
+        if not isinstance(outputs, torch.Tensor):
+            raise TypeError("DistilBERT classification must return tensor logits.")
+        return outputs
 
     @overrides
     def training_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
         """"""
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-        }
-
-        logits = self.forward(**inputs)
-        loss = self.loss(logits, batch["labels"])
+        logits = self._classification_logits(batch["input_ids"], batch["attention_mask"])
+        loss = self.loss(labels=batch["labels"], logits=logits)
 
         self.scorer.add(logits.detach().cpu(), batch["labels"], loss.detach().cpu())
         if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
@@ -100,13 +95,8 @@ class LtCustomDistilBert(BaseSequenceClassificationTransformerModule):
     @overrides
     def validation_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
         """"""
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-        }
-
-        logits = self.forward(**inputs)
-        loss = self.loss(logits, batch["labels"])
+        logits = self._classification_logits(batch["input_ids"], batch["attention_mask"])
+        loss = self.loss(labels=batch["labels"], logits=logits)
 
         self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
         self.validation_step_outputs.append(
@@ -117,27 +107,11 @@ class LtCustomDistilBert(BaseSequenceClassificationTransformerModule):
     @overrides
     def test_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
         """"""
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-        }
-
-        logits = self.forward(**inputs)
-        loss = self.loss(logits, batch["labels"])
+        logits = self._classification_logits(batch["input_ids"], batch["attention_mask"])
+        loss = self.loss(labels=batch["labels"], logits=logits)
 
         self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
         self.test_step_outputs.append(
             {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
         )
         return loss
-
-    def _build_model(self):
-        """"""
-        self.encoder = AutoModel.from_pretrained(self.pretrained_model)
-        self.classifier = torch.nn.Sequential(
-            torch.nn.Dropout(self.model_config.seq_classif_dropout),
-            torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),
-            torch.nn.ReLU(),
-            torch.nn.LayerNorm(self.model_config.hidden_size),
-            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels),
-        )

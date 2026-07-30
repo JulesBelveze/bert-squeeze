@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from copy import deepcopy
 from importlib import resources
 from typing import Dict, List, Optional
@@ -72,8 +74,11 @@ class TrainAssistant(object):
                 f" following: {CONFIG_MAPPER.keys()}"
             )
 
-        config_path = resources.files("bert_squeeze").joinpath(
-            "assistants/configs", config_name
+        config_path = (
+            resources.files("bert_squeeze")
+            .joinpath("assistants")
+            .joinpath("configs")
+            .joinpath(config_name)
         )
         with resources.as_file(config_path) as resolved_path:
             conf = OmegaConf.load(resolved_path)
@@ -102,6 +107,14 @@ class TrainAssistant(object):
                     overrides if base is None else deep_update(base, overrides)
                 )
 
+        labels = conf["general"].get("labels")
+        if labels is not None:
+            num_labels = len(labels)
+            configured_num_labels = conf["general"].get("num_labels")
+            if configured_num_labels is not None and configured_num_labels != num_labels:
+                raise ValueError("general.num_labels must match the number of labels.")
+            conf["general"]["num_labels"] = num_labels
+
         self.name = name
         self.general = conf["general"]
         self.train = conf["train"]
@@ -112,8 +125,8 @@ class TrainAssistant(object):
 
         self._model: Optional[pl.LightningModule] = None
         self._data: Optional[pl.LightningDataModule] = None
-        self._logger = None
-        self._callbacks = None
+        self._logger: Optional[Logger] = None
+        self._callbacks: Optional[List[Callback]] = None
 
     @property
     def model(self) -> pl.LightningModule:
@@ -162,11 +175,11 @@ class TrainAssistant(object):
         """"""
         if self._callbacks is None:
             if self._callbacks_conf is not None:
-                self.callbacks = [
+                self._callbacks = [
                     instantiate(callback) for callback in self._callbacks_conf
                 ]
             else:
-                self.callbacks = []
+                self._callbacks = []
         return self._callbacks
 
     @callbacks.setter

@@ -1,7 +1,9 @@
 # This is heavily inspired by the following repo:
 # https://github.com/castorini/DeeBERT
+from __future__ import annotations
+
 from abc import ABC
-from typing import List, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -66,15 +68,17 @@ class DeeBertEncoder(nn.Module):
     def __init__(self, config: PretrainedConfig, inference: bool):
         super(DeeBertEncoder, self).__init__()
         self.config = config
-        self.layer = nn.ModuleList([BertLayer(config)] * config.num_hidden_layers)
-        self.ramp = nn.ModuleList([OffRamp(config)] * config.num_hidden_layers)
+        self.layer = nn.ModuleList(
+            [BertLayer(config) for _ in range(config.num_hidden_layers)]
+        )
+        self.ramp = nn.ModuleList(
+            [OffRamp(config) for _ in range(config.num_hidden_layers)]
+        )
 
-        self.early_exit_entropy = [
-            -1,
-        ] * config.num_hidden_layers
+        self.early_exit_entropy: List[float] = [-1.0] * config.num_hidden_layers
         self.inference = inference
 
-    def set_early_exit_entropy(self, x: Union[List[float], float]) -> None:
+    def set_early_exit_entropy(self, x: Union[List[float], float, int]) -> None:
         """
         Assigning an entropy threshold to every layer.
 
@@ -85,9 +89,9 @@ class DeeBertEncoder(nn.Module):
         """
         if isinstance(x, float) or isinstance(x, int):
             for i in range(self.config.num_hidden_layers):
-                self.early_exit_entropy[i] = x
+                self.early_exit_entropy[i] = float(x)
         elif isinstance(x, list):
-            self.early_exit_entropy = x
+            self.early_exit_entropy = list(x)
         else:
             raise TypeError(
                 f"Expected 'x' to be of type 'float' or 'list' but got :'{type(x)}'"
@@ -117,11 +121,11 @@ class DeeBertEncoder(nn.Module):
         output_hidden_states: bool = False,
     ) -> DeeBertEncoderOutput:
         """"""
-        all_hidden_states = tuple() if output_hidden_states else None
-        all_attentions = tuple() if output_attentions else None
+        all_hidden_states: Tuple[torch.Tensor, ...] = tuple()
+        all_attentions: Tuple[torch.Tensor, ...] = tuple()
 
         if not self.inference:
-            all_ramps = tuple()
+            all_ramps: Tuple[RampOutput, ...] = tuple()
 
             for i, layer_module in enumerate(self.layer):
                 if output_hidden_states:
@@ -149,16 +153,18 @@ class DeeBertEncoder(nn.Module):
 
             return DeeBertEncoderOutput(
                 last_hidden_state=hidden_states,
-                hidden_states=all_hidden_states,
-                attentions=all_attentions,
+                hidden_states=all_hidden_states if output_hidden_states else None,
+                attentions=all_attentions if output_attentions else None,
                 ramps_exit=all_ramps,
                 exit_layer=i,
             )
         else:
-            all_ramps = [
-                0,
-            ] * hidden_states.shape[0]
-            positions = torch.arange(start=0, end=hidden_states.shape[0]).long()
+            batch_ramps: List[Optional[RampOutput]] = [None] * hidden_states.shape[0]
+            positions = torch.arange(
+                start=0,
+                end=hidden_states.shape[0],
+                device=hidden_states.device,
+            ).long()
 
             for i, layer_module in enumerate(self.layer):
                 layer_outputs = layer_module(
@@ -174,21 +180,35 @@ class DeeBertEncoder(nn.Module):
 
                 if i == len(self.layer) - 1:
                     for idx, pos in enumerate(positions):
-                        all_ramps[pos] = ramp_exit[idx]
+                        batch_ramps[int(pos)] = ramp_exit[idx]
                 else:
                     enough_info = ramp_exit.entropy < self.early_exit_entropy[i]
                     right_pos = positions[enough_info]
 
                     for idx, pos in enumerate(right_pos):
-                        all_ramps[pos] = ramp_exit[idx]
+                        batch_ramps[int(pos)] = ramp_exit[idx]
 
                     hidden_states = hidden_states[~enough_info]
                     attention_mask = attention_mask[~enough_info]
                     positions = positions[~enough_info]
 
                     if positions.nelement() == 0:
-                        return DeeBertEncoderOutput(ramps_exit=all_ramps, exit_layer=i)
-            return DeeBertEncoderOutput(ramps_exit=all_ramps, exit_layer=i)
+                        return DeeBertEncoderOutput(
+                            ramps_exit=self._completed_ramps(batch_ramps),
+                            exit_layer=i,
+                        )
+            return DeeBertEncoderOutput(
+                ramps_exit=self._completed_ramps(batch_ramps),
+                exit_layer=i,
+            )
+
+    @staticmethod
+    def _completed_ramps(
+        ramps: List[Optional[RampOutput]],
+    ) -> Tuple[RampOutput, ...]:
+        if any(ramp is None for ramp in ramps):
+            raise RuntimeError("DeeBERT did not produce an output for every sample.")
+        return tuple(ramp for ramp in ramps if ramp is not None)
 
 
 class DeeBertModel(BertPreTrainedModel, ABC):
