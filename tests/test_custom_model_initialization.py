@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Callable
+
 import torch
 from omegaconf import OmegaConf
 from transformers import (
@@ -18,6 +21,7 @@ from bert_squeeze.models.lt_deebert import LtDeeBert
 from bert_squeeze.models.lt_distilbert import LtCustomDistilBert
 from bert_squeeze.models.lt_fastbert import LtFastBert
 from bert_squeeze.models.lt_theseus_bert import LtTheseusBert
+from bert_squeeze.utils.scorers import FastBertSequenceClassificationScorer
 
 
 def _bert_config(num_hidden_layers: int = 1, num_labels: int = 2) -> BertConfig:
@@ -120,6 +124,7 @@ def test_distilbert_uses_injected_sequence_classifier(tmp_path):
     batch = {
         "input_ids": torch.tensor([[1, 2, 3], [4, 5, 0]]),
         "attention_mask": torch.tensor([[1, 1, 1], [1, 1, 0]]),
+        "token_type_ids": torch.zeros((2, 3), dtype=torch.long),
         "labels": torch.tensor([0, 2]),
     }
 
@@ -154,20 +159,72 @@ def test_fastbert_inference_uses_configured_label_count() -> None:
     assert probabilities.shape == (2, 3)
 
 
-def test_fastbert_respects_requested_training_stage(tmp_path) -> None:
+def _fastbert_module(tmp_path: Path) -> LtFastBert:
     config = _bert_config(num_hidden_layers=2)
     injected_model = BertForSequenceClassification(config)
     injected_model.save_pretrained(tmp_path)
 
-    module = LtFastBert(
-        training_config=_training_config(),
+    return LtFastBert(
+        training_config=_training_config(inference_speed=1.1),
         pretrained_model=str(tmp_path),
         num_labels=2,
         model=injected_model,
+        scorer=FastBertSequenceClassificationScorer([0, 1]),
         training_stage=1,
     )
 
+
+def test_fastbert_shared_lifecycle_handles_branch_logits(tmp_path: Path) -> None:
+    module = _fastbert_module(tmp_path)
+    batch = {**_inputs(), "labels": torch.tensor([0, 1])}
+
+    training_loss = module.training_step(batch, 0)
+    training_loss.backward()
+    validation_loss = module.validation_step(batch, 0)
+    test_loss = module.test_step(batch, 0)
+
     assert module.training_stage == 1
+    assert (
+        module.encoder.layer_classifiers["branch_classifier_0"].dense_logits.weight.grad
+        is not None
+    )
+    assert torch.isfinite(training_loss)
+    assert torch.isfinite(validation_loss)
+    assert torch.isfinite(test_loss)
+    assert "branch_classifier_0" in module.scorer.confusion_matrix
+    assert module.validation_step_outputs[0]["logits"].shape == (2, 2)
+    assert all(
+        loss.device.type == "cpu" for loss in module.valid_scorer.losses["full_loss"]
+    )
+
+
+def test_fastbert_prediction_uses_adaptive_early_exit(tmp_path: Path) -> None:
+    module = _fastbert_module(tmp_path)
+    module.eval()
+    with torch.no_grad():
+        expected_probabilities, _ = module(
+            **_inputs(), inference=True, inference_speed=1.1
+        )
+
+    layer_calls = [0] * len(module.encoder.layer)
+
+    def count_layer(layer_idx: int) -> Callable[..., None]:
+        def hook(*args: object) -> None:
+            layer_calls[layer_idx] += 1
+
+        return hook
+
+    handles = [
+        layer.register_forward_hook(count_layer(layer_idx))
+        for layer_idx, layer in enumerate(module.encoder.layer)
+    ]
+    with torch.no_grad():
+        probabilities = module.predict_step(_inputs(), 0)
+    for handle in handles:
+        handle.remove()
+
+    assert torch.allclose(probabilities, expected_probabilities)
+    assert layer_calls == [1, 0]
 
 
 def test_theseus_loads_and_uses_a_custom_pretrained_encoder(tmp_path):
@@ -183,6 +240,10 @@ def test_theseus_loads_and_uses_a_custom_pretrained_encoder(tmp_path):
         ),
     )
     logits = module(**_inputs())
+    loss = module.training_step(
+        {**_inputs(), "labels": torch.tensor([0, 1])},
+        0,
+    )
 
     assert module.model is module.encoder
     assert torch.equal(
@@ -190,3 +251,5 @@ def test_theseus_loads_and_uses_a_custom_pretrained_encoder(tmp_path):
         source_encoder.embeddings.word_embeddings.weight,
     )
     assert logits.shape == (2, 2)
+    assert torch.isfinite(loss)
+    assert module.replacement_scheduler.step_counter == 1
