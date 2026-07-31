@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from copy import deepcopy
 from typing import Dict, List, Optional, Tuple, Union
@@ -22,7 +24,11 @@ from ..utils.experiment_logging import ExperimentLogger
 from ..utils.losses import LabelSmoothingLoss
 from ..utils.optimizers import BertAdam
 from ..utils.scorers import BaseSequenceClassificationScorer, LMScorer, Scorer
-from ..utils.types import Loss
+from ..utils.types import (
+    FastBertLoss,
+    SequenceClassificationOutput,
+    SequenceClassificationStepOutput,
+)
 
 
 class _IdentityParamList(list):
@@ -60,14 +66,14 @@ class BaseTransformerModule(pl.LightningModule):
         self.config = training_config
 
         self.pretrained_model = pretrained_model
-        self.model = (
-            self.BASE_CLASS_MODEL.from_pretrained(self.pretrained_model)
-            if model is None
-            else model
-        )
-        self.training_step_outputs = []
-        self.test_step_outputs = []
-        self.validation_step_outputs = []
+        if model is None:
+            if self.BASE_CLASS_MODEL is None:
+                raise TypeError("A base model class or model instance is required.")
+            model = self.BASE_CLASS_MODEL.from_pretrained(self.pretrained_model)
+        self.model = model
+        self.training_step_outputs: List[Dict[str, torch.Tensor]] = []
+        self.test_step_outputs: List[Dict[str, torch.Tensor]] = []
+        self.validation_step_outputs: List[Dict[str, torch.Tensor]] = []
 
         self._set_scorers(scorer)
 
@@ -288,7 +294,7 @@ class BaseTransformerModule(pl.LightningModule):
         for param in self.encoder.parameters():
             param.requires_grad = True
 
-    def loss(self, *args, **kwargs) -> Loss:
+    def loss(self, *args, **kwargs) -> object:
         """"""
         raise NotImplementedError()
 
@@ -368,9 +374,141 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
         self._sanity_checks(training_config)
         self._set_objective()
 
+    def training_step(
+        self,
+        batch: Dict[str, torch.Tensor],
+        batch_idx: int,
+        *args: object,
+        **kwargs: object,
+    ) -> torch.Tensor:
+        self._before_training_step()
+        step_output = self._classification_step(batch, training=True)
+        self._update_scorer(self.scorer, step_output)
+        self._log_training_metrics()
+        return step_output.optimization_loss
+
+    def validation_step(
+        self,
+        batch: Dict[str, torch.Tensor],
+        batch_idx: int,
+        *args: object,
+        **kwargs: object,
+    ) -> torch.Tensor:
+        step_output = self._classification_step(batch)
+        self._update_scorer(self.valid_scorer, step_output)
+        self._store_step_output(self.validation_step_outputs, step_output)
+        return step_output.optimization_loss
+
+    def test_step(
+        self,
+        batch: Dict[str, torch.Tensor],
+        batch_idx: int,
+        *args: object,
+        **kwargs: object,
+    ) -> torch.Tensor:
+        step_output = self._classification_step(batch)
+        self._update_scorer(self.test_scorer, step_output)
+        self._store_step_output(self.test_step_outputs, step_output)
+        return step_output.optimization_loss
+
+    def predict_step(
+        self,
+        batch: Dict[str, torch.Tensor],
+        batch_idx: int,
+        *args: object,
+        **kwargs: object,
+    ) -> torch.Tensor:
+        self._before_prediction_step()
+        return self._predict_probabilities(batch)
+
+    def _classification_step(
+        self,
+        batch: Dict[str, torch.Tensor],
+        training: bool = False,
+    ) -> SequenceClassificationStepOutput:
+        output = self._classification_output(batch)
+        labels = batch["labels"]
+        loss = self._classification_loss(output, labels)
+        return SequenceClassificationStepOutput(output=output, labels=labels, loss=loss)
+
+    def _classification_output(
+        self, batch: Dict[str, torch.Tensor]
+    ) -> SequenceClassificationOutput:
+        logits = self.forward(**self._model_inputs(batch))
+        if not isinstance(logits, torch.Tensor):
+            raise TypeError("Sequence classifiers must return tensor logits.")
+        return SequenceClassificationOutput(logits=logits)
+
+    def _classification_loss(
+        self,
+        output: SequenceClassificationOutput,
+        labels: torch.Tensor,
+    ) -> Union[torch.Tensor, FastBertLoss]:
+        return self.loss(labels=labels, logits=output.logits)
+
+    def _model_inputs(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        input_names = ("input_ids", "attention_mask", "token_type_ids")
+        return {name: batch[name] for name in input_names if name in batch}
+
+    def _before_training_step(self) -> None:
+        pass
+
+    def _before_prediction_step(self) -> None:
+        pass
+
+    def _predict_probabilities(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+        output = self._classification_output(batch)
+        return F.softmax(output.logits, dim=-1)
+
+    def _log_training_metrics(self) -> None:
+        if self.global_step <= 0 or self.global_step % self.config.logging_steps != 0:
+            return
+
+        logging_loss = {
+            key: torch.stack(values).mean()
+            for key, values in self.scorer.losses.items()
+            if values
+        }
+        self.log_dict({f"train/loss_{key}": value for key, value in logging_loss.items()})
+        self.log("train/acc", self.scorer.acc)
+        self.scorer.reset()
+
+    @staticmethod
+    def _detached_logits(
+        logits: Union[torch.Tensor, List[torch.Tensor]]
+    ) -> Union[torch.Tensor, List[torch.Tensor]]:
+        if isinstance(logits, torch.Tensor):
+            return logits.detach().cpu()
+        return [item.detach().cpu() for item in logits]
+
+    def _update_scorer(
+        self,
+        scorer: Scorer,
+        step_output: SequenceClassificationStepOutput,
+    ) -> None:
+        logits = self._detached_logits(step_output.output.scorer_logits)
+        labels = step_output.labels.detach().cpu()
+        loss = step_output.loss
+        if isinstance(loss, torch.Tensor):
+            loss = loss.detach().cpu()
+        scorer.add(logits, labels, loss)
+
+    @staticmethod
+    def _store_step_output(
+        output_store: List[Dict[str, torch.Tensor]],
+        step_output: SequenceClassificationStepOutput,
+    ) -> None:
+        output_store.append(
+            {
+                "loss": step_output.optimization_loss.detach().cpu(),
+                "logits": step_output.output.logits.detach().cpu(),
+                "labels": step_output.labels.detach().cpu(),
+            }
+        )
+
     def on_validation_epoch_end(self):
         """"""
-        if not self.trainer.sanity_checking:
+        if not self.trainer.sanity_checking and self.validation_step_outputs:
             all_logits = torch.cat(
                 [pred["logits"] for pred in self.validation_step_outputs]
             )
@@ -381,13 +519,19 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
         self.valid_scorer.reset()
         self.validation_step_outputs.clear()
 
-    def _sanity_checks(self, training_config: DictConfig) -> None:
+    def on_test_epoch_end(self) -> None:
+        logging.info(self.test_scorer.get_table())
+        self.test_scorer.reset()
+        self.test_step_outputs.clear()
+
+    @staticmethod
+    def _sanity_checks(training_config: DictConfig) -> None:
         """
         Args:
             training_config (DictConfig):
                 training configuration
         """
-        super()._sanity_checks(training_config)
+        BaseTransformerModule._sanity_checks(training_config)
 
         if training_config.get("scorer_type") == "loose":
             assert "loose_classes" in training_config.keys(), (
@@ -433,7 +577,9 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
         self.valid_scorer = deepcopy(scorer)
         self.test_scorer = deepcopy(scorer)
 
-    def loss(self, labels: torch.Tensor, logits: torch.Tensor, *args, **kwargs) -> Loss:
+    def loss(
+        self, labels: torch.Tensor, logits: torch.Tensor, *args, **kwargs
+    ) -> Union[torch.Tensor, FastBertLoss]:
         """
         Method called for loss computation
 
@@ -445,7 +591,7 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
         """
         return self.objective(logits.view(-1, self.num_labels), labels.view(-1).long())
 
-    def log_eval_report(self, probs: np.array) -> None:
+    def log_eval_report(self, probs: np.ndarray) -> None:
         """
         Method that logs an evaluation report.
 
@@ -524,7 +670,9 @@ class BaseSeq2SeqTransformerModule(BaseTransformerModule):
         self.valid_scorer = deepcopy(scorer)
         self.test_scorer = deepcopy(scorer)
 
-    def loss(self, labels: torch.Tensor, logits: torch.Tensor, *args, **kwargs) -> Loss:
+    def loss(
+        self, labels: torch.Tensor, logits: torch.Tensor, *args, **kwargs
+    ) -> torch.Tensor:
         """
         Method called for loss computation
 
