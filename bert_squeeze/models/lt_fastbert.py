@@ -16,7 +16,7 @@ from transformers.models.bert.modeling_bert import BertEmbeddings
 
 from bert_squeeze.utils.scorers import Scorer
 
-from ..utils.types import FastBertLoss
+from ..utils.types import FastBertLoss, SequenceClassificationOutput
 from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers.fastbert import FastBertGraph
 
@@ -68,11 +68,11 @@ class LtFastBert(BaseSequenceClassificationTransformerModule):
         input_ids: torch.Tensor = None,
         token_type_ids: torch.Tensor = None,
         attention_mask: torch.Tensor = None,
-        inference: torch.Tensor = False,
+        inference: bool = False,
         inference_speed: float = 0.5,
         training_stage: int = 0,
         **kwargs,
-    ) -> torch.Tensor:
+    ) -> Union[torch.Tensor, List[torch.Tensor], tuple[torch.Tensor, int]]:
         """
         Args:
             input_ids (torch.Tensor):
@@ -130,81 +130,41 @@ class LtFastBert(BaseSequenceClassificationTransformerModule):
         return output
 
     @overrides
-    def training_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        """"""
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"],
-            "training_stage": self.training_stage,
-        }
-
-        outputs = self.forward(**inputs)
-        losses = self.loss(outputs, batch["labels"])
-
-        if self.training_stage == 0:
-            # "outputs" is logits from the last classification layer
-            logits = outputs
-        else:
-            # outputs[-1] is log prob from the last classification layer
-            # outputs[:-1] is list of all the student classification layers logits
-            logits = outputs[:-1]
-
-        self.scorer.add(logits, batch["labels"], losses)
-        if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
-            logging_loss = {
-                key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
-            }
-            self.log_dict({f"train/loss_{key}": val for key, val in logging_loss.items()})
-            self.log("train/acc", self.scorer.acc)
-            self.scorer.reset()
-
-        return losses.full_loss
-
-    @overrides
-    def validation_step(self, batch, batch_idx, *args, **kwargs) -> None:
-        """"""
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"],
-            "training_stage": self.training_stage,
-        }
-
-        outputs = self.forward(**inputs)
-        losses = self.loss(outputs, batch["labels"])
-
-        if self.training_stage == 0:
-            # "outputs" is logits from the last classification layer
-            logits = outputs
-        else:
-            # outputs[-1] is log prob from the last classification layer
-            # outputs[:-1] is list of all the student classification layers logits
-            logits = outputs[:-1]
-        self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), losses)
-        self.validation_step_outputs.append(
-            {"loss": losses.full_loss, "logits": logits.cpu()}
+    def _classification_output(
+        self, batch: dict[str, torch.Tensor]
+    ) -> SequenceClassificationOutput:
+        inputs = self._model_inputs(batch)
+        outputs = self.forward(**inputs, training_stage=self.training_stage)
+        if isinstance(outputs, torch.Tensor):
+            return SequenceClassificationOutput(logits=outputs)
+        if not outputs or not all(isinstance(output, torch.Tensor) for output in outputs):
+            raise TypeError("FastBERT must return one or more tensor logits.")
+        return SequenceClassificationOutput(
+            logits=outputs[-1],
+            intermediate_logits=outputs[:-1],
         )
 
     @overrides
-    def test_step(self, batch, batch_idx, *args, **kwargs) -> None:
-        """"""
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"],
-            "training_stage": self.training_stage,
-        }
+    def _classification_loss(
+        self,
+        output: SequenceClassificationOutput,
+        labels: torch.Tensor,
+    ) -> FastBertLoss:
+        outputs = output.scorer_logits
+        return self.loss(outputs, labels)
 
-        outputs = self.forward(**inputs)
-        losses = self.loss(outputs, batch["labels"])
-
-        # outputs[-1] is log prob from the last classification layer
-        # outputs[:-1] is list of all the student classification layers logits
-        logits = outputs[:-1]
-
-        self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), losses)
-        self.test_step_outputs.append({"loss": losses.full_loss, "logits": logits.cpu()})
+    @overrides
+    def _predict_probabilities(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
+        outputs = self.forward(
+            **self._model_inputs(batch),
+            inference=True,
+            inference_speed=self.config.get("inference_speed", 0.5),
+        )
+        if not isinstance(outputs, tuple) or not isinstance(outputs[0], torch.Tensor):
+            raise TypeError(
+                "FastBERT inference must return probabilities and an exit layer."
+            )
+        return outputs[0]
 
     def _build_model(self):
         """"""

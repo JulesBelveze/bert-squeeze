@@ -1,6 +1,7 @@
-import dataclasses
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple, TypeVar, Union
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import List, Optional, Sequence, Tuple, TypeVar, Union
 
 import torch
 
@@ -40,14 +41,32 @@ class DeeBertModelOutput:
     pooled_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[torch.FloatTensor] = None
     attentions: Optional[torch.FloatTensor] = None
-    ramps_exits: Optional[torch.FloatTensor] = None
+    ramps_exits: Optional[Sequence[RampOutput]] = None
     # Optional per-layer gate logits/probs for BERxiT
     gates_logits: Optional[Tuple[torch.FloatTensor]] = None
 
     @property
     def logits(self) -> torch.Tensor:
         """"""
+        if self.ramps_exits is None:
+            raise ValueError("Ramp outputs are required to build logits.")
         return torch.stack([ramp.logits for ramp in self.ramps_exits], dim=0)
+
+
+@dataclass
+class SequenceClassificationOutput:
+    logits: torch.Tensor
+    intermediate_logits: Optional[Sequence[torch.Tensor]] = None
+    ramps_exits: Optional[Sequence[RampOutput]] = None
+    gates_logits: Optional[Tuple[torch.Tensor, ...]] = None
+    attentions: Optional[Tuple[torch.Tensor, ...]] = None
+    exit_layer: Optional[int] = None
+
+    @property
+    def scorer_logits(self) -> Union[torch.Tensor, List[torch.Tensor]]:
+        if self.intermediate_logits is None:
+            return self.logits
+        return [*self.intermediate_logits, self.logits]
 
 
 @dataclass
@@ -57,12 +76,34 @@ class DistillationLoss:
     full_loss: torch.Tensor
 
 
-# TODO: find a way not to hardcode the number of layers
-FastBertLoss = dataclasses.make_dataclass(
-    cls_name="FastBertLoss",
-    fields=[("full_loss", torch.Tensor)]
-    + [(f"kl_layer_{i}", Optional[torch.Tensor], field(default=None)) for i in range(11)],
-)
+@dataclass
+class FastBertLoss:
+    full_loss: torch.Tensor
+    kl_layer_0: Optional[torch.Tensor] = None
+    kl_layer_1: Optional[torch.Tensor] = None
+    kl_layer_2: Optional[torch.Tensor] = None
+    kl_layer_3: Optional[torch.Tensor] = None
+    kl_layer_4: Optional[torch.Tensor] = None
+    kl_layer_5: Optional[torch.Tensor] = None
+    kl_layer_6: Optional[torch.Tensor] = None
+    kl_layer_7: Optional[torch.Tensor] = None
+    kl_layer_8: Optional[torch.Tensor] = None
+    kl_layer_9: Optional[torch.Tensor] = None
+    kl_layer_10: Optional[torch.Tensor] = None
+
+
+@dataclass
+class SequenceClassificationStepOutput:
+    output: SequenceClassificationOutput
+    labels: torch.Tensor
+    loss: Union[torch.Tensor, FastBertLoss]
+
+    @property
+    def optimization_loss(self) -> torch.Tensor:
+        if isinstance(self.loss, torch.Tensor):
+            return self.loss
+        return self.loss.full_loss
+
 
 Loss = TypeVar("Loss", DistillationLoss, FastBertLoss, torch.Tensor)
 LossType = Optional[Loss]

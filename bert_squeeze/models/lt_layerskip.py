@@ -11,6 +11,10 @@ from overrides import overrides
 from bert_squeeze.utils.scorers.sequence_classification_scorer import (
     BaseSequenceClassificationScorer,
 )
+from bert_squeeze.utils.types import (
+    SequenceClassificationOutput,
+    SequenceClassificationStepOutput,
+)
 
 from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers.layer_dropout import LayerDropoutWrapper
@@ -111,61 +115,28 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
             )[-1]
         return self._get_layer_logits(hidden_states)
 
-    def training_step(
+    @overrides
+    def _classification_step(
         self,
         batch: dict[str, torch.Tensor],
-        batch_idx: int,
-        *args: object,
-        **kwargs: object,
-    ) -> torch.Tensor:
-        inputs = self._build_inputs(batch)
+        training: bool = False,
+    ) -> SequenceClassificationStepOutput:
+        if not training:
+            return super()._classification_step(batch)
+
+        inputs = self._model_inputs(batch)
         outputs = self._forward_all_layers(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
+            token_type_ids=inputs.get("token_type_ids"),
         )
         loss = self._compute_training_loss(outputs, batch["labels"])
-
         logits = self._get_layer_logits(outputs[-1])
-        self.scorer.add(logits.detach().cpu(), batch["labels"], loss.detach().cpu())
-        if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
-            logging_loss = {
-                key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
-            }
-            self.log_dict({f"train/loss_{key}": val for key, val in logging_loss.items()})
-            self.log("train/acc", self.scorer.acc)
-            self.scorer.reset()
-
-        return loss
-
-    def validation_step(
-        self,
-        batch: dict[str, torch.Tensor],
-        batch_idx: int,
-        *args: object,
-        **kwargs: object,
-    ) -> torch.Tensor:
-        return self._eval_step(batch, self.valid_scorer, self.validation_step_outputs)
-
-    def test_step(
-        self,
-        batch: dict[str, torch.Tensor],
-        batch_idx: int,
-        *args: object,
-        **kwargs: object,
-    ) -> torch.Tensor:
-        return self._eval_step(batch, self.test_scorer, self.test_step_outputs)
-
-    def predict_step(
-        self,
-        batch: dict[str, torch.Tensor],
-        batch_idx: int,
-        *args: object,
-        **kwargs: object,
-    ) -> torch.Tensor:
-        inputs = self._build_inputs(batch)
-        logits = self.forward(**inputs)
-        return torch.softmax(logits, dim=-1)
+        return SequenceClassificationStepOutput(
+            output=SequenceClassificationOutput(logits=logits),
+            labels=batch["labels"],
+            loss=loss,
+        )
 
     def _compute_training_loss(
         self, outputs: tuple[torch.Tensor, ...], labels: torch.Tensor
@@ -221,32 +192,6 @@ class LtLayerSkip(BaseSequenceClassificationTransformerModule):
         if hidden_states is None:
             raise RuntimeError("output_hidden_states must be enabled for LayerSkip.")
         return tuple(hidden_states[1:])
-
-    def _eval_step(
-        self,
-        batch: dict[str, torch.Tensor],
-        scorer: BaseSequenceClassificationScorer,
-        output_store: list[dict[str, torch.Tensor]],
-    ) -> torch.Tensor:
-        inputs = self._build_inputs(batch)
-        logits = self.forward(**inputs)
-        labels = batch["labels"]
-        loss = super().loss(labels=labels, logits=logits)
-        scorer.add(logits.cpu(), labels.cpu(), loss.cpu())
-        output_store.append(
-            {"loss": loss, "logits": logits.cpu(), "labels": labels.cpu()}
-        )
-        return loss
-
-    @staticmethod
-    def _build_inputs(
-        batch: dict[str, torch.Tensor]
-    ) -> dict[str, Optional[torch.Tensor]]:
-        return {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch.get("token_type_ids"),
-        }
 
     def _forward_early_exit(
         self,

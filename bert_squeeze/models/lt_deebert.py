@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-import logging
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import lightning.pytorch as pl
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from omegaconf import DictConfig, ListConfig
 from overrides import overrides
 from torch.nn import CrossEntropyLoss
 from transformers import AutoConfig
 
 from bert_squeeze.utils.scorers import Scorer
-from bert_squeeze.utils.types import RampOutput
+from bert_squeeze.utils.types import RampOutput, SequenceClassificationOutput
 
 from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers.deebert import DeeBertModel
@@ -121,105 +119,32 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
         return logits, ramps_exits, exit_layer
 
     @overrides
-    def training_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        """"""
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"],
-        }
-        logits, ramps_exits, _ = self.forward(**inputs)
-        loss = self.loss(
+    def _classification_output(
+        self, batch: Dict[str, torch.Tensor]
+    ) -> SequenceClassificationOutput:
+        logits, ramps_exits, exit_layer = self.forward(**self._model_inputs(batch))
+        return SequenceClassificationOutput(
             logits=logits,
-            labels=batch["labels"],
-            train_ramps=self.train_highway,
             ramps_exits=ramps_exits,
+            exit_layer=exit_layer,
         )
-
-        self.scorer.add(logits.detach().cpu(), batch["labels"], loss.detach().cpu())
-        if (
-            self.config.logging_steps > 0
-            and self.global_step % self.config.logging_steps == 0
-        ):
-            logging_loss = {
-                key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
-            }
-            self.log_dict({f"train/loss_{key}": val for key, val in logging_loss.items()})
-            self.log("train/acc", self.scorer.acc)
-            self.scorer.reset()
-
-        return loss
 
     @overrides
-    def validation_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        """"""
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"],
-        }
-        logits, ramps_exits, _ = self.forward(**inputs)
-        loss = self.loss(
-            logits=logits,
-            labels=batch["labels"],
-            ramps_exits=ramps_exits,
+    def _classification_loss(
+        self,
+        output: SequenceClassificationOutput,
+        labels: torch.Tensor,
+    ) -> torch.Tensor:
+        return self.loss(
+            logits=output.logits,
+            labels=labels,
             train_ramps=self.train_highway,
+            ramps_exits=output.ramps_exits,
         )
-        self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        self.validation_step_outputs.append(
-            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
-        )
-        return loss
-
-    def on_validation_epoch_end(self) -> None:
-        """"""
-        all_logits = torch.cat([pred["logits"] for pred in self.validation_step_outputs])
-        all_probs = F.softmax(all_logits, dim=-1)
-        labels_probs = all_probs.numpy()
-
-        self.log_eval_report(labels_probs)
-        self.valid_scorer.reset()
-        self.validation_step_outputs.clear()
 
     @overrides
-    def test_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        """"""
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"],
-        }
-        logits, ramps_exits, _ = self.forward(**inputs)
-        loss = self.loss(
-            logits=logits,
-            labels=batch["labels"],
-            ramps_exits=ramps_exits,
-            train_ramps=self.train_highway,
-        )
-        self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        self.test_step_outputs.append(
-            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
-        )
-        return loss
-
-    def on_test_epoch_end(self) -> None:
-        """"""
-        logging.info(self.test_scorer.get_table())
-        self.test_scorer.reset()
-        self.test_step_outputs.clear()
-
-    def predict_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        """"""
+    def _before_prediction_step(self) -> None:
         self.bert.set_inference_mode(inference=True)
-
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"],
-        }
-        logits, _, _ = self.forward(**inputs)
-        preds = torch.softmax(logits, dim=-1)
-        return preds
 
     @overrides
     def _get_optimizer_parameters(self) -> List[Dict]:

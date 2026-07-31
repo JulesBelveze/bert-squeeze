@@ -495,7 +495,7 @@ class FastBertSequenceClassificationScorer:
             for attr in loss.__dataclass_fields__:
                 if getattr(loss, attr) is None:
                     continue
-                self.losses[attr].append(getattr(loss, attr).detach())
+                self.losses[attr].append(getattr(loss, attr).detach().cpu())
         else:
             raise TypeError(f"Got 'loss' with type: {type(loss)}")
 
