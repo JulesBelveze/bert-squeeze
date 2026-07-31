@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional, Union
 
 import lightning.pytorch as pl
@@ -111,58 +113,8 @@ class LtTheseusBert(BaseSequenceClassificationTransformerModule):
         return logits
 
     @overrides
-    def training_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        """"""
+    def _before_training_step(self) -> None:
         self.replacement_scheduler.step()
-
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"],
-        }
-        logits = self.forward(**inputs)
-        loss = self.loss(logits=logits, labels=batch["labels"])
-
-        self.scorer.add(logits.detach().cpu(), batch["labels"], loss.detach().cpu())
-        if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
-            logging_loss = {
-                key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
-            }
-            self.log_dict({f"train/loss_{key}": val for key, val in logging_loss.items()})
-            self.log("train/acc", self.scorer.acc)
-            self.scorer.reset()
-
-        return loss
-
-    @overrides
-    def validation_step(self, batch, batch_idx, *args, **kwargs) -> None:
-        """"""
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"],
-        }
-        logits = self.forward(**inputs)
-        loss = self.loss(logits=logits, labels=batch["labels"])
-        self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        self.validation_step_outputs.append(
-            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
-        )
-
-    @overrides
-    def test_step(self, batch, batch_idx, *args, **kwargs) -> None:
-        """"""
-        inputs = {
-            "input_ids": batch["input_ids"],
-            "attention_mask": batch["attention_mask"],
-            "token_type_ids": batch["token_type_ids"],
-        }
-        logits = self.forward(**inputs)
-        loss = self.loss(logits=logits, labels=batch["labels"])
-        self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        self.test_step_outputs.append(
-            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
-        )
 
     def _build_model(self):
         """"""

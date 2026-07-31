@@ -66,52 +66,7 @@ class LtCustomDistilBert(BaseSequenceClassificationTransformerModule):
             return logits, attentions
         return logits
 
-    def _classification_logits(
-        self, input_ids: torch.Tensor, attention_mask: torch.Tensor
-    ) -> torch.Tensor:
-        outputs = self.forward(input_ids=input_ids, attention_mask=attention_mask)
-        if not isinstance(outputs, torch.Tensor):
-            raise TypeError("DistilBERT classification must return tensor logits.")
-        return outputs
-
     @overrides
-    def training_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        """"""
-        logits = self._classification_logits(batch["input_ids"], batch["attention_mask"])
-        loss = self.loss(labels=batch["labels"], logits=logits)
-
-        self.scorer.add(logits.detach().cpu(), batch["labels"], loss.detach().cpu())
-        if self.global_step > 0 and self.global_step % self.config.logging_steps == 0:
-            logging_loss = {
-                key: torch.stack(val).mean() for key, val in self.scorer.losses.items()
-            }
-            self.log_dict({f"train/loss_{key}": val for key, val in logging_loss.items()})
-
-            self.log("train/acc", self.scorer.acc)
-            self.scorer.reset()
-
-        return loss
-
-    @overrides
-    def validation_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        """"""
-        logits = self._classification_logits(batch["input_ids"], batch["attention_mask"])
-        loss = self.loss(labels=batch["labels"], logits=logits)
-
-        self.valid_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        self.validation_step_outputs.append(
-            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
-        )
-        return loss
-
-    @overrides
-    def test_step(self, batch, batch_idx, *args, **kwargs) -> torch.Tensor:
-        """"""
-        logits = self._classification_logits(batch["input_ids"], batch["attention_mask"])
-        loss = self.loss(labels=batch["labels"], logits=logits)
-
-        self.test_scorer.add(logits.cpu(), batch["labels"].cpu(), loss.cpu())
-        self.test_step_outputs.append(
-            {"loss": loss, "logits": logits.cpu(), "labels": batch["labels"].cpu()}
-        )
-        return loss
+    def _model_inputs(self, batch: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        input_names = ("input_ids", "attention_mask")
+        return {name: batch[name] for name in input_names if name in batch}
