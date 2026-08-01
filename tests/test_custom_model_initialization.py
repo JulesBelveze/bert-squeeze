@@ -5,6 +5,7 @@ from typing import Callable
 
 import pytest
 import torch
+from adapters import AutoAdapterModel
 from omegaconf import OmegaConf
 from transformers import (
     BertConfig,
@@ -17,6 +18,7 @@ from bert_squeeze.models.custom_transformers.berxit import BerxitModel
 from bert_squeeze.models.custom_transformers.deebert import DeeBertModel
 from bert_squeeze.models.custom_transformers.fastbert import FastBertGraph
 from bert_squeeze.models.custom_transformers.theseus_bert import TheseusBertModel
+from bert_squeeze.models.lt_adapter import LtAdapter
 from bert_squeeze.models.lt_berxit import LtBerxit
 from bert_squeeze.models.lt_deebert import LtDeeBert
 from bert_squeeze.models.lt_distilbert import LtCustomDistilBert
@@ -53,6 +55,48 @@ def _inputs():
         "attention_mask": torch.tensor([[1, 1, 1, 0], [1, 1, 0, 0]]),
         "token_type_ids": torch.zeros((2, 4), dtype=torch.long),
     }
+
+
+def test_adapter_loads_and_configures_adapter_model(tmp_path: Path) -> None:
+    source_model = AutoAdapterModel.from_config(_bert_config())
+    source_model.save_pretrained(tmp_path)
+
+    module = LtAdapter(
+        training_config=_training_config(),
+        pretrained_model=str(tmp_path),
+        task_name="classification",
+        adapter_config_name="seq_bn",
+        labels=[0, 1],
+    )
+    logits = module(**_inputs())
+
+    assert "classification" in module.model.adapters_config
+    assert "classification" in module.model.heads
+    assert logits.shape == (2, 2)
+
+
+def test_adapter_preserves_injected_model_configuration(tmp_path: Path) -> None:
+    source_model = AutoAdapterModel.from_config(_bert_config())
+    source_model.add_adapter("classification", config="seq_bn")
+    source_model.add_classification_head("classification", num_labels=2)
+    source_model.save_pretrained(tmp_path)
+    injected_model = AutoAdapterModel.from_pretrained(tmp_path)
+    injected_head = injected_model.heads["classification"]
+
+    module = LtAdapter(
+        training_config=_training_config(),
+        pretrained_model=str(tmp_path),
+        task_name="classification",
+        adapter_config_name="seq_bn",
+        labels=[0, 1],
+        model=injected_model,
+    )
+    logits = module(**_inputs())
+
+    assert module.model is injected_model
+    assert injected_model.heads["classification"] is injected_head
+    assert "classification" in injected_model.adapters_config
+    assert logits.shape == (2, 2)
 
 
 def test_deebert_loads_and_uses_a_custom_pretrained_encoder(tmp_path):

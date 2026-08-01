@@ -5,10 +5,9 @@ from typing import List, Optional, Tuple, Union
 import lightning.pytorch as pl
 import torch
 import torch.nn as nn
-from adapters import AutoAdapterModel
+from adapters import AutoAdapterModel, ModelWithFlexibleHeadsAdaptersMixin, Stack
 from omegaconf import DictConfig
 from overrides import overrides
-from transformers import AutoConfig
 
 from bert_squeeze.utils.scorers import Scorer
 
@@ -39,6 +38,8 @@ class LtAdapter(BaseSequenceClassificationTransformerModule):
             helper object to compute performance metrics during training
     """
 
+    BASE_CLASS_MODEL = AutoAdapterModel
+
     def __init__(
         self,
         training_config: DictConfig,
@@ -60,7 +61,7 @@ class LtAdapter(BaseSequenceClassificationTransformerModule):
         self.adapter_config_name = adapter_config_name
         self.labels = labels
 
-        self._build_model()
+        self._configure_adapter()
 
     @overrides
     def forward(
@@ -91,19 +92,17 @@ class LtAdapter(BaseSequenceClassificationTransformerModule):
         )
         return outputs.logits
 
-    def _build_model(self):
-        """"""
-        config = AutoConfig.from_pretrained(
-            self.pretrained_model, num_labels=self.model_config.num_labels
-        )
-        model = AutoAdapterModel.from_pretrained(self.pretrained_model, config=config)
+    def _configure_adapter(self) -> None:
+        model = self.model
+        if not isinstance(model, ModelWithFlexibleHeadsAdaptersMixin):
+            raise TypeError("LtAdapter requires a model with flexible adapter heads.")
 
-        model.add_adapter(self.task_name, config=self.adapter_config_name)
-        model.add_classification_head(
-            head_name=self.task_name,
-            num_labels=self.model_config.num_labels,
-            id2label={i: label for i, label in enumerate(self.labels)},
-        )
-        model.set_active_adapters([self.task_name])
-        model.train_adapter([self.task_name])
-        self.model = model
+        if self.task_name not in model.adapters_config:
+            model.add_adapter(self.task_name, config=self.adapter_config_name)
+        if self.task_name not in model.heads:
+            model.add_classification_head(
+                head_name=self.task_name,
+                num_labels=self.model_config.num_labels,
+                id2label={i: label for i, label in enumerate(self.labels)},
+            )
+        model.train_adapter(Stack(self.task_name))
