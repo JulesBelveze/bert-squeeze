@@ -3,11 +3,16 @@ from typing import Dict, List, Tuple, Union
 import lightning.pytorch as pl
 import numpy as np
 import torch
-from omegaconf import DictConfig, ListConfig
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from omegaconf import DictConfig
 
 from ..utils.experiment_logging import ExperimentLogger
-from ..utils.optimizers import BertAdam
+from ..utils.optimizers import (
+    BertAdam,
+    OptimizerParameterGroup,
+    build_optimizer_parameter_groups,
+    register_legacy_optimizer_state_migration,
+)
+from ..utils.schedulers import GroupCompatibleReduceLROnPlateau
 from ..utils.types import DistillationLoss
 
 
@@ -52,107 +57,14 @@ class BaseDistiller(pl.LightningModule):
         """"""
         raise NotImplementedError()
 
-    def _get_student_parameters(self) -> List[Dict]:
-        """
-        Method that defines the student's parameters to optimize.
-
-        Returns:
-            List[Dict]: group of parameters to optimize
-        """
-        no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight', 'layer_norm.weight']
-
-        if self.params.discriminative_learning:
-            if (
-                isinstance(self.params.learning_rates, ListConfig)
-                and len(self.params.learning_rates) > 1
-            ):
-                groups = [
-                    (f'layer.{i}.', self.params.learning_rates[i]) for i in range(12)
-                ]
-            else:
-                lr = (
-                    self.params.learning_rates[0]
-                    if isinstance(self.params.learning_rates, ListConfig)
-                    else self.params.learning_rates
-                )
-                groups = [
-                    (f'layer.{i}.', lr * pow(self.params.layer_lr_decay, 11 - i))
-                    for i in range(12)
-                ]
-
-            group_all = [f'layer.{i}.' for i in range(12)]
-            no_decay_optimizer_parameters, decay_optimizer_parameters = [], []
-            for g, l in groups:
-                no_decay_optimizer_parameters.append(
-                    {
-                        'params': [
-                            p
-                            for n, p in self.student.named_parameters()
-                            if not any(nd in n for nd in no_decay)
-                            and any(nd in n for nd in [g])
-                        ],
-                        'weight_decay': self.params.weight_decay,
-                        'lr': l,
-                    }
-                )
-                decay_optimizer_parameters.append(
-                    {
-                        'params': [
-                            p
-                            for n, p in self.student.named_parameters()
-                            if any(nd in n for nd in no_decay)
-                            and any(nd in n for nd in [g])
-                        ],
-                        'weight_decay': 0.0,
-                        'lr': l,
-                    }
-                )
-
-            group_all_parameters = [
-                {
-                    'params': [
-                        p
-                        for n, p in self.student.named_parameters()
-                        if not any(nd in n for nd in no_decay)
-                        and not any(nd in n for nd in group_all)
-                    ],
-                    'weight_decay': self.params.weight_decay,
-                },
-                {
-                    'params': [
-                        p
-                        for n, p in self.student.named_parameters()
-                        if any(nd in n for nd in no_decay)
-                        and not any(nd in n for nd in group_all)
-                    ],
-                    'weight_decay': 0.0,
-                },
-            ]
-            optimizer_grouped_parameters = (
-                no_decay_optimizer_parameters
-                + decay_optimizer_parameters
-                + group_all_parameters
-            )
-        else:
-            optimizer_grouped_parameters = [
-                {
-                    'params': [
-                        p
-                        for n, p in self.student.named_parameters()
-                        if not any(nd in n for nd in no_decay)
-                    ],
-                    'weight_decay': self.params.weight_decay,
-                },
-                {
-                    'params': [
-                        p
-                        for n, p in self.student.named_parameters()
-                        if any(nd in n for nd in no_decay)
-                    ],
-                    'weight_decay': 0.0,
-                },
-            ]
-        return optimizer_grouped_parameters
+    def _get_student_parameters(self) -> List[OptimizerParameterGroup]:
+        return build_optimizer_parameter_groups(
+            self.student.named_parameters(),
+            discriminative_learning=self.params.discriminative_learning,
+            learning_rates=self.params.learning_rates,
+            layer_lr_decay=self.params.get("layer_lr_decay", 1.0),
+            weight_decay=self.params.weight_decay,
+        )
 
     def configure_optimizers(self) -> Tuple[List, List]:
         """
@@ -184,8 +96,13 @@ class BaseDistiller(pl.LightningModule):
         else:
             raise ValueError(f"Optimizer '{self.params.optimizer}' not supported.")
 
+        if self.params.discriminative_learning:
+            register_legacy_optimizer_state_migration(
+                optimizer, self.student.named_parameters()
+            )
+
         if self.params.lr_scheduler:
-            scheduler = ReduceLROnPlateau(optimizer)
+            scheduler = GroupCompatibleReduceLROnPlateau(optimizer)
             lr_scheduler = {
                 'scheduler': scheduler,
                 'name': 'NeptuneLogger',

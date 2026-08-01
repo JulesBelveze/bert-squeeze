@@ -5,11 +5,15 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 import lightning.pytorch as pl
 import torch
 import torch.nn as nn
-from omegaconf import DictConfig, ListConfig
+from omegaconf import DictConfig
 from overrides import overrides
 from torch.nn import CrossEntropyLoss
 from transformers import AutoConfig
 
+from bert_squeeze.utils.optimizers import (
+    OptimizerParameterGroup,
+    build_optimizer_parameter_groups,
+)
 from bert_squeeze.utils.scorers import Scorer
 from bert_squeeze.utils.types import RampOutput, SequenceClassificationOutput
 
@@ -147,132 +151,24 @@ class LtDeeBert(BaseSequenceClassificationTransformerModule):
         self.bert.set_inference_mode(inference=True)
 
     @overrides
-    def _get_optimizer_parameters(self) -> List[Dict]:
-        """
-        Method that defines the parameter to optimize.
-
-        Returns:
-            List[Dict]: group of parameters to optimize
-        """
-        no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight', 'layer_norm.weight']
-
-        if self.config.discriminative_learning:
-            if (
-                isinstance(self.config.learning_rates, ListConfig)
-                and len(self.config.learning_rates) > 1
-            ):
-                groups = [
-                    (f'layer.{i}.', self.config.learning_rates[i]) for i in range(12)
-                ]
-            else:
-                lr = (
-                    self.config.learning_rates[0]
-                    if isinstance(self.config.learning_rates, ListConfig)
-                    else self.config.learning_rates
-                )
-                groups = [
-                    (f'layer.{i}.', lr * pow(self.config.layer_lr_decay, 11 - i))
-                    for i in range(12)
-                ]
-
-            group_all = [f'layer.{i}.' for i in range(12)]
-            no_decay_optimizer_parameters, decay_optimizer_parameters = [], []
-            for g, l in groups:
-                no_decay_optimizer_parameters.append(
-                    {
-                        'params': [
-                            p
-                            for n, p in self.named_parameters()
-                            if ("highway" not in n)
-                            and not any(nd in n for nd in no_decay)
-                            and any(nd in n for nd in [g])
-                        ],
-                        'weight_decay': self.config.weight_decay,
-                        'lr': l,
-                    }
-                )
-                decay_optimizer_parameters.append(
-                    {
-                        'params': [
-                            p
-                            for n, p in self.named_parameters()
-                            if ("highway" not in n)
-                            and any(nd in n for nd in no_decay)
-                            and any(nd in n for nd in [g])
-                        ],
-                        'weight_decay': 0.0,
-                        'lr': l,
-                    }
-                )
-
-            group_all_parameters = [
-                {
-                    'params': [
-                        p
-                        for n, p in self.named_parameters()
-                        if ("highway" not in n)
-                        and not any(nd in n for nd in no_decay)
-                        and not any(nd in n for nd in group_all)
-                    ],
-                    'weight_decay': self.config.weight_decay,
-                },
-                {
-                    'params': [
-                        p
-                        for n, p in self.named_parameters()
-                        if ("highway" not in n)
-                        and any(nd in n for nd in no_decay)
-                        and not any(nd in n for nd in group_all)
-                    ],
-                    'weight_decay': 0.0,
-                },
-            ]
-            optimizer_grouped_parameters = (
-                no_decay_optimizer_parameters
-                + decay_optimizer_parameters
-                + group_all_parameters
-            )
+    def _get_optimizer_parameters(self) -> List[OptimizerParameterGroup]:
+        discriminative_learning = self.config.discriminative_learning
+        if discriminative_learning:
+            named_parameters = self.named_parameters()
         else:
-            if self.config.train_highway:
-                optimizer_grouped_parameters = [
-                    {
-                        'params': [
-                            p
-                            for n, p in self.named_parameters()
-                            if ("highway" in n) and (not any(nd in n for nd in no_decay))
-                        ],
-                        'weight_decay': self.config.weight_decay,
-                    },
-                    {
-                        'params': [
-                            p
-                            for n, p in self.named_parameters()
-                            if ("highway" in n) and (any(nd in n for nd in no_decay))
-                        ],
-                        'weight_decay': 0.0,
-                    },
-                ]
-            else:
-                optimizer_grouped_parameters = [
-                    {
-                        'params': [
-                            p
-                            for n, p in self.named_parameters()
-                            if ("highway" not in n)
-                            and (not any(nd in n for nd in no_decay))
-                        ],
-                        'weight_decay': self.config.weight_decay,
-                    },
-                    {
-                        'params': [
-                            p
-                            for n, p in self.named_parameters()
-                            if ("highway" not in n) and (any(nd in n for nd in no_decay))
-                        ],
-                        'weight_decay': 0.0,
-                    },
-                ]
-        return optimizer_grouped_parameters
+            ramp_only = self.config.train_highway
+            named_parameters = (
+                (name, parameter)
+                for name, parameter in self.named_parameters()
+                if (".ramp." in name) == ramp_only
+            )
+        return build_optimizer_parameter_groups(
+            named_parameters,
+            discriminative_learning=discriminative_learning,
+            learning_rates=self.config.learning_rates,
+            layer_lr_decay=self.config.get("layer_lr_decay", 1.0),
+            weight_decay=self.config.weight_decay,
+        )
 
     @overrides
     def loss(
