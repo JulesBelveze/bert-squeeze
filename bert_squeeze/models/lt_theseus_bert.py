@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Optional, Union
 
 import lightning.pytorch as pl
@@ -17,6 +18,33 @@ from ..utils.schedulers.theseus_schedulers import (
 )
 from .base_lt_module import BaseSequenceClassificationTransformerModule
 from .custom_transformers import TheseusBertModel
+
+
+def _should_initialize_successor_layers(
+    model: TheseusBertModel, loading_info: object
+) -> bool:
+    if not isinstance(loading_info, Mapping):
+        raise TypeError("Theseus loading information must be a mapping.")
+
+    missing_keys = loading_info.get("missing_keys")
+    if not isinstance(missing_keys, list) or not all(
+        isinstance(key, str) for key in missing_keys
+    ):
+        raise TypeError("Theseus loading information must contain missing key names.")
+
+    model_prefix = f"{model.base_model_prefix}."
+    normalized_missing_keys = {key.removeprefix(model_prefix) for key in missing_keys}
+    expected_successor_keys = {
+        f"encoder.successor_layers.{key}"
+        for key in model.encoder.successor_layers.state_dict()
+    }
+    missing_successor_keys = expected_successor_keys & normalized_missing_keys
+
+    if not missing_successor_keys:
+        return False
+    if missing_successor_keys != expected_successor_keys:
+        raise ValueError("Theseus checkpoint has incomplete successor layer weights.")
+    return True
 
 
 class LtTheseusBert(BaseSequenceClassificationTransformerModule):
@@ -50,12 +78,18 @@ class LtTheseusBert(BaseSequenceClassificationTransformerModule):
         **kwargs,
     ):
         if model is None:
-            model = TheseusBertModel.from_pretrained(
+            loaded_model, loading_info = TheseusBertModel.from_pretrained(
                 pretrained_model,
                 config=AutoConfig.from_pretrained(
                     pretrained_model, num_labels=num_labels
                 ),
+                output_loading_info=True,
             )
+            if not isinstance(loaded_model, TheseusBertModel):
+                raise TypeError("Expected a TheseusBertModel checkpoint.")
+            model = loaded_model
+            if _should_initialize_successor_layers(model, loading_info):
+                model.encoder.init_successor_layers()
 
         super().__init__(
             training_config, pretrained_model, num_labels, model, scorer, **kwargs
@@ -116,10 +150,8 @@ class LtTheseusBert(BaseSequenceClassificationTransformerModule):
     def _before_training_step(self) -> None:
         self.replacement_scheduler.step()
 
-    def _build_model(self):
-        """"""
+    def _build_model(self) -> None:
         self.encoder = self.model
-        self.encoder.encoder.init_successor_layers()
 
         self.classifier = torch.nn.Sequential(
             torch.nn.Dropout(self.model_config.hidden_dropout_prob),

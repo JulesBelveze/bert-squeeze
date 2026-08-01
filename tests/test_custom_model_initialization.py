@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
+import pytest
 import torch
 from omegaconf import OmegaConf
 from transformers import (
@@ -227,8 +228,11 @@ def test_fastbert_prediction_uses_adaptive_early_exit(tmp_path: Path) -> None:
     assert layer_calls == [1, 0]
 
 
-def test_theseus_loads_and_uses_a_custom_pretrained_encoder(tmp_path):
+def test_theseus_restores_trained_successor_layers(tmp_path: Path) -> None:
     source_encoder = TheseusBertModel(_bert_config(num_hidden_layers=6))
+    with torch.no_grad():
+        source_encoder.encoder.layer[0].attention.self.query.weight.fill_(1.0)
+        source_encoder.encoder.successor_layers[0].attention.self.query.weight.fill_(7.0)
     source_encoder.save_pretrained(tmp_path)
 
     module = LtTheseusBert(
@@ -250,6 +254,52 @@ def test_theseus_loads_and_uses_a_custom_pretrained_encoder(tmp_path):
         module.encoder.embeddings.word_embeddings.weight,
         source_encoder.embeddings.word_embeddings.weight,
     )
+    assert torch.equal(
+        module.encoder.encoder.successor_layers[0].attention.self.query.weight,
+        source_encoder.encoder.successor_layers[0].attention.self.query.weight,
+    )
     assert logits.shape == (2, 2)
     assert torch.isfinite(loss)
     assert module.replacement_scheduler.step_counter == 1
+
+
+def test_theseus_initializes_successors_missing_from_bert_checkpoint(
+    tmp_path: Path,
+) -> None:
+    source_encoder = BertForSequenceClassification(_bert_config(num_hidden_layers=6))
+    with torch.no_grad():
+        source_encoder.bert.encoder.layer[0].attention.self.query.weight.fill_(3.0)
+    source_encoder.save_pretrained(tmp_path)
+
+    module = LtTheseusBert(
+        training_config=_training_config(),
+        pretrained_model=str(tmp_path),
+        num_labels=2,
+        replacement_scheduler=OmegaConf.create(
+            {"type": "constant", "replacing_rate": 1.0}
+        ),
+    )
+
+    assert torch.equal(
+        module.encoder.encoder.successor_layers[0].attention.self.query.weight,
+        source_encoder.bert.encoder.layer[0].attention.self.query.weight,
+    )
+
+
+def test_theseus_rejects_partial_successor_checkpoint(tmp_path: Path) -> None:
+    source_encoder = TheseusBertModel(_bert_config(num_hidden_layers=6))
+    source_encoder.save_pretrained(tmp_path, safe_serialization=False)
+    checkpoint_path = tmp_path / "pytorch_model.bin"
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    state_dict.pop("encoder.successor_layers.0.attention.self.query.weight")
+    torch.save(state_dict, checkpoint_path)
+
+    with pytest.raises(ValueError, match="incomplete successor layer weights"):
+        LtTheseusBert(
+            training_config=_training_config(),
+            pretrained_model=str(tmp_path),
+            num_labels=2,
+            replacement_scheduler=OmegaConf.create(
+                {"type": "constant", "replacing_rate": 1.0}
+            ),
+        )
