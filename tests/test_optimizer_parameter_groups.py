@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 import pytest
 import torch
 import torch.nn as nn
+from lightning.pytorch import Trainer
 from omegaconf import DictConfig, OmegaConf
-from torch.optim import AdamW
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from transformers import BertConfig, T5Config, T5ForConditionalGeneration
+from torch.utils.data import DataLoader
+from transformers import (
+    BertConfig,
+    GPT2Config,
+    GPT2LMHeadModel,
+    LlamaConfig,
+    LlamaForCausalLM,
+    T5Config,
+    T5ForConditionalGeneration,
+)
 
 from bert_squeeze.models.custom_transformers.berxit import BerxitModel
 from bert_squeeze.models.custom_transformers.deebert import DeeBertModel
@@ -18,11 +26,8 @@ from bert_squeeze.models.lt_deebert import LtDeeBert
 from bert_squeeze.utils.optimizers import (
     OptimizerParameterGroup,
     build_optimizer_parameter_groups,
-    register_legacy_optimizer_state_migration,
 )
-from bert_squeeze.utils.schedulers import GroupCompatibleReduceLROnPlateau
-
-_NO_DECAY_NAMES = ("bias", "gamma", "beta", "LayerNorm.weight", "layer_norm.weight")
+from bert_squeeze.utils.types import RampOutput
 
 
 class _Encoder(nn.Module):
@@ -34,12 +39,13 @@ class _Encoder(nn.Module):
 class _LayeredModel(nn.Module):
     def __init__(self, layer_count: int) -> None:
         super().__init__()
+        self.embeddings = nn.Embedding(4, 2)
         self.encoder = _Encoder(layer_count)
         self.classifier = nn.Linear(2, 2)
 
 
 def _learning_rate_for(
-    groups: list[OptimizerParameterGroup], parameter: nn.Parameter
+    groups: list[OptimizerParameterGroup], parameter: torch.Tensor
 ) -> Optional[float]:
     for group in groups:
         if any(group_parameter is parameter for group_parameter in group["params"]):
@@ -47,15 +53,23 @@ def _learning_rate_for(
     raise AssertionError("Parameter is missing from optimizer groups.")
 
 
+def _grouped_parameter_ids(
+    groups: list[OptimizerParameterGroup],
+) -> list[int]:
+    return [id(parameter) for group in groups for parameter in group["params"]]
+
+
 @pytest.mark.parametrize(
-    ("learning_rates", "expected_rates"),
+    ("learning_rates", "expected_rates", "embedding_rate"),
     [
-        ([0.1], [0.025, 0.05, 0.1]),
-        ([0.01, 0.02, 0.03], [0.01, 0.02, 0.03]),
+        ([0.1], [0.025, 0.05, 0.1], 0.0125),
+        ([0.01, 0.02, 0.03], [0.01, 0.02, 0.03], 0.005),
     ],
 )
 def test_optimizer_groups_follow_model_depth(
-    learning_rates: list[float], expected_rates: list[float]
+    learning_rates: list[float],
+    expected_rates: list[float],
+    embedding_rate: float,
 ) -> None:
     model = _LayeredModel(layer_count=3)
 
@@ -67,17 +81,19 @@ def test_optimizer_groups_follow_model_depth(
         weight_decay=0.01,
     )
 
-    actual_rates = [
+    assert [
         _learning_rate_for(groups, layer.weight) for layer in model.encoder.layer
-    ]
-    assert actual_rates == pytest.approx(expected_rates)
-    assert [groups[index]["lr"] for index in range(3)] == pytest.approx(expected_rates)
-    assert [groups[12 + index]["lr"] for index in range(3)] == pytest.approx(
-        expected_rates
+    ] == pytest.approx(expected_rates)
+    assert _learning_rate_for(groups, model.embeddings.weight) == pytest.approx(
+        embedding_rate
     )
-    assert all("lr" not in group for group in groups[24:])
-    assert _learning_rate_for(groups, model.classifier.weight) is None
-    assert sum(len(group["params"]) for group in groups) == len(list(model.parameters()))
+    assert _learning_rate_for(groups, model.classifier.weight) == pytest.approx(
+        learning_rates[-1]
+    )
+    grouped_parameter_ids = _grouped_parameter_ids(groups)
+    assert len(grouped_parameter_ids) == len(set(grouped_parameter_ids))
+    assert len(grouped_parameter_ids) == len(list(model.parameters()))
+    assert all(group["params"] for group in groups)
 
 
 def test_optimizer_groups_reject_mismatched_layer_rates() -> None:
@@ -93,117 +109,37 @@ def test_optimizer_groups_reject_mismatched_layer_rates() -> None:
         )
 
 
-def _legacy_optimizer_groups(model: nn.Module) -> list[OptimizerParameterGroup]:
-    named_parameters = list(model.named_parameters())
-    layer_keys = [f"layer.{index}." for index in range(12)]
-    legacy_rates = [0.1 * pow(0.5, 11 - index) for index in range(12)]
-    legacy_groups: list[OptimizerParameterGroup] = []
-    for use_weight_decay in (True, False):
-        legacy_groups.extend(
-            OptimizerParameterGroup(
-                params=[
-                    parameter
-                    for name, parameter in named_parameters
-                    if layer_key in name
-                    and (not any(no_decay in name for no_decay in _NO_DECAY_NAMES))
-                    == use_weight_decay
-                ],
-                weight_decay=0.01 if use_weight_decay else 0.0,
-                lr=legacy_rates[index],
-            )
-            for index, layer_key in enumerate(layer_keys)
-        )
-    for use_weight_decay in (True, False):
-        legacy_groups.append(
-            OptimizerParameterGroup(
-                params=[
-                    parameter
-                    for name, parameter in named_parameters
-                    if not any(layer_key in name for layer_key in layer_keys)
-                    and (not any(no_decay in name for no_decay in _NO_DECAY_NAMES))
-                    == use_weight_decay
-                ],
-                weight_decay=0.01 if use_weight_decay else 0.0,
-            )
-        )
-    return legacy_groups
-
-
-def _current_optimizer(model: nn.Module) -> AdamW:
-    optimizer = AdamW(
-        build_optimizer_parameter_groups(
-            model.named_parameters(),
-            discriminative_learning=True,
-            learning_rates=[0.1],
-            layer_lr_decay=0.5,
-            weight_decay=0.01,
-        ),
-        lr=0.1,
-    )
-    register_legacy_optimizer_state_migration(optimizer, model.named_parameters())
-    return optimizer
-
-
-@pytest.mark.parametrize("layer_count", [3, 24])
-def test_optimizer_groups_restore_legacy_optimizer_state(layer_count: int) -> None:
-    model = _LayeredModel(layer_count=layer_count)
-    legacy_optimizer = AdamW(
-        _legacy_optimizer_groups(model),
-        lr=0.1,
-        betas=(0.8, 0.88),
-        eps=1e-6,
-    )
-    sum(parameter.square().sum() for parameter in model.parameters()).backward()
-    legacy_optimizer.step()
-    legacy_optimizer.zero_grad()
-
-    current_optimizer = _current_optimizer(model)
-    current_optimizer.load_state_dict(legacy_optimizer.state_dict())
-    sum(parameter.square().sum() for parameter in model.parameters()).backward()
-    current_optimizer.step()
-
-    assert all(torch.isfinite(parameter).all() for parameter in model.parameters())
-    assert current_optimizer.param_groups[0]["betas"] == (0.8, 0.88)
-    assert current_optimizer.param_groups[0]["eps"] == 1e-6
-
-
-def test_scheduler_restores_after_optimizer_group_migration() -> None:
-    model = _LayeredModel(layer_count=24)
-    legacy_optimizer = AdamW(_legacy_optimizer_groups(model), lr=0.1)
-    legacy_scheduler = ReduceLROnPlateau(legacy_optimizer, factor=0.5, patience=0)
-    current_optimizer = _current_optimizer(model)
-    current_optimizer.load_state_dict(legacy_optimizer.state_dict())
-    current_scheduler = GroupCompatibleReduceLROnPlateau(
-        current_optimizer, factor=0.5, patience=0
-    )
-
-    current_scheduler.load_state_dict(legacy_scheduler.state_dict())
-    current_scheduler.step(1.0)
-    current_scheduler.step(2.0)
-
-    assert len(current_scheduler.min_lrs) == len(current_optimizer.param_groups)
-
-
-def _t5_model(block_count: int) -> T5ForConditionalGeneration:
+def _t5_model(encoder_blocks: int, decoder_blocks: int) -> T5ForConditionalGeneration:
     return T5ForConditionalGeneration(
         T5Config(
             vocab_size=32,
             d_model=16,
             d_ff=32,
-            num_layers=block_count,
-            num_decoder_layers=block_count,
+            num_layers=encoder_blocks,
+            num_decoder_layers=decoder_blocks,
             num_heads=2,
         )
     )
 
 
-def test_t5_optimizer_groups_follow_block_depth() -> None:
-    model = _t5_model(block_count=2)
+@pytest.mark.parametrize(
+    ("learning_rates", "expected_encoder_rates", "expected_decoder_rates"),
+    [
+        ([0.1], [0.05, 0.1], [0.0125, 0.025, 0.05, 0.1]),
+        ([0.01, 0.02, 0.03, 0.04], [0.03, 0.04], [0.01, 0.02, 0.03, 0.04]),
+    ],
+)
+def test_encoder_decoder_stacks_receive_independent_schedules(
+    learning_rates: list[float],
+    expected_encoder_rates: list[float],
+    expected_decoder_rates: list[float],
+) -> None:
+    model = _t5_model(encoder_blocks=2, decoder_blocks=4)
 
     groups = build_optimizer_parameter_groups(
         model.named_parameters(),
         discriminative_learning=True,
-        learning_rates=[0.1],
+        learning_rates=learning_rates,
         layer_lr_decay=0.5,
         weight_decay=0.01,
     )
@@ -216,27 +152,63 @@ def test_t5_optimizer_groups_follow_block_depth() -> None:
         _learning_rate_for(groups, block.layer[0].SelfAttention.q.weight)
         for block in model.decoder.block
     ]
-    grouped_parameters = [parameter for group in groups for parameter in group["params"]]
+    assert encoder_rates == pytest.approx(expected_encoder_rates)
+    assert decoder_rates == pytest.approx(expected_decoder_rates)
 
-    assert encoder_rates == pytest.approx([0.05, 0.1])
-    assert decoder_rates == pytest.approx([0.05, 0.1])
-    assert len(grouped_parameters) == len(
-        {id(parameter) for parameter in grouped_parameters}
+
+@pytest.mark.parametrize(
+    "architecture",
+    ["gpt2", "llama"],
+)
+def test_normalization_parameters_do_not_use_weight_decay(
+    architecture: str,
+) -> None:
+    if architecture == "gpt2":
+        model = GPT2LMHeadModel(
+            GPT2Config(
+                n_layer=2,
+                n_head=2,
+                n_embd=16,
+                n_positions=16,
+                vocab_size=32,
+            )
+        )
+    else:
+        model = LlamaForCausalLM(
+            LlamaConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=2,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                vocab_size=32,
+                max_position_embeddings=16,
+            )
+        )
+
+    groups = build_optimizer_parameter_groups(
+        model.named_parameters(),
+        discriminative_learning=True,
+        learning_rates=[0.1],
+        layer_lr_decay=0.5,
+        weight_decay=0.01,
     )
-    assert len(grouped_parameters) == len(list(model.parameters()))
+    weight_decay_by_parameter = {
+        id(parameter): group["weight_decay"]
+        for group in groups
+        for parameter in group["params"]
+    }
+    normalization_parameters = [
+        parameter
+        for name, parameter in model.named_parameters()
+        if "ln_" in name or "layernorm" in name or name.endswith("norm.weight")
+    ]
 
-
-def test_t5_legacy_state_migrates_when_group_counts_match() -> None:
-    model = _t5_model(block_count=12)
-    legacy_optimizer = AdamW(_legacy_optimizer_groups(model), lr=0.1)
-    current_optimizer = _current_optimizer(model)
-
-    assert len(legacy_optimizer.param_groups) == len(current_optimizer.param_groups)
-    current_optimizer.load_state_dict(legacy_optimizer.state_dict())
-
-    sum(parameter.square().sum() for parameter in model.parameters()).backward()
-    current_optimizer.step()
-    assert all(torch.isfinite(parameter).all() for parameter in model.parameters())
+    assert normalization_parameters
+    assert all(
+        weight_decay_by_parameter[id(parameter)] == 0.0
+        for parameter in normalization_parameters
+    )
 
 
 def _model_config(tmp_path: Path) -> BertConfig:
@@ -252,74 +224,182 @@ def _model_config(tmp_path: Path) -> BertConfig:
     return model_config
 
 
-def _ramp_training_config(**overrides: object) -> DictConfig:
+def _training_config(**overrides: object) -> DictConfig:
     config = {
         "logging_steps": 2,
         "accumulation_steps": 1,
         "objective": "ce",
         "lr_scheduler": False,
+        "optimizer": "adamw",
+        "adam_eps": 1e-8,
         "discriminative_learning": True,
         "learning_rates": [0.1],
         "layer_lr_decay": 0.5,
         "weight_decay": 0.01,
         "train_highway": True,
         "train_gates": True,
+        "train_stage": "backbone",
         "early_exit_entropy": -1.0,
+        "gate_thresholds": 0.5,
     }
     config.update(overrides)
     return OmegaConf.create(config)
 
 
-def _assert_parameters_are_grouped(
-    module: Union[LtDeeBert, LtBerxit], parameter_marker: str
+def _batch() -> dict[str, torch.Tensor]:
+    return {
+        "input_ids": torch.tensor([[1, 2, 3], [3, 2, 1]]),
+        "attention_mask": torch.ones(2, 3, dtype=torch.long),
+        "labels": torch.tensor([0, 1]),
+    }
+
+
+@pytest.mark.parametrize("train_highway", [False, True])
+def test_deebert_training_stages_update_the_inference_exits(
+    tmp_path: Path, train_highway: bool
 ) -> None:
-    groups = module._get_optimizer_parameters()
-    grouped_parameter_ids = {
-        id(parameter) for group in groups for parameter in group["params"]
-    }
-    expected_parameter_ids = {
-        id(parameter)
-        for name, parameter in module.named_parameters()
-        if parameter_marker in name
-    }
-
-    assert expected_parameter_ids
-    assert expected_parameter_ids <= grouped_parameter_ids
-
-
-def test_deebert_shipped_config_includes_ramp_parameters(tmp_path: Path) -> None:
     model_config = _model_config(tmp_path)
     module = LtDeeBert(
-        training_config=_ramp_training_config(),
+        training_config=_training_config(train_highway=train_highway),
         pretrained_model=str(tmp_path),
         num_labels=2,
         model=DeeBertModel(model_config),
     )
 
-    _assert_parameters_are_grouped(module, ".ramp.")
+    output = module._classification_output(_batch())
+    module._classification_loss(output, _batch()["labels"]).backward()
+    grouped_ids = set(_grouped_parameter_ids(module._get_optimizer_parameters()))
+    trainable_ids = {
+        id(parameter) for parameter in module.parameters() if parameter.requires_grad
+    }
+
+    backbone_grad = module.bert.encoder.layer[0].attention.self.query.weight.grad
+    intermediate_grad = module.bert.encoder.ramp[0].classifier.weight.grad
+    final_grad = module.bert.encoder.ramp[-1].classifier.weight.grad
+    if train_highway:
+        assert backbone_grad is None
+        assert intermediate_grad is not None
+        assert final_grad is None
+    else:
+        assert backbone_grad is not None
+        assert intermediate_grad is None
+        assert final_grad is not None
+    assert grouped_ids == trainable_ids
 
 
-def test_berxit_shipped_config_includes_ramp_parameters(tmp_path: Path) -> None:
+def _berxit_module(tmp_path: Path, **overrides: object) -> LtBerxit:
     model_config = _model_config(tmp_path)
-    module = LtBerxit(
-        training_config=_ramp_training_config(),
+    return LtBerxit(
+        training_config=_training_config(**overrides),
         pretrained_model=str(tmp_path),
         num_labels=2,
         model=BerxitModel(model_config),
     )
 
-    _assert_parameters_are_grouped(module, ".ramp.")
+
+def test_berxit_gate_stage_only_trains_the_shared_gate(tmp_path: Path) -> None:
+    module = _berxit_module(tmp_path, train_stage="gates")
+
+    trainable_parameters = {
+        name for name, parameter in module.named_parameters() if parameter.requires_grad
+    }
+    grouped_ids = set(_grouped_parameter_ids(module._get_optimizer_parameters()))
+
+    assert trainable_parameters
+    assert all("gates" in name for name in trainable_parameters)
+    assert grouped_ids == {
+        id(parameter) for parameter in module.parameters() if parameter.requires_grad
+    }
 
 
-def test_berxit_non_discriminative_training_includes_gate_parameters(
-    tmp_path: Path,
-) -> None:
-    model_config = _model_config(tmp_path)
-    module = LtBerxit(
-        training_config=_ramp_training_config(discriminative_learning=False),
-        pretrained_model=str(tmp_path),
-        num_labels=2,
-        model=BerxitModel(model_config),
+def test_berxit_trains_final_and_intermediate_exits(tmp_path: Path) -> None:
+    module = _berxit_module(tmp_path)
+    batch = _batch()
+    output = module._classification_output(batch)
+
+    module.loss(
+        labels=batch["labels"],
+        ramps_exits=output.ramps_exits,
+        train_ramps=False,
+    ).backward()
+    assert module.bert.encoder.ramp[0].classifier.weight.grad is None
+    assert module.bert.encoder.ramp[-1].classifier.weight.grad is not None
+
+    module.zero_grad(set_to_none=True)
+    output = module._classification_output(batch)
+    module.loss(
+        labels=batch["labels"],
+        ramps_exits=output.ramps_exits,
+        train_ramps=True,
+    ).backward()
+    assert module.bert.encoder.ramp[0].classifier.weight.grad is not None
+    assert module.bert.encoder.ramp[-1].classifier.weight.grad is not None
+
+
+def test_berxit_uses_label_based_certainty_targets(tmp_path: Path) -> None:
+    module = _berxit_module(tmp_path)
+    model_config = module.model_config
+    labels = torch.tensor([0])
+    pooled_output = torch.zeros(1, model_config.hidden_size)
+    correct_early_exit = RampOutput(
+        logits=torch.tensor([[4.0, -4.0]]), pooled_output=pooled_output
+    )
+    wrong_final_exit = RampOutput(
+        logits=torch.tensor([[-4.0, 4.0]]), pooled_output=pooled_output
+    )
+    early_gate = torch.tensor([[2.0]], requires_grad=True)
+    final_gate = torch.tensor([[2.0]], requires_grad=True)
+
+    loss = module.loss(
+        labels=labels,
+        ramps_exits=[correct_early_exit, wrong_final_exit],
+        gates_logits=(early_gate, final_gate),
+        train_ramps=True,
+        train_gates=True,
+    )
+    loss.backward()
+
+    assert early_gate.grad is not None and early_gate.grad.item() < 0
+    assert final_gate.grad is not None and final_gate.grad.item() > 0
+    assert isinstance(module.bert.encoder.gates, nn.Linear)
+
+
+def test_berxit_inference_returns_every_sample_after_early_exit(tmp_path: Path) -> None:
+    module = _berxit_module(tmp_path, gate_thresholds=0.0)
+    module.bert.set_inference_mode(inference=True)
+    batch = _batch()
+
+    logits, ramps_exits, exit_layer, _ = module.forward(
+        input_ids=batch["input_ids"],
+        attention_mask=batch["attention_mask"],
     )
 
-    _assert_parameters_are_grouped(module, ".gates.")
+    assert logits.shape == (2, 2)
+    assert len(ramps_exits) == 2
+    assert exit_layer == 0
+
+
+def test_plateau_scheduler_uses_epoch_training_loss(tmp_path: Path) -> None:
+    model_config = _model_config(tmp_path)
+    module = LtDeeBert(
+        training_config=_training_config(
+            train_highway=False,
+            lr_scheduler=True,
+        ),
+        pretrained_model=str(tmp_path),
+        num_labels=2,
+        model=DeeBertModel(model_config),
+    )
+    trainer = Trainer(
+        accelerator="cpu",
+        devices=1,
+        enable_checkpointing=False,
+        enable_model_summary=False,
+        enable_progress_bar=False,
+        logger=False,
+        max_epochs=1,
+    )
+
+    trainer.fit(module, train_dataloaders=DataLoader([_batch()], batch_size=None))
+
+    assert "train/epoch_loss" in trainer.callback_metrics

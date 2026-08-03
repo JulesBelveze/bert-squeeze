@@ -29,6 +29,7 @@ train:
   warmup_steps: true
   weight_decay: 0.01
 
+  # Set false for the backbone and final exit, or true for frozen-backbone exits.
   train_highway: true
   early_exit_entropy: -1
 

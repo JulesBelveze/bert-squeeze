@@ -23,12 +23,7 @@ from .custom_transformers.berxit import BerxitModel
 
 
 class LtBerxit(BaseSequenceClassificationTransformerModule):
-    """
-    Lightning module to fine-tune a BERxiT-style model for sequence classification.
-
-    This mirrors LtDeeBert's integration, exposing the same training/inference
-    behavior and configuration hooks (e.g., train_highway, early_exit_entropy).
-    """
+    """Fine-tune BERxiT models for sequence classification."""
 
     def __init__(
         self,
@@ -50,18 +45,15 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
         super().__init__(
             training_config, pretrained_model, num_labels, model, scorer, **kwargs
         )
-        # Training stage: "backbone" (default) or "gates"
         self.train_stage = getattr(training_config, "train_stage", "backbone")
-        # Optional global step at which to switch from backbone to gate training
         self.switch_step: Optional[int] = getattr(training_config, "switch_step", None)
         self.train_highway = training_config.train_highway
-        # In backbone stage, gates are optional; in gates stage, we always train them
-        if self.train_stage == "gates":
-            self.train_gates = True
-        else:
-            self.train_gates = getattr(training_config, "train_gates", False)
+        self.train_gates = self.train_stage == "gates" or getattr(
+            training_config, "train_gates", False
+        )
         self._build_model()
-        # Guard to ensure stage switching happens at most once
+        if self.train_stage == "gates":
+            self._freeze_backbone_for_gates()
         self._has_switched_stage = False
 
     @overrides
@@ -89,10 +81,8 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
 
         if not self.bert.encoder.inference:
             exit_layer = self.num_layers
-            pooled_output = outputs.pooled_output
-            pooled_output = self.dropout(pooled_output)
-            logits = self.classifier(pooled_output)
             ramps_exits = outputs.ramps_exits
+            logits = ramps_exits[-1].logits
             gates_logits = outputs.gates_logits
         else:
             ramps_exits = outputs.ramps_exits
@@ -125,7 +115,7 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
         return self.loss(
             logits=output.logits,
             labels=labels,
-            train_ramps=self.train_highway,
+            train_ramps=self._train_all_exits(),
             ramps_exits=output.ramps_exits,
             train_gates=self.train_gates,
             gates_logits=output.gates_logits,
@@ -139,23 +129,14 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
     def _before_prediction_step(self) -> None:
         self.bert.set_inference_mode(inference=True)
 
+    def _train_all_exits(self) -> bool:
+        return self.train_highway and self.global_step % 2 == 1
+
     def _freeze_backbone_for_gates(self) -> None:
-        """
-        Freeze all parameters except the BERXiT gates so that gate training
-        happens on top of a fixed teacher model.
-        """
-        for name, param in self.named_parameters():
-            if "gates" in name:
-                param.requires_grad = True
-            else:
-                param.requires_grad = False
+        for name, parameter in self.named_parameters():
+            parameter.requires_grad = "gates" in name
 
     def _maybe_switch_stage(self) -> None:
-        """
-        If `switch_step` is set and we are still in backbone stage, switch to
-        gate training once `global_step` reaches the threshold. This triggers
-        a reconfiguration of optimizers in Lightning.
-        """
         if (
             self.switch_step is None
             or self.train_stage == "gates"
@@ -172,7 +153,6 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
             self.train_gates = True
             self._freeze_backbone_for_gates()
             if self.trainer is not None:
-                # Rebuild optimizers so only gate parameters are optimized
                 self.trainer.strategy.setup_optimizers(self.trainer)
             self._has_switched_stage = True
 
@@ -193,14 +173,11 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
             )
 
         discriminative_learning = self.config.discriminative_learning
-        if discriminative_learning:
-            named_parameters = self.named_parameters()
-        else:
-            named_parameters = (
-                (name, parameter)
-                for name, parameter in self.named_parameters()
-                if self._is_active_training_parameter(name)
-            )
+        named_parameters = (
+            (name, parameter)
+            for name, parameter in self.named_parameters()
+            if parameter.requires_grad
+        )
         return build_optimizer_parameter_groups(
             named_parameters,
             discriminative_learning=discriminative_learning,
@@ -208,13 +185,6 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
             layer_lr_decay=self.config.get("layer_lr_decay", 1.0),
             weight_decay=self.config.weight_decay,
         )
-
-    def _is_active_training_parameter(self, parameter_name: str) -> bool:
-        if ".ramp." in parameter_name:
-            return self.config.train_highway
-        if ".gates." in parameter_name:
-            return self.train_gates
-        return not self.config.train_highway
 
     @overrides
     def loss(
@@ -228,64 +198,51 @@ class LtBerxit(BaseSequenceClassificationTransformerModule):
         *args,
         **kwargs,
     ) -> torch.Tensor:
-        # Same ramp loss mechanics as LtDeeBert for consistency
-        if train_ramps:
-            if ramps_exits is None or len(ramps_exits) < 2:
-                raise ValueError("Ramp training requires at least two ramp outputs.")
-            ramps_losses: List[torch.Tensor] = []
-            for ramps_exit in ramps_exits[:-1]:
-                ramps_logits = ramps_exit.logits
-                loss_fct = CrossEntropyLoss()
-                ramps_loss = loss_fct(
-                    ramps_logits.view(-1, self.model_config.num_labels), labels.view(-1)
-                )
-                ramps_losses.append(ramps_loss)
-            loss = torch.stack(ramps_losses).sum()
-        else:
+        if ramps_exits is None:
             if logits is None:
-                raise ValueError(
-                    "Classifier logits are required when ramps are disabled."
-                )
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(
+                raise ValueError("BERxiT training requires classifier outputs.")
+            return CrossEntropyLoss()(
                 logits.view(-1, self.model_config.num_labels), labels.view(-1)
             )
-        # Optional: add gate loss using pseudo-labels from final ramp
-        if train_gates:
-            if ramps_exits is None or gates_logits is None:
-                raise ValueError("Gate training requires ramp and gate outputs.")
-            with torch.no_grad():
-                final_logits = ramps_exits[-1].logits  # [B, C]
-                final_pred = final_logits.argmax(dim=-1)  # [B]
-            bce = torch.nn.BCEWithLogitsLoss()
-            gate_losses: List[torch.Tensor] = []
-            for i, gate_logit in enumerate(gates_logits[:-1]):
-                layer_pred = ramps_exits[i].logits.argmax(dim=-1)  # [B]
-                target = (layer_pred == final_pred).float().unsqueeze(-1)  # [B,1]
-                gate_losses.append(bce(gate_logit, target))
-            if gate_losses:
-                loss = loss + torch.stack(gate_losses).sum()
-        return loss
 
-    def _build_model(self):
-        # Pass BERxiT-specific hyperparams via HF config attributes
-        if not hasattr(self.model_config, "gate_hidden_dim"):
-            self.model_config.gate_hidden_dim = getattr(
-                self.config, "gate_hidden_dim", 32
+        exit_indices = (
+            tuple(range(len(ramps_exits))) if train_ramps else (len(ramps_exits) - 1,)
+        )
+        loss_fct = CrossEntropyLoss()
+        classification_losses = [
+            loss_fct(
+                ramps_exits[index].logits.view(-1, self.model_config.num_labels),
+                labels.view(-1),
             )
+            for index in exit_indices
+        ]
+        loss = torch.stack(classification_losses).sum()
+
+        if not train_gates:
+            return loss
+        if gates_logits is None or len(gates_logits) != len(ramps_exits):
+            raise ValueError("Gate training requires one gate output per ramp.")
+        return loss + self._gate_loss(labels, ramps_exits, gates_logits, exit_indices)
+
+    @staticmethod
+    def _gate_loss(
+        labels: torch.Tensor,
+        ramps_exits: Sequence[RampOutput],
+        gates_logits: Sequence[torch.Tensor],
+        exit_indices: Sequence[int],
+    ) -> torch.Tensor:
+        gate_losses = []
+        for index in exit_indices:
+            prediction = ramps_exits[index].logits.argmax(dim=-1)
+            target = (prediction == labels).float()
+            certainty = torch.sigmoid(gates_logits[index]).squeeze(-1)
+            gate_losses.append(torch.nn.functional.mse_loss(certainty, target))
+        return torch.stack(gate_losses).sum()
+
+    def _build_model(self) -> None:
         self.bert = self.model
         self.num_layers = len(self.bert.encoder.layer)
-        self.dropout = nn.Dropout(self.model_config.hidden_dropout_prob)
-        self.classifier = torch.nn.Sequential(
-            torch.nn.Dropout(self.model_config.hidden_dropout_prob),
-            torch.nn.Linear(self.model_config.hidden_size, self.model_config.hidden_size),
-            torch.nn.ReLU(),
-            torch.nn.LayerNorm(self.model_config.hidden_size),
-            torch.nn.Linear(self.model_config.hidden_size, self.model_config.num_labels),
-        )
-
         self.bert.encoder.set_early_exit_entropy(self.config.early_exit_entropy)
-        # Optional: set gate thresholds for early exit
         if hasattr(self.config, "gate_thresholds"):
             self.bert.set_exit_gate_thresholds(self.config.gate_thresholds)
         self.bert.init_highway_pooler()

@@ -49,7 +49,7 @@ def _training_config() -> DictConfig:
             "discriminative_learning": False,
             "learning_rates": [0.1],
             "logging_steps": 10,
-            "lr_scheduler": False,
+            "lr_scheduler": True,
             "optimizer": "sgd",
             "weight_decay": 0.0,
         }
@@ -87,5 +87,6 @@ def test_seq2seq_distillation_trains_student_with_synthetic_batches():
     )
 
     assert trainer.global_step == 2
+    assert "train/epoch_loss" in trainer.callback_metrics
     assert not torch.equal(student.classifier.weight, initial_weights)
     assert all(parameter.grad is None for parameter in teacher.parameters())

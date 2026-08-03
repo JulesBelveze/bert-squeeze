@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from omegaconf import DictConfig, ListConfig
 from torch.nn import CrossEntropyLoss
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -25,9 +26,7 @@ from ..utils.optimizers import (
     BertAdam,
     OptimizerParameterGroup,
     build_optimizer_parameter_groups,
-    register_legacy_optimizer_state_migration,
 )
-from ..utils.schedulers import GroupCompatibleReduceLROnPlateau
 from ..utils.scorers import BaseSequenceClassificationScorer, LMScorer, Scorer
 from ..utils.types import (
     FastBertLoss,
@@ -155,12 +154,13 @@ class BaseTransformerModule(pl.LightningModule):
         else:
             raise ValueError(f"Optimizer '{self.config.optimizer}' not supported.")
 
-        if self.config.discriminative_learning:
-            register_legacy_optimizer_state_migration(optimizer, self.named_parameters())
-
         if optimizer_name == "adamw" and self.config.lr_scheduler:
-            scheduler = GroupCompatibleReduceLROnPlateau(optimizer)
-            lr_scheduler = {'scheduler': scheduler, 'name': 'NeptuneLogger'}
+            scheduler = ReduceLROnPlateau(optimizer)
+            lr_scheduler = {
+                'scheduler': scheduler,
+                'name': 'learning_rate',
+                'monitor': self.config.get("lr_scheduler_monitor", "train/epoch_loss"),
+            }
             return [optimizer], [lr_scheduler]
 
         return [optimizer], []
@@ -298,6 +298,12 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
     ) -> torch.Tensor:
         self._before_training_step()
         step_output = self._classification_step(batch, training=True)
+        self.log(
+            "train/epoch_loss",
+            step_output.optimization_loss,
+            on_step=False,
+            on_epoch=True,
+        )
         self._update_scorer(self.scorer, step_output)
         self._log_training_metrics()
         return step_output.optimization_loss

@@ -15,13 +15,9 @@ train:
   accumulation_steps: 1
   auto_lr: false
   discriminative_learning: true
-  # Training stage for BERxiT:
-  # - "backbone": train encoder + ramps + final classifier (no gate loss unless train_gates=true)
-  # - "gates": freeze backbone/ramps/classifier and train only gates
-  # You can also keep "backbone" here and use `switch_step` to switch to gate training mid-run.
+  # "backbone" trains the model; "gates" calibrates only the exit gate
   train_stage: "backbone"
-  # Optional global-step at which to switch from backbone to gate training within a single run.
-  # If null, no automatic switch is performed.
+  # Set a step to switch from backbone training to gate calibration.
   switch_step:
   dropout: 0.2
   layer_lr_decay: 0.95
@@ -37,12 +33,12 @@ train:
   warmup_steps: true
   weight_decay: 0.01
 
+  # Alternate between final-exit and all-exit objectives.
   train_highway: true
   early_exit_entropy: -1
-  # BERxiT-specific options
+  # Train the shared learning-to-exit gate.
   train_gates: true
-  gate_hidden_dim: 32
-  # Either a single float applied to all layers or a list of floats per layer
+  # Use one threshold for every layer or provide one value per layer.
   gate_thresholds: 0.5
 
 model:

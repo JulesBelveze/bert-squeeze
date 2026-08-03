@@ -2,17 +2,11 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Sequence
-from typing import Optional, TypedDict, Union, cast
+from typing import Optional, TypedDict, Union
 
 from torch import nn
-from torch.optim import Optimizer
-from torch.optim.optimizer import StateDict
 
-__all__ = [
-    "OptimizerParameterGroup",
-    "build_optimizer_parameter_groups",
-    "register_legacy_optimizer_state_migration",
-]
+__all__ = ["OptimizerParameterGroup", "build_optimizer_parameter_groups"]
 
 
 class _RequiredOptimizerParameterGroup(TypedDict):
@@ -24,13 +18,21 @@ class OptimizerParameterGroup(_RequiredOptimizerParameterGroup, total=False):
     lr: float
 
 
+_LayerKey = tuple[str, int]
+
 _LAYER_PATTERNS = (
-    (re.compile(r"(?:^|\.)block\.(\d+)\."), False),
-    (re.compile(r"(?:^|\.)layers\.(\d+)\."), False),
-    (re.compile(r"(?:^|\.)h\.(\d+)\."), False),
-    (re.compile(r"(?:^|\.)layer\.(\d+)\."), True),
+    re.compile(r"(?:^|\.)(block)\.(\d+)\."),
+    re.compile(r"(?:^|\.)(layers)\.(\d+)\."),
+    re.compile(r"(?:^|\.)(h)\.(\d+)\."),
+    re.compile(r"(?:^|\.)(layer)\.(\d+)\."),
 )
-_NO_DECAY_NAMES = ("bias", "gamma", "beta", "LayerNorm.weight", "layer_norm.weight")
+_EMBEDDING_MODULES = (
+    "embeddings",
+    "embed_tokens",
+    "embed_positions",
+    "wte",
+    "wpe",
+)
 
 
 def build_optimizer_parameter_groups(
@@ -45,178 +47,36 @@ def build_optimizer_parameter_groups(
     if not discriminative_learning:
         return _weight_decay_groups(parameters, weight_decay)
 
-    parameters_by_layer, remaining_parameters, uses_legacy_layout = (
-        _split_parameters_by_layer(parameters)
-    )
-    layer_indices = sorted(parameters_by_layer)
-    if not layer_indices:
+    rates = _learning_rate_values(learning_rates)
+    layer_keys = [_layer_key(name) for name, _ in parameters]
+    stack_indices = _stack_indices(layer_keys)
+    if not stack_indices:
         raise ValueError("No encoder layers found for discriminative learning.")
 
-    layer_rates = _layer_rates(learning_rates, layer_lr_decay, len(layer_indices))
-    layer_rate_by_index = dict(zip(layer_indices, layer_rates))
-    preserve_legacy_slots = uses_legacy_layout and all(
-        0 <= index < 12 for index in layer_indices
-    )
-    group_indices = list(range(12)) if preserve_legacy_slots else layer_indices
-    groups = []
-    for use_weight_decay in (True, False):
-        for layer_index in group_indices:
-            layer_parameters = [
-                parameter
-                for name, parameter in parameters_by_layer.get(layer_index, [])
-                if _uses_weight_decay(name) == use_weight_decay
-            ]
-            if layer_parameters or preserve_legacy_slots:
-                groups.append(
-                    _parameter_group(
-                        layer_parameters,
-                        weight_decay,
-                        use_weight_decay,
-                        layer_rate_by_index.get(layer_index, layer_rates[-1]),
-                    )
-                )
+    layer_rate_by_key = _layer_rates_by_key(rates, layer_lr_decay, stack_indices)
+    embedding_rate = min(layer_rate_by_key.values()) * layer_lr_decay
+    head_rate = rates[-1]
 
-    groups.extend(_weight_decay_groups(remaining_parameters, weight_decay))
-    return groups
-
-
-def register_legacy_optimizer_state_migration(
-    optimizer: Optimizer,
-    named_parameters: Iterable[tuple[str, nn.Parameter]],
-) -> None:
-    legacy_parameter_groups = _legacy_parameter_groups(list(named_parameters))
-
-    def migrate_state_dict(
-        current_optimizer: Optimizer, state_dict: StateDict
-    ) -> Optional[StateDict]:
-        saved_groups = cast(list[dict[str, object]], state_dict["param_groups"])
-        if len(saved_groups) != len(legacy_parameter_groups):
-            return None
-
-        saved_metadata_by_parameter = _saved_parameter_metadata(
-            saved_groups, legacy_parameter_groups
+    grouped_parameters: dict[tuple[float, bool], list[nn.Parameter]] = {}
+    for (name, parameter), layer_key in zip(parameters, layer_keys):
+        learning_rate = _parameter_learning_rate(
+            name,
+            layer_key,
+            layer_rate_by_key,
+            embedding_rate,
+            head_rate,
         )
-        if saved_metadata_by_parameter is None:
-            return None
+        group_key = (learning_rate, _uses_weight_decay(name))
+        grouped_parameters.setdefault(group_key, []).append(parameter)
 
-        current_groups = cast(list[dict[str, object]], current_optimizer.param_groups)
-        serialized_groups = cast(
-            list[dict[str, object]], current_optimizer.state_dict()["param_groups"]
-        )
-        migrated_groups = []
-        for current_group, serialized_group in zip(current_groups, serialized_groups):
-            current_parameters = cast(list[nn.Parameter], current_group["params"])
-            if any(
-                id(parameter) not in saved_metadata_by_parameter
-                for parameter in current_parameters
-            ):
-                return None
-            source_group_indices = {
-                saved_metadata_by_parameter[id(parameter)][1]
-                for parameter in current_parameters
-            }
-            if len(source_group_indices) == 1:
-                source_group_index = next(iter(source_group_indices))
-                source_group = saved_groups[source_group_index]
-                migrated_group = {
-                    key: value for key, value in source_group.items() if key != "params"
-                }
-            else:
-                migrated_group = {
-                    key: value
-                    for key, value in serialized_group.items()
-                    if key != "params"
-                }
-            migrated_group["params"] = [
-                saved_metadata_by_parameter[id(parameter)][0]
-                for parameter in current_parameters
-            ]
-            migrated_groups.append(migrated_group)
-
-        migrated_state_dict = dict(state_dict)
-        migrated_state_dict["param_groups"] = migrated_groups
-        return cast(StateDict, migrated_state_dict)
-
-    optimizer.register_load_state_dict_pre_hook(migrate_state_dict)
+    return [
+        _parameter_group(parameters, weight_decay, use_weight_decay, learning_rate)
+        for (learning_rate, use_weight_decay), parameters in grouped_parameters.items()
+    ]
 
 
-def _split_parameters_by_layer(
-    parameters: Sequence[tuple[str, nn.Parameter]],
-) -> tuple[
-    dict[int, list[tuple[str, nn.Parameter]]],
-    list[tuple[str, nn.Parameter]],
-    bool,
-]:
-    parameters_by_layer: dict[int, list[tuple[str, nn.Parameter]]] = {}
-    remaining_parameters = []
-    uses_legacy_layout = True
-    for name, parameter in parameters:
-        layer_match = _layer_match(name)
-        if layer_match is None:
-            remaining_parameters.append((name, parameter))
-            continue
-        layer_index, is_legacy_layer = layer_match
-        uses_legacy_layout = uses_legacy_layout and is_legacy_layer
-        parameters_by_layer.setdefault(layer_index, []).append((name, parameter))
-    return parameters_by_layer, remaining_parameters, uses_legacy_layout
-
-
-def _legacy_parameter_groups(
-    parameters: Sequence[tuple[str, nn.Parameter]],
-) -> list[list[nn.Parameter]]:
-    layer_keys = [f"layer.{index}." for index in range(12)]
-    groups: list[list[nn.Parameter]] = []
-    for use_weight_decay in (True, False):
-        groups.extend(
-            [
-                parameter
-                for name, parameter in parameters
-                if layer_key in name and _uses_weight_decay(name) == use_weight_decay
-            ]
-            for layer_key in layer_keys
-        )
-    for use_weight_decay in (True, False):
-        groups.append(
-            [
-                parameter
-                for name, parameter in parameters
-                if not any(layer_key in name for layer_key in layer_keys)
-                and _uses_weight_decay(name) == use_weight_decay
-            ]
-        )
-    return groups
-
-
-def _saved_parameter_metadata(
-    saved_groups: Sequence[dict[str, object]],
-    legacy_parameter_groups: Sequence[list[nn.Parameter]],
-) -> Optional[dict[int, tuple[int, int]]]:
-    saved_metadata_by_parameter: dict[int, tuple[int, int]] = {}
-    for group_index, (saved_group, legacy_parameters) in enumerate(
-        zip(saved_groups, legacy_parameter_groups)
-    ):
-        saved_ids = cast(list[int], saved_group["params"])
-        if len(saved_ids) != len(legacy_parameters):
-            return None
-        saved_metadata_by_parameter.update(
-            (id(parameter), (saved_id, group_index))
-            for parameter, saved_id in zip(legacy_parameters, saved_ids)
-        )
-    return saved_metadata_by_parameter
-
-
-def _layer_match(parameter_name: str) -> Optional[tuple[int, bool]]:
-    for pattern, is_legacy_layer in _LAYER_PATTERNS:
-        match = pattern.search(parameter_name)
-        if match is not None:
-            return int(match.group(1)), is_legacy_layer
-    return None
-
-
-def _layer_rates(
+def _learning_rate_values(
     learning_rates: Union[float, Sequence[float]],
-    layer_lr_decay: float,
-    layer_count: int,
 ) -> list[float]:
     rates = (
         [float(rate) for rate in learning_rates]
@@ -225,16 +85,82 @@ def _layer_rates(
     )
     if not rates:
         raise ValueError("At least one learning rate is required.")
-    if len(rates) == 1:
-        return [
-            rates[0] * pow(layer_lr_decay, layer_count - index - 1)
-            for index in range(layer_count)
-        ]
-    if len(rates) != layer_count:
-        raise ValueError(
-            f"Expected {layer_count} layer learning rates, received {len(rates)}."
-        )
     return rates
+
+
+def _stack_indices(layer_keys: Sequence[Optional[_LayerKey]]) -> dict[str, set[int]]:
+    indices: dict[str, set[int]] = {}
+    for layer_key in layer_keys:
+        if layer_key is None:
+            continue
+        stack, layer_index = layer_key
+        indices.setdefault(stack, set()).add(layer_index)
+    return indices
+
+
+def _layer_rates_by_key(
+    rates: Sequence[float],
+    layer_lr_decay: float,
+    stack_indices: dict[str, set[int]],
+) -> dict[_LayerKey, float]:
+    if layer_lr_decay <= 0 or layer_lr_decay > 1:
+        raise ValueError("layer_lr_decay must be in (0, 1].")
+    max_layer_count = max(len(indices) for indices in stack_indices.values())
+    if len(rates) > 1 and len(rates) != max_layer_count:
+        raise ValueError(
+            f"Expected {max_layer_count} layer learning rates, received {len(rates)}."
+        )
+
+    rate_by_key: dict[_LayerKey, float] = {}
+    for stack, indices in stack_indices.items():
+        sorted_indices = sorted(indices)
+        stack_rates = _stack_rates(rates, layer_lr_decay, len(sorted_indices))
+        rate_by_key.update(
+            ((stack, layer_index), rate)
+            for layer_index, rate in zip(sorted_indices, stack_rates)
+        )
+    return rate_by_key
+
+
+def _stack_rates(
+    rates: Sequence[float], layer_lr_decay: float, layer_count: int
+) -> list[float]:
+    if len(rates) > 1:
+        return list(rates[-layer_count:])
+    return [
+        rates[0] * pow(layer_lr_decay, layer_count - index - 1)
+        for index in range(layer_count)
+    ]
+
+
+def _parameter_learning_rate(
+    name: str,
+    layer_key: Optional[_LayerKey],
+    layer_rate_by_key: dict[_LayerKey, float],
+    embedding_rate: float,
+    head_rate: float,
+) -> float:
+    if layer_key is not None:
+        return layer_rate_by_key[layer_key]
+    if _is_embedding_parameter(name):
+        return embedding_rate
+    return head_rate
+
+
+def _layer_key(parameter_name: str) -> Optional[_LayerKey]:
+    for pattern in _LAYER_PATTERNS:
+        match = pattern.search(parameter_name)
+        if match is not None:
+            stack = parameter_name[: match.start(1)] + match.group(1)
+            return stack, int(match.group(2))
+    return None
+
+
+def _is_embedding_parameter(parameter_name: str) -> bool:
+    parts = parameter_name.lower().split(".")
+    return parts[-2:] == ["shared", "weight"] or any(
+        module in _EMBEDDING_MODULES for module in parts[:-1]
+    )
 
 
 def _weight_decay_groups(
@@ -248,16 +174,10 @@ def _weight_decay_groups(
             for name, parameter in named_parameters
             if _uses_weight_decay(name) == use_weight_decay
         ]
-        if not parameters:
-            continue
-        groups.append(
-            _parameter_group(
-                parameters,
-                weight_decay,
-                use_weight_decay,
-                None,
+        if parameters:
+            groups.append(
+                _parameter_group(parameters, weight_decay, use_weight_decay, None)
             )
-        )
     return groups
 
 
@@ -277,4 +197,10 @@ def _parameter_group(
 
 
 def _uses_weight_decay(parameter_name: str) -> bool:
-    return not any(no_decay in parameter_name for no_decay in _NO_DECAY_NAMES)
+    parts = parameter_name.lower().split(".")
+    parameter = parts[-1]
+    if parameter in {"bias", "beta", "gamma"}:
+        return False
+    return parameter != "weight" or not any(
+        "norm" in module or module.startswith("ln_") for module in parts[:-1]
+    )

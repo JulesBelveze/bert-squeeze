@@ -1,1 +1,0 @@
-from .reduce_on_plateau import GroupCompatibleReduceLROnPlateau

@@ -1,18 +1,17 @@
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import lightning.pytorch as pl
 import numpy as np
 import torch
 from omegaconf import DictConfig
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from ..utils.experiment_logging import ExperimentLogger
 from ..utils.optimizers import (
     BertAdam,
     OptimizerParameterGroup,
     build_optimizer_parameter_groups,
-    register_legacy_optimizer_state_migration,
 )
-from ..utils.schedulers import GroupCompatibleReduceLROnPlateau
 from ..utils.types import DistillationLoss
 
 
@@ -36,7 +35,7 @@ class BaseDistiller(pl.LightningModule):
         teacher: Union["pl.LightningModule", "torch.nn.Module"],
         student: Union[pl.LightningModule, torch.nn.Module],
         training_config: DictConfig,
-        teacher_checkpoint: str = None,
+        teacher_checkpoint: Optional[str] = None,
         **kwargs,
     ):
         super().__init__()
@@ -96,21 +95,24 @@ class BaseDistiller(pl.LightningModule):
         else:
             raise ValueError(f"Optimizer '{self.params.optimizer}' not supported.")
 
-        if self.params.discriminative_learning:
-            register_legacy_optimizer_state_migration(
-                optimizer, self.student.named_parameters()
-            )
-
         if self.params.lr_scheduler:
-            scheduler = GroupCompatibleReduceLROnPlateau(optimizer)
+            scheduler = ReduceLROnPlateau(optimizer)
             lr_scheduler = {
                 'scheduler': scheduler,
-                'name': 'NeptuneLogger',
-                'monitor': 'loss',
+                'name': 'learning_rate',
+                'monitor': self.params.get("lr_scheduler_monitor", "train/epoch_loss"),
             }
             return [optimizer], [lr_scheduler]
 
         return [optimizer], []
+
+    def _log_training_loss(self, loss: torch.Tensor) -> None:
+        self.log(
+            "train/epoch_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+        )
 
     def training_step(self, batch, _) -> torch.Tensor:
         raise NotImplementedError()
