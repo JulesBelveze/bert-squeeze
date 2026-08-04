@@ -1,19 +1,8 @@
-"""
-This implementation mirrors the DeeBERT integration but under the BERxiT
-name, following the repository's integration patterns so users can train
-and use a BERxiT-style early-exiting model.
-
-Note: This module reuses the same architectural approach as DeeBERT in this
-codebase (off-ramps between layers with entropy-based early exit),
-so it integrates seamlessly with existing training loops and configs.
-"""
-
 from abc import ABC
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from transformers import PretrainedConfig
 from transformers.models.bert.modeling_bert import (
     BertEmbeddings,
@@ -27,51 +16,20 @@ from ...utils.types import DeeBertEncoderOutput, DeeBertModelOutput, RampOutput
 from .deebert import OffRamp
 
 
-class ExitGate(nn.Module):
-    """A small MLP gate that predicts whether to exit at a given layer.
-
-    Inputs are hand-crafted features from the ramp logits/probs.
-    """
-
-    def __init__(self, in_dim: int = 3, hidden: int = 32):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(in_dim, hidden),
-            nn.ReLU(),
-            nn.Linear(hidden, 1),
-        )
-
-    def forward(self, feats: torch.Tensor) -> torch.Tensor:
-        # Returns logits for BCEWithLogitsLoss
-        return self.net(feats)
-
-
 class BerxitEncoder(nn.Module):
-    """
-    Encoder that inserts off-ramps between each Transformer block and
-    supports early exiting using an entropy threshold.
-    """
+    """BERT encoder with classifier ramps and a shared exit gate."""
 
     def __init__(self, config: PretrainedConfig, inference: bool):
         super(BerxitEncoder, self).__init__()
         self.config = config
-        # Ensure distinct modules per layer
         self.layer = nn.ModuleList(
             [BertLayer(config) for _ in range(config.num_hidden_layers)]
         )
         self.ramp = nn.ModuleList(
             [OffRamp(config) for _ in range(config.num_hidden_layers)]
         )
-        # BERxiT gates
-        gate_hidden = getattr(config, "gate_hidden_dim", 32)
-        self.gates = nn.ModuleList(
-            [
-                ExitGate(in_dim=3, hidden=gate_hidden)
-                for _ in range(config.num_hidden_layers)
-            ]
-        )
+        self.gates = nn.Linear(config.hidden_size, 1)
 
-        # Thresholds for DeeBERT entropy (fallback) and BERxiT gate
         self.early_exit_entropy = [-1.0] * config.num_hidden_layers
         self.gate_thresholds = [-1.0] * config.num_hidden_layers
         self.inference = inference
@@ -98,24 +56,13 @@ class BerxitEncoder(nn.Module):
         if isinstance(x, float) or isinstance(x, int):
             self.gate_thresholds = [float(x)] * self.config.num_hidden_layers
         elif isinstance(x, list):
-            assert (
-                len(x) == self.config.num_hidden_layers
-            ), "gate thresholds size mismatch"
+            if len(x) != self.config.num_hidden_layers:
+                raise ValueError("Gate threshold count must match the encoder depth.")
             self.gate_thresholds = [float(v) for v in x]
         else:
             raise TypeError(
                 f"Expected 'x' to be of type 'float' or 'list' but got :'{type(x)}'"
             )
-
-    @staticmethod
-    def _gate_features(logits: torch.Tensor) -> torch.Tensor:
-        # logits: [B, C]
-        probs = F.softmax(logits, dim=-1)
-        pmax, _ = probs.max(dim=-1, keepdim=True)  # [B,1]
-        top2 = torch.topk(probs, k=2, dim=-1).values  # [B,2]
-        margin = (top2[:, 0] - top2[:, 1]).unsqueeze(-1)  # [B,1]
-        ent = entropy(probs).unsqueeze(-1)  # [B,1]
-        return torch.cat([pmax, margin, ent], dim=-1)  # [B,3]
 
     def forward(
         self,
@@ -127,15 +74,15 @@ class BerxitEncoder(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
     ) -> DeeBertEncoderOutput:
-        all_hidden_states = tuple() if output_hidden_states else None
-        all_attentions = tuple() if output_attentions else None
+        all_hidden_states: List[torch.Tensor] = []
+        all_attentions: List[torch.Tensor] = []
 
         if not self.inference:
-            all_ramps: Tuple[RampOutput, ...] = tuple()
-            all_gates: Tuple[torch.Tensor, ...] = tuple()
+            all_ramps: List[RampOutput] = []
+            all_gates: List[torch.Tensor] = []
             for i, layer_module in enumerate(self.layer):
                 if output_hidden_states:
-                    all_hidden_states += (hidden_states,)
+                    all_hidden_states.append(hidden_states)
 
                 layer_outputs = layer_module(
                     hidden_states=hidden_states,
@@ -149,98 +96,93 @@ class BerxitEncoder(nn.Module):
 
                 if output_attentions:
                     attention = layer_outputs[1]
-                    all_attentions += (attention,)
+                    all_attentions.append(attention)
 
                 ramp_exit = self.ramp[i](hidden_states)
-                all_ramps += (ramp_exit,)
-                # Gate logits from features of current ramp
-                feats = self._gate_features(ramp_exit.logits)
-                gate_logit = self.gates[i](feats)  # [B,1]
-                all_gates += (gate_logit,)
+                all_ramps.append(ramp_exit)
+                gate_logit = self.gates(hidden_states[:, 0])
+                all_gates.append(gate_logit)
 
                 if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (hidden_states,)
+                    all_hidden_states.append(hidden_states)
 
             return DeeBertEncoderOutput(
                 last_hidden_state=hidden_states,
-                hidden_states=all_hidden_states,
-                attentions=all_attentions,
-                ramps_exit=all_ramps,
-                gates_logits=all_gates,
+                hidden_states=(
+                    tuple(all_hidden_states) if output_hidden_states else None
+                ),
+                attentions=tuple(all_attentions) if output_attentions else None,
+                ramps_exit=tuple(all_ramps),
+                gates_logits=tuple(all_gates),
                 exit_layer=i,
             )
-        else:
-            batch_size = hidden_states.shape[0]
-            all_ramps = [0] * batch_size
-            positions = torch.arange(
-                start=0, end=hidden_states.shape[0], device=hidden_states.device
-            ).long()
-            # Collect per-layer gate logits for diagnostics; fill with NaNs by default
-            gates_per_layer: Tuple[torch.Tensor, ...] = tuple(
-                torch.full(
-                    (batch_size, 1),
-                    float('nan'),
-                    device=hidden_states.device,
-                    dtype=hidden_states.dtype,
-                )
-                for _ in range(len(self.layer))
+
+        batch_size = hidden_states.shape[0]
+        inference_ramps: List[Optional[RampOutput]] = [None] * batch_size
+        positions = torch.arange(
+            start=0, end=hidden_states.shape[0], device=hidden_states.device
+        ).long()
+        gates_per_layer: Tuple[torch.Tensor, ...] = tuple(
+            torch.full(
+                (batch_size, 1),
+                float("nan"),
+                device=hidden_states.device,
+                dtype=hidden_states.dtype,
             )
+            for _ in range(len(self.layer))
+        )
 
-            for i, layer_module in enumerate(self.layer):
-                layer_outputs = layer_module(
-                    hidden_states=hidden_states,
-                    attention_mask=attention_mask,
-                    head_mask=head_mask[i],
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    output_attentions=output_attentions,
-                )
-                hidden_states = layer_outputs[0]
-                ramp_exit = self.ramp[i](hidden_states)
-                # Compute gate decision
-                feats = self._gate_features(ramp_exit.logits)
-                gate_logit = self.gates[i](feats)
-                # Scatter current gate logits back to original batch positions
-                gates_per_layer[i][positions] = gate_logit
-                gate_prob = torch.sigmoid(gate_logit).squeeze(-1)  # [b_cur]
-                ramp_exit.entropy = entropy(ramp_exit.logits)
-
-                if i == len(self.layer) - 1:
-                    for idx, pos in enumerate(positions):
-                        all_ramps[pos] = ramp_exit[idx]
-                else:
-                    # Prefer gate thresholds; fallback to entropy if thresholds are negative
-                    if self.gate_thresholds[i] >= 0:
-                        enough_info = gate_prob >= self.gate_thresholds[i]
-                    else:
-                        enough_info = ramp_exit.entropy < self.early_exit_entropy[i]
-                    right_pos = positions[enough_info]
-
-                    for idx, pos in enumerate(right_pos):
-                        all_ramps[pos] = ramp_exit[idx]
-
-                    hidden_states = hidden_states[~enough_info]
-                    attention_mask = attention_mask[~enough_info]
-                    positions = positions[~enough_info]
-
-                    if positions.nelement() == 0:
-                        return DeeBertEncoderOutput(
-                            ramps_exit=all_ramps,
-                            gates_logits=gates_per_layer,
-                            exit_layer=i,
-                        )
-            return DeeBertEncoderOutput(
-                ramps_exit=all_ramps,
-                gates_logits=gates_per_layer,
-                exit_layer=i,
+        for i, layer_module in enumerate(self.layer):
+            layer_outputs = layer_module(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                head_mask=head_mask[i],
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                output_attentions=output_attentions,
             )
+            hidden_states = layer_outputs[0]
+            ramp_exit = self.ramp[i](hidden_states)
+            gate_logit = self.gates(hidden_states[:, 0])
+            gates_per_layer[i][positions] = gate_logit
+            gate_prob = torch.sigmoid(gate_logit).squeeze(-1)
+            ramp_entropy = entropy(ramp_exit.logits)
+            ramp_exit.entropy = ramp_entropy
+
+            is_final_layer = i == len(self.layer) - 1
+            if is_final_layer:
+                enough_info = torch.ones_like(gate_prob, dtype=torch.bool)
+            elif self.gate_thresholds[i] >= 0:
+                enough_info = gate_prob >= self.gate_thresholds[i]
+            else:
+                enough_info = ramp_entropy < self.early_exit_entropy[i]
+            right_pos = positions[enough_info]
+
+            for idx, pos in enumerate(right_pos):
+                inference_ramps[pos] = ramp_exit[idx]
+
+            if is_final_layer:
+                continue
+
+            hidden_states = hidden_states[~enough_info]
+            attention_mask = attention_mask[~enough_info]
+            positions = positions[~enough_info]
+
+            if positions.nelement() == 0:
+                break
+
+        completed_ramps = tuple(ramp for ramp in inference_ramps if ramp is not None)
+        if len(completed_ramps) != batch_size:
+            raise RuntimeError("BERxiT inference did not produce every sample.")
+        return DeeBertEncoderOutput(
+            ramps_exit=completed_ramps,
+            gates_logits=gates_per_layer,
+            exit_layer=i,
+        )
 
 
 class BerxitModel(BertPreTrainedModel, ABC):
-    """
-    BERxiT-like BERT model with off-ramps and early exit, matching the
-    interfaces used by the DeeBERT integration in this repository.
-    """
+    """BERT model with BERxiT early exits."""
 
     def __init__(self, config: PretrainedConfig, inference: bool = False):
         super(BerxitModel, self).__init__(config)

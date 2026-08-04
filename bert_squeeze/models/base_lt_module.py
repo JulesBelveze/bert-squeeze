@@ -22,7 +22,11 @@ from transformers import (
 
 from ..utils.experiment_logging import ExperimentLogger
 from ..utils.losses import LabelSmoothingLoss
-from ..utils.optimizers import BertAdam
+from ..utils.optimizers import (
+    BertAdam,
+    OptimizerParameterGroup,
+    build_optimizer_parameter_groups,
+)
 from ..utils.scorers import BaseSequenceClassificationScorer, LMScorer, Scorer
 from ..utils.types import (
     FastBertLoss,
@@ -31,7 +35,7 @@ from ..utils.types import (
 )
 
 
-class _IdentityParamList(list):
+class _IdentityParamList(list[nn.Parameter]):
     def __contains__(self, item: object) -> bool:
         return any(param is item for param in self)
 
@@ -130,12 +134,6 @@ class BaseTransformerModule(pl.LightningModule):
                 lr=learning_rate,
                 eps=self.config.adam_eps,
             )
-
-            if self.config.lr_scheduler:
-                scheduler = ReduceLROnPlateau(optimizer)
-                lr_scheduler = {'scheduler': scheduler, 'name': 'NeptuneLogger'}
-                return [optimizer], [lr_scheduler]
-
         elif optimizer_name == "bertadam":
             optimizer = BertAdam(
                 optimizer_parameters,
@@ -155,6 +153,15 @@ class BaseTransformerModule(pl.LightningModule):
             )
         else:
             raise ValueError(f"Optimizer '{self.config.optimizer}' not supported.")
+
+        if optimizer_name == "adamw" and self.config.lr_scheduler:
+            scheduler = ReduceLROnPlateau(optimizer)
+            lr_scheduler = {
+                'scheduler': scheduler,
+                'name': 'learning_rate',
+                'monitor': self.config.get("lr_scheduler_monitor", "train/epoch_loss"),
+            }
+            return [optimizer], [lr_scheduler]
 
         return [optimizer], []
 
@@ -176,106 +183,14 @@ class BaseTransformerModule(pl.LightningModule):
             training_config.logging_steps > training_config.accumulation_steps
         ), "'logging_steps' should be greater than 'accumulation_steps'"
 
-    def _get_optimizer_parameters(self) -> List[Dict]:
-        """
-        Method that defines the parameters to optimize.
-
-        Returns:
-            List[Dict]: group of parameters to optimize
-        """
-        no_decay = ['bias', 'gamma', 'beta', 'LayerNorm.weight', 'layer_norm.weight']
-
-        if self.config.discriminative_learning:
-            if (
-                isinstance(self.config.learning_rates, ListConfig)
-                and len(self.config.learning_rates) > 1
-            ):
-                groups = [
-                    (f'layer.{i}.', self.config.learning_rates[i]) for i in range(12)
-                ]
-            else:
-                lr = (
-                    self.config.learning_rates[0]
-                    if isinstance(self.config.learning_rates, ListConfig)
-                    else self.config.learning_rates
-                )
-                groups = [
-                    (f'layer.{i}.', lr * pow(self.config.layer_lr_decay, 11 - i))
-                    for i in range(12)
-                ]
-
-            group_all = [f'layer.{i}.' for i in range(12)]
-            no_decay_optimizer_parameters, decay_optimizer_parameters = [], []
-            for g, l in groups:
-                no_decay_optimizer_parameters.append(
-                    {
-                        'params': [
-                            p
-                            for n, p in self.named_parameters()
-                            if not any(nd in n for nd in no_decay)
-                            and any(nd in n for nd in [g])
-                        ],
-                        'weight_decay': self.config.weight_decay,
-                        'lr': l,
-                    }
-                )
-                decay_optimizer_parameters.append(
-                    {
-                        'params': [
-                            p
-                            for n, p in self.named_parameters()
-                            if any(nd in n for nd in no_decay)
-                            and any(nd in n for nd in [g])
-                        ],
-                        'weight_decay': 0.0,
-                        'lr': l,
-                    }
-                )
-
-            group_all_parameters = [
-                {
-                    'params': [
-                        p
-                        for n, p in self.named_parameters()
-                        if not any(nd in n for nd in no_decay)
-                        and not any(nd in n for nd in group_all)
-                    ],
-                    'weight_decay': self.config.weight_decay,
-                },
-                {
-                    'params': [
-                        p
-                        for n, p in self.named_parameters()
-                        if any(nd in n for nd in no_decay)
-                        and not any(nd in n for nd in group_all)
-                    ],
-                    'weight_decay': 0.0,
-                },
-            ]
-            optimizer_grouped_parameters = (
-                no_decay_optimizer_parameters
-                + decay_optimizer_parameters
-                + group_all_parameters
-            )
-        else:
-            optimizer_grouped_parameters = [
-                {
-                    'params': [
-                        p
-                        for n, p in self.named_parameters()
-                        if not any(nd in n for nd in no_decay)
-                    ],
-                    'weight_decay': self.config.weight_decay,
-                },
-                {
-                    'params': [
-                        p
-                        for n, p in self.named_parameters()
-                        if any(nd in n for nd in no_decay)
-                    ],
-                    'weight_decay': 0.0,
-                },
-            ]
+    def _get_optimizer_parameters(self) -> List[OptimizerParameterGroup]:
+        optimizer_grouped_parameters = build_optimizer_parameter_groups(
+            self.named_parameters(),
+            discriminative_learning=self.config.discriminative_learning,
+            learning_rates=self.config.learning_rates,
+            layer_lr_decay=self.config.get("layer_lr_decay", 1.0),
+            weight_decay=self.config.weight_decay,
+        )
         for group in optimizer_grouped_parameters:
             group["params"] = _IdentityParamList(list(group["params"]))
         return optimizer_grouped_parameters
@@ -383,6 +298,12 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
     ) -> torch.Tensor:
         self._before_training_step()
         step_output = self._classification_step(batch, training=True)
+        self.log(
+            "train/epoch_loss",
+            step_output.optimization_loss,
+            on_step=False,
+            on_epoch=True,
+        )
         self._update_scorer(self.scorer, step_output)
         self._log_training_metrics()
         return step_output.optimization_loss

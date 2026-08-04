@@ -1,9 +1,7 @@
-from typing import Any, Dict, TypeVar, Union
+from typing import Dict, Optional, Union
 
 import lightning.pytorch as pl
-import numpy as np
 import torch
-import torch.nn.functional as F
 from omegaconf import DictConfig
 from overrides import overrides
 from torch.nn import CrossEntropyLoss
@@ -35,7 +33,7 @@ class Seq2SeqDistiller(BaseDistiller):
         teacher: Union["pl.LightningModule", "torch.nn.Module"],
         student: Union["pl.LightningModule", "torch.nn.Module"],
         training_config: DictConfig,
-        teacher_checkpoint: str = None,
+        teacher_checkpoint: Optional[str] = None,
         **kwargs,
     ):
         super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
@@ -127,6 +125,7 @@ class Seq2SeqDistiller(BaseDistiller):
                 for key, val in self.s_scorer.losses.items()
             }
             self.log_dict(logging_loss)
+        self._log_training_loss(loss.full_loss)
         return loss.full_loss
 
     @overrides

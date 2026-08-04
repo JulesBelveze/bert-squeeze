@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
@@ -43,7 +43,7 @@ class BaseSequenceClassificationDistiller(BaseDistiller):
         student: Union["pl.LightningModule", "torch.nn.Module"],
         training_config: DictConfig,
         labels: Union[List[str], List[int]],
-        teacher_checkpoint: str = None,
+        teacher_checkpoint: Optional[str] = None,
         **kwargs,
     ):
         super().__init__(teacher, student, training_config, teacher_checkpoint, **kwargs)
@@ -158,7 +158,7 @@ class SequenceClassificationDistiller(BaseSequenceClassificationDistiller):
         student: Union["pl.LightningModule", "torch.nn.Module"],
         training_config: DictConfig,
         labels: Union[List[str], List[int]],
-        teacher_checkpoint: str = None,
+        teacher_checkpoint: Optional[str] = None,
         **kwargs,
     ):
         super().__init__(
@@ -220,7 +220,7 @@ class SequenceClassificationDistiller(BaseSequenceClassificationDistiller):
         self,
         teacher_logits: torch.Tensor,
         student_logits: torch.Tensor,
-        labels: torch.Tensor = None,
+        labels: Optional[torch.Tensor] = None,
         ignore_index: int = -100,
         *args,
         **kwargs,
@@ -268,6 +268,7 @@ class SequenceClassificationDistiller(BaseSequenceClassificationDistiller):
             self.log_dict(logging_loss)
 
             self.log("train/acc", self.scorer.acc)
+        self._log_training_loss(loss.full_loss)
         return loss.full_loss
 
     @overrides
@@ -350,7 +351,7 @@ class SequenceClassificationParallelDistiller(BaseSequenceClassificationDistille
         student: Union["pl.LightningModule", "torch.nn.Module"],
         training_config: DictConfig,
         labels: Union[List[str], List[int]],
-        teacher_checkpoint: str = None,
+        teacher_checkpoint: Optional[str] = None,
         **kwargs,
     ):
         super().__init__(
@@ -464,6 +465,7 @@ class SequenceClassificationParallelDistiller(BaseSequenceClassificationDistille
         s_logits_original, s_logits_translated = self.get_student_logits(batch)
 
         loss = self.loss(t_logits, s_logits_original, s_logits_translated)
+        self._log_training_loss(loss.full_loss)
         return loss.full_loss
 
     @overrides

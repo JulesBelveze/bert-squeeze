@@ -26,24 +26,22 @@ class RampOutput:
 @dataclass
 class DeeBertEncoderOutput:
     exit_layer: int
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    ramps_exit: Optional[Tuple[RampOutput]] = None
-    # Optional per-layer gate logits/probs for BERxiT
-    gates_logits: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: Optional[torch.Tensor] = None
+    hidden_states: Optional[Tuple[torch.Tensor, ...]] = None
+    attentions: Optional[Tuple[torch.Tensor, ...]] = None
+    ramps_exit: Optional[Tuple[RampOutput, ...]] = None
+    gates_logits: Optional[Tuple[torch.Tensor, ...]] = None
 
 
 @dataclass
 class DeeBertModelOutput:
     exit_layer: int
-    sequence_output: Optional[torch.FloatTensor] = None
-    pooled_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[torch.FloatTensor] = None
-    attentions: Optional[torch.FloatTensor] = None
+    sequence_output: Optional[torch.Tensor] = None
+    pooled_output: Optional[torch.Tensor] = None
+    hidden_states: Optional[Tuple[torch.Tensor, ...]] = None
+    attentions: Optional[Tuple[torch.Tensor, ...]] = None
     ramps_exits: Optional[Sequence[RampOutput]] = None
-    # Optional per-layer gate logits/probs for BERxiT
-    gates_logits: Optional[Tuple[torch.FloatTensor]] = None
+    gates_logits: Optional[Tuple[torch.Tensor, ...]] = None
 
     @property
     def logits(self) -> torch.Tensor:

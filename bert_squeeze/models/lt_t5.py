@@ -84,6 +84,12 @@ class SimpleT5Model(BaseSeq2SeqTransformerModule):
             )
             self.scorer.reset()
 
+        self.log(
+            "train/epoch_loss",
+            outputs.loss,
+            on_step=False,
+            on_epoch=True,
+        )
         return outputs.loss
 
     def validation_step(self, batch, batch_idx, *args, **kwargs) -> dict:
