@@ -15,6 +15,7 @@ from bert_squeeze.utils.utils_fct import deep_update
 CONFIG_MAPPER = {
     "lr": "train_lr.yaml",
     "bert": "train_bert.yaml",
+    "automodel": "train_automodel.yaml",
     "lstm": "train_lstm.yaml",
     "deebert": "train_deebert.yaml",
     "berxit": "train_berxit.yaml",

@@ -34,6 +34,8 @@ class BaseDataModule(pl.LightningDataModule):
         if "percent" in self.dataset_config:
             dataset = self._subset_percent(dataset, self.dataset_config.percent)
 
+        # Encode string labels before splitting so `stratify_by_column` works.
+        dataset = self._encode_labels(dataset)
         dataset = self._ensure_required_splits(dataset)
 
         self.dataset = dataset
@@ -53,6 +55,17 @@ class BaseDataModule(pl.LightningDataModule):
                 for split, split_dataset in dataset.items()
             }
         )
+
+    def _encode_labels(self, dataset: datasets.DatasetDict) -> datasets.DatasetDict:
+        """
+        Hook to convert a label column into integer ids before splitting.
+
+        The base implementation is a no-op; subclasses that know their label column
+        (e.g. `TransformerDataModule`) override it. Encoding here rather than after the
+        split keeps the ids consistent across splits and lets `stratify_by_column`
+        operate on a `ClassLabel` feature.
+        """
+        return dataset
 
     def _normalize_splits(
         self, dataset: Union[datasets.DatasetDict, datasets.Dataset]
