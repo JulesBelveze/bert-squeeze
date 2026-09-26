@@ -282,6 +282,11 @@ class DistillationDataModule(pl.LightningDataModule):
                 padded_batch[key] = values
                 continue
 
+            # Scalar columns (e.g. labels) carry no sequence dimension to pad.
+            if not isinstance(values[0], (list, tuple)):
+                padded_batch[key] = torch.LongTensor(values)
+                continue
+
             max_length = max(len(sequence) for sequence in values)
             if padding_strategy == 'end':
                 padded_values = [

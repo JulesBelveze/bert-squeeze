@@ -168,6 +168,10 @@ class LtFastBert(BaseSequenceClassificationTransformerModule):
 
     def _build_model(self):
         """"""
+        # `AutoConfig.from_pretrained` leaves `_attn_implementation` unset; transformers
+        # >= 4.48 indexes its attention classes by it, so default to eager attention.
+        if getattr(self.model_config, "_attn_implementation", None) is None:
+            self.model_config._attn_implementation = "eager"
         self.embeddings = BertEmbeddings(self.model_config)
         self.encoder = FastBertGraph(self.model_config)
 
@@ -184,14 +188,16 @@ class LtFastBert(BaseSequenceClassificationTransformerModule):
                 a local path.
         """
         if pretrained_model_path is None:
-            tmp_model = AutoModel.from_pretrained(self.pretrained_model)
-            # XXX during thetest this creates a `model.safetensors` not a `pytorch_model.bin`
-            # so th enext line fails
-            tmp_model.save_pretrained("tmp_model", safe_serialization=False)
-
-            pretrained_model_path = os.path.join("tmp_model", "pytorch_model.bin")
-
-        pretrained_model_weights = torch.load(pretrained_model_path, map_location='cpu')
+            # Load the backbone weights straight from the in-memory model. The previous
+            # round-trip through a local `pytorch_model.bin` broke on torch < 2.6, which
+            # refuses `torch.load` of pickled checkpoints (CVE-2025-32434).
+            pretrained_model_weights = AutoModel.from_pretrained(
+                self.pretrained_model
+            ).state_dict()
+        else:
+            pretrained_model_weights = torch.load(
+                pretrained_model_path, map_location="cpu"
+            )
         self.load_state_dict(pretrained_model_weights, strict=False)
 
     def freeze_encoder(self):

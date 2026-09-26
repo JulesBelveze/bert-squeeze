@@ -67,11 +67,39 @@ class TransformerDataModule(BaseDataModule):
             tokenized_dataset = tokenized_dataset.rename_column(self.label_col, "labels")
 
         columns = ["input_ids", "attention_mask", "labels"]
-        if "distilbert" not in self.tokenizer.name_or_path:
+        # Only some tokenizers emit token_type_ids (BERT does; ModernBERT, RoBERTa and
+        # DistilBERT do not), so key off what is actually present.
+        available = next(iter(tokenized_dataset.values())).column_names
+        if "token_type_ids" in available:
             columns += ["token_type_ids"]
 
         tokenized_dataset.set_format(type="torch", columns=columns)
         return tokenized_dataset
+
+    @overrides
+    def _encode_labels(self, dataset: datasets.DatasetDict) -> datasets.DatasetDict:
+        """
+        Convert a string label column into integer ids via a `ClassLabel` feature.
+
+        If `dataset_config.label_map` is set, string labels are first remapped through
+        it and rows whose label is absent from the map are dropped — handy for merging
+        near-synonymous classes or filtering junk labels. No-op when the label column is
+        missing or already numeric, so existing integer-labelled datasets are untouched.
+        """
+        label_col = self.label_col
+        if label_col is None or label_col not in dataset["train"].column_names:
+            return dataset
+
+        label_map = self.dataset_config.get("label_map")
+        if label_map is not None:
+            label_map = dict(label_map)
+            dataset = dataset.filter(lambda ex: ex[label_col] in label_map)
+            dataset = dataset.map(lambda ex: {label_col: label_map[ex[label_col]]})
+
+        feature = dataset["train"].features[label_col]
+        if isinstance(feature, datasets.Value) and feature.dtype == "string":
+            dataset = dataset.class_encode_column(label_col)
+        return dataset
 
     def setup(self, stage: Optional[str] = None):
         """"""
@@ -181,8 +209,14 @@ class TransformerParallelDataModule(TransformerDataModule):
             "translation_input_ids",
             "translation_attention_mask",
         ]
-        if "distilbert" not in self.tokenizer.name_or_path:
-            columns += ["token_type_ids", "translation_token_type_ids"]
+        # Only include token_type_ids the tokenizer actually produced (BERT does;
+        # ModernBERT, RoBERTa and DistilBERT do not).
+        available = next(iter(tokenized_dataset.values())).column_names
+        columns += [
+            col
+            for col in ("token_type_ids", "translation_token_type_ids")
+            if col in available
+        ]
 
         tokenized_dataset.set_format(type="torch", columns=columns)
         return tokenized_dataset
@@ -386,10 +420,10 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
             },
         )
         columns = ["input_ids", "attention_mask", "labels"]
-        if not any(
-            model_name in self.tokenizer.name_or_path
-            for model_name in ("distilbert", "t5")
-        ):
+        # Only include token_type_ids the tokenizer actually produced (BERT does;
+        # ModernBERT, RoBERTa, DistilBERT and T5 do not).
+        available = next(iter(tokenized_dataset.values())).column_names
+        if "token_type_ids" in available:
             columns += ["token_type_ids"]
 
         columns_to_keep = [self.target_col, self.source_col] + columns
