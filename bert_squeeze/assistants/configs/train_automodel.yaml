@@ -24,8 +24,7 @@ train:
   num_epochs: 10
   optimizer: adamw
   objective: ce
-  warmup_ratio: 0.06
-  warmup_steps: true
+  warmup_ratio: 0.06  # only consumed by the bertadam optimizer
   weight_decay: 0.01
 
 model:
