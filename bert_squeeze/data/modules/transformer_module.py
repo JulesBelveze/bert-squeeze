@@ -209,8 +209,14 @@ class TransformerParallelDataModule(TransformerDataModule):
             "translation_input_ids",
             "translation_attention_mask",
         ]
-        if "distilbert" not in self.tokenizer.name_or_path:
-            columns += ["token_type_ids", "translation_token_type_ids"]
+        # Only include token_type_ids the tokenizer actually produced (BERT does;
+        # ModernBERT, RoBERTa and DistilBERT do not).
+        available = next(iter(tokenized_dataset.values())).column_names
+        columns += [
+            col
+            for col in ("token_type_ids", "translation_token_type_ids")
+            if col in available
+        ]
 
         tokenized_dataset.set_format(type="torch", columns=columns)
         return tokenized_dataset
@@ -414,10 +420,10 @@ class Seq2SeqTransformerDataModule(BaseDataModule):
             },
         )
         columns = ["input_ids", "attention_mask", "labels"]
-        if not any(
-            model_name in self.tokenizer.name_or_path
-            for model_name in ("distilbert", "t5")
-        ):
+        # Only include token_type_ids the tokenizer actually produced (BERT does;
+        # ModernBERT, RoBERTa, DistilBERT and T5 do not).
+        available = next(iter(tokenized_dataset.values())).column_names
+        if "token_type_ids" in available:
             columns += ["token_type_ids"]
 
         columns_to_keep = [self.target_col, self.source_col] + columns
