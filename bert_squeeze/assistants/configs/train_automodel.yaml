@@ -30,7 +30,9 @@ train:
 model:
   _target_: bert_squeeze.models.lt_automodel.LtSequenceClassificationAutoModel
   num_labels: ${general.num_labels}
-  pretrained_model: "answerdotai/ModernBERT-base"
+  # Any AutoModelForSequenceClassification encoder works here. For ModernBERT
+  # (answerdotai/ModernBERT-base) install transformers>=4.48.
+  pretrained_model: "roberta-base"
   training_config: ${train}
   scorer:
     _target_: bert_squeeze.utils.scorers.sequence_classification_scorer.BaseSequenceClassificationScorer
