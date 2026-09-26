@@ -72,6 +72,27 @@ def test_encode_labels_applies_label_map_and_drops_unmapped(make_module):
     assert set(feature.names) == {"X", "Y"}
 
 
+def test_encode_labels_collapses_synonyms_to_one_class(make_module):
+    """Several source labels mapping to the same target must share a single class id."""
+    module = make_module()
+    module.dataset_config.label_map = {"a": "X", "b": "X", "c": "Y"}
+    dataset = datasets.DatasetDict(
+        {
+            "train": datasets.Dataset.from_dict(
+                {"text": ["1", "2", "3"], "label": ["a", "b", "c"]}
+            )
+        }
+    )
+
+    encoded = module._encode_labels(dataset)
+
+    feature = encoded["train"].features["label"]
+    assert feature.names == ["X", "Y"]  # 2 classes, not 3
+    ids = encoded["train"]["label"]
+    assert ids[0] == ids[1]  # a and b collapsed to the same id
+    assert ids[2] != ids[0]
+
+
 def test_encode_labels_noop_for_int_column(make_module):
     module = make_module()
     dataset = datasets.DatasetDict(
