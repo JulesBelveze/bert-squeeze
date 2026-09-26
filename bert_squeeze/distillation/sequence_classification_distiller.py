@@ -279,7 +279,7 @@ class SequenceClassificationDistiller(BaseSequenceClassificationDistiller):
 
         loss = self.loss(t_logits, s_logits, batch["s_labels"])
         self.s_test_scorer.add(
-            s_logits.detach().cpu(), batch["labels"].detach().cpu(), loss
+            s_logits.detach().cpu(), batch["s_labels"].detach().cpu(), loss
         )
         self.test_step_outputs.append(
             {"loss": loss.full_loss, "logits": s_logits.detach().cpu()}
