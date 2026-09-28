@@ -267,7 +267,7 @@ class SequenceClassificationDistiller(BaseSequenceClassificationDistiller):
             }
             self.log_dict(logging_loss)
 
-            self.log("train/acc", self.scorer.acc)
+            self.log("train/acc", self.s_scorer.acc)
         self._log_training_loss(loss.full_loss)
         return loss.full_loss
 
