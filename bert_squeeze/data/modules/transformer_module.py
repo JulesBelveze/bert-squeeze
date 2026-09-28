@@ -73,6 +73,13 @@ class TransformerDataModule(BaseDataModule):
         if "token_type_ids" in available:
             columns += ["token_type_ids"]
 
+        # Drop any remaining source columns (e.g. category/title/url) — set_format only
+        # hides them, and downstream steps like distillation concatenation re-expose them,
+        # which then leak into model.forward() as unexpected kwargs.
+        extra = [c for c in available if c not in columns]
+        if extra:
+            tokenized_dataset = tokenized_dataset.remove_columns(extra)
+
         tokenized_dataset.set_format(type="torch", columns=columns)
         return tokenized_dataset
 
