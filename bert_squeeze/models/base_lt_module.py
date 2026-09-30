@@ -395,7 +395,9 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
         # which `self.log` rejects — log each branch separately in that case.
         acc = self.scorer.acc
         if isinstance(acc, dict):
-            self.log_dict({f"train/acc_{key}": float(value) for key, value in acc.items()})
+            self.log_dict(
+                {f"train/acc_{key}": float(value) for key, value in acc.items()}
+            )
         else:
             self.log("train/acc", float(acc))
         self.scorer.reset()
