@@ -391,7 +391,15 @@ class BaseSequenceClassificationTransformerModule(BaseTransformerModule):
             if values
         }
         self.log_dict({f"train/loss_{key}": value for key, value in logging_loss.items()})
-        self.log("train/acc", self.scorer.acc)
+        # Multi-branch scorers (e.g. FastBERT) report per-exit accuracies as a dict,
+        # which `self.log` rejects — log each branch separately in that case.
+        acc = self.scorer.acc
+        if isinstance(acc, dict):
+            self.log_dict(
+                {f"train/acc_{key}": float(value) for key, value in acc.items()}
+            )
+        else:
+            self.log("train/acc", float(acc))
         self.scorer.reset()
 
     @staticmethod
