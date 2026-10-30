@@ -85,4 +85,5 @@ jobs:
         env:
           HF_HUB_OFFLINE: "1"
           TRANSFORMERS_OFFLINE: "1"
-        run: "$RUNNER_TEMP/selective-env/bin/python" -m pytest -q tests/test_selective_quantization_example.py tests/test_quantization_study_package.py
+        run: |
+          "$RUNNER_TEMP/selective-env/bin/python" -m pytest -q tests/test_selective_quantization_example.py tests/test_quantization_study_package.py
