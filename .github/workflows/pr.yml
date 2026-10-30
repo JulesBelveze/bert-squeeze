@@ -3,7 +3,7 @@ on: [pull_request]
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
@@ -11,10 +11,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v1
+        uses: astral-sh/setup-uv@v6
         with:
+          version: "0.8.22"
           python-version: ${{ matrix.python-version }}
-          cache: true # enable caching
+          enable-cache: true
 
       - name: Install dev dependencies
         run: uv sync --extra dev
@@ -26,7 +27,7 @@ jobs:
         run: uv run task lint
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
@@ -34,10 +35,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v1
+        uses: astral-sh/setup-uv@v6
         with:
+          version: "0.8.22"
           python-version: ${{ matrix.python-version }}
-          cache: true # enable caching
+          enable-cache: true
 
       - name: Install dependencies
         run: uv sync --all-extras
@@ -46,15 +48,16 @@ jobs:
         run: uv run task test
 
   security:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v1
+        uses: astral-sh/setup-uv@v6
         with:
+          version: "0.8.22"
           python-version: "3.11"
-          cache: true
+          enable-cache: true
 
       - name: Export requirements
         run: uv export --all-extras --no-hashes > requirements.txt
@@ -63,3 +66,24 @@ jobs:
         run: uvx pip-audit -r requirements.txt
         # You can initially allow failures to avoid blocking PRs
         continue-on-error: true
+
+  selective-quantization:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.22"
+          python-version: "3.12"
+          enable-cache: true
+      - name: Create isolated study environment
+        run: |
+          uv venv --python 3.12 "$RUNNER_TEMP/selective-env"
+          uv pip install --python "$RUNNER_TEMP/selective-env/bin/python" --index-url https://download.pytorch.org/whl/cpu torch==2.8.0
+          uv pip install --python "$RUNNER_TEMP/selective-env/bin/python" pytest==8.3.3 transformers==5.16.1 scikit-learn==1.5.2 pyarrow==19.0.1 numpy==2.5.4 tokenizers==0.23.3 huggingface-hub==1.33.0 safetensors==0.8.0
+      - name: Check standalone example and study packaging
+        env:
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+        run: |
+          "$RUNNER_TEMP/selective-env/bin/python" -m pytest -q tests/test_selective_quantization_example.py tests/test_quantization_study_package.py

@@ -51,6 +51,8 @@ Optional: install Aim support with `uv sync --extra aim` and configure
 
 # Quickstarts
 
+For a runnable CPU example, see [selective quantization](examples/selective_quantization/README.md): compare FP32, full INT8, and an explicit module exemption, then verify saved artifacts across batching/padding policies. It includes a pinned public-checkpoint demo and runs with inline dependencies without installing the training package.
+
 You can find a bunch of examples on how to use the library to simply train models or perform optimization techniques 
 (distillation, pruning, quantization) in the [docs](https://julesbelveze.github.io/bert-squeeze/index.html).
 
