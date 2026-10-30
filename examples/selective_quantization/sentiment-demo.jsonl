@@ -1,0 +1,8 @@
+{"text":"A wonderful film with great performances.","label":1}
+{"text":"I loved every minute of this movie.","label":1}
+{"text":"A delightful and entertaining story.","label":1}
+{"text":"The acting and writing were excellent.","label":1}
+{"text":"A boring film with terrible acting.","label":0}
+{"text":"I regret watching this awful movie.","label":0}
+{"text":"The story was dull and disappointing.","label":0}
+{"text":"A tedious waste of time.","label":0}
