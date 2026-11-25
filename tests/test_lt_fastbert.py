@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from omegaconf import OmegaConf
 from transformers import AutoConfig
@@ -71,3 +72,21 @@ def test_load_pretrained_bert_model_uses_in_memory_state_dict(monkeypatch):
     _build(monkeypatch, _Backbone)
 
     assert captured.get("called") is True
+
+
+def test_inference_returns_a_distribution_for_samples_that_never_exit_early(monkeypatch):
+    """With `inference_speed=0` no sample exits early, so the last layer must answer."""
+    module = _build(monkeypatch, nn.Module).eval()
+    input_ids = torch.randint(1, 100, (4, 6))
+
+    with torch.no_grad():
+        probs, exit_layer = module.forward(
+            input_ids=input_ids,
+            token_type_ids=torch.zeros_like(input_ids),
+            attention_mask=torch.ones_like(input_ids),
+            inference=True,
+            inference_speed=0.0,
+        )
+
+    assert exit_layer == module.model_config.num_hidden_layers - 1
+    assert torch.allclose(probs.sum(dim=-1), torch.ones(4), atol=1e-5)

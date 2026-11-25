@@ -147,8 +147,12 @@ class FastBertGraph(nn.Module):
                 log_prob = F.log_softmax(logits, dim=-1)
                 uncertain = torch.sum(prob * log_prob, 1) / (-torch.log(self.num_class))
 
-                # checking if there's enough information
-                enough_info = uncertain < inference_speed
+                # checking if there's enough information; the last layer has to answer
+                # for every remaining sample, otherwise they keep all-zero probabilities
+                if i == len(self.layer) - 1:
+                    enough_info = torch.ones_like(uncertain, dtype=torch.bool)
+                else:
+                    enough_info = uncertain < inference_speed
 
                 right_pos = positions[enough_info]
                 final_probs[right_pos] = prob[enough_info]
