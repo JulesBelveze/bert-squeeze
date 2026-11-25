@@ -11,10 +11,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v1
+        uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: true # enable caching
+          enable-cache: true
 
       - name: Install dev dependencies
         run: uv sync --extra dev
@@ -29,15 +29,16 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        # 3.9 is left out: the locked onnxruntime (1.20.0) ships no cp39 wheel
+        python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v1
+        uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: true # enable caching
+          enable-cache: true
 
       - name: Install dependencies
         run: uv sync --all-extras
@@ -51,10 +52,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v1
+        uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.11"
-          cache: true
+          enable-cache: true
 
       - name: Export requirements
         run: uv export --all-extras --no-hashes > requirements.txt

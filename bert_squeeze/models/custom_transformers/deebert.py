@@ -183,10 +183,11 @@ class DeeBertEncoder(nn.Module):
                         batch_ramps[int(pos)] = ramp_exit[idx]
                 else:
                     enough_info = ramp_exit.entropy < self.early_exit_entropy[i]
-                    right_pos = positions[enough_info]
 
-                    for idx, pos in enumerate(right_pos):
-                        batch_ramps[int(pos)] = ramp_exit[idx]
+                    # `idx` is the row in the current (shrunken) batch, `pos` the
+                    # sample's index in the original batch.
+                    for idx in enough_info.nonzero(as_tuple=True)[0]:
+                        batch_ramps[int(positions[idx])] = ramp_exit[int(idx)]
 
                     hidden_states = hidden_states[~enough_info]
                     attention_mask = attention_mask[~enough_info]

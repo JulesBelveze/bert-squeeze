@@ -156,10 +156,11 @@ class BerxitEncoder(nn.Module):
                 enough_info = gate_prob >= self.gate_thresholds[i]
             else:
                 enough_info = ramp_entropy < self.early_exit_entropy[i]
-            right_pos = positions[enough_info]
 
-            for idx, pos in enumerate(right_pos):
-                inference_ramps[pos] = ramp_exit[idx]
+            # `idx` is the row in the current (shrunken) batch, `positions[idx]` the
+            # sample's index in the original batch.
+            for idx in enough_info.nonzero(as_tuple=True)[0]:
+                inference_ramps[int(positions[idx])] = ramp_exit[int(idx)]
 
             if is_final_layer:
                 continue
